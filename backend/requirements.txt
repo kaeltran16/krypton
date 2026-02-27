@@ -1,0 +1,20 @@
+fastapi==0.133.1
+uvicorn[standard]==0.41.0
+sqlalchemy[asyncio]==2.0.47
+asyncpg==0.31.0
+alembic==1.18.4
+psycopg2-binary==2.9.10
+httpx==0.28.1
+pydantic==2.12.5
+pydantic-settings==2.13.1
+pandas==3.0.1
+numpy==2.4.2
+pyyaml==6.0.3
+python-dotenv==1.2.1
+websockets==16.0
+pywebpush==2.3.0
+
+# testing
+pytest==8.3.5
+pytest-asyncio==0.25.3
+pytest-cov==7.0.0

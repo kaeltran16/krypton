@@ -1,0 +1,23 @@
+pairs:
+  - BTC-USDT-SWAP
+  - ETH-USDT-SWAP
+
+timeframes:
+  - 15m
+  - 1h
+  - 4h
+
+collector:
+  mode: event_driven
+  polling_interval_seconds: 900
+  rest_poll_interval_seconds: 300
+
+engine:
+  signal_threshold: 50
+  llm_threshold: 30
+  llm_timeout_seconds: 30
+  traditional_weight: 0.60
+  llm_weight: 0.40
+
+api:
+  ws_heartbeat_seconds: 30
