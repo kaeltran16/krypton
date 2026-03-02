@@ -4,9 +4,10 @@ import { formatScore, formatTime } from "../../../shared/lib/format";
 interface SignalCardProps {
   signal: Signal;
   onSelect: (signal: Signal) => void;
+  onExecute?: (signal: Signal) => void;
 }
 
-export function SignalCard({ signal, onSelect }: SignalCardProps) {
+export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
   const isLong = signal.direction === "LONG";
 
   return (
@@ -30,6 +31,16 @@ export function SignalCard({ signal, onSelect }: SignalCardProps) {
           {formatTime(signal.created_at)}
         </span>
       </div>
+      {onExecute && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onExecute(signal); }}
+          className={`mt-2 w-full py-2 rounded text-sm font-medium ${
+            isLong ? "bg-long/20 text-long" : "bg-short/20 text-short"
+          }`}
+        >
+          Execute {signal.direction}
+        </button>
+      )}
     </button>
   );
 }

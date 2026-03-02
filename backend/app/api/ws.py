@@ -14,7 +14,9 @@ DEFAULT_TIMEFRAMES = ["15m", "1h", "4h"]
 @router.websocket("/ws/signals")
 async def signal_stream(websocket: WebSocket, api_key: str = Query(None)):
     settings = websocket.app.state.settings
-    if api_key != settings.krypton_api_key:
+    client_key = api_key or websocket.headers.get("x-api-key")
+    if client_key != settings.krypton_api_key:
+        await websocket.accept()
         await websocket.close(code=4001, reason="Invalid API key")
         return
 
@@ -34,3 +36,4 @@ async def signal_stream(websocket: WebSocket, api_key: str = Query(None)):
                 manager.update_subscription(websocket, pairs, timeframes)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+

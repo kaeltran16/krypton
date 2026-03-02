@@ -34,6 +34,8 @@ export function useSignalWebSocket() {
         Math.abs(data.signal.final_score) >= thresholdRef.current
       ) {
         addSignal(data.signal);
+      } else if (data.type === "candle" && data.candle) {
+        useSignalStore.getState().notifyCandleListeners(data.candle);
       }
     };
 

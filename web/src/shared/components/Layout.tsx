@@ -1,21 +1,33 @@
 import { useState, type ReactNode } from "react";
 
-type Tab = "feed" | "settings";
+type Tab = "dashboard" | "chart" | "signals" | "settings";
 
 interface LayoutProps {
-  feed: ReactNode;
+  dashboard: ReactNode;
+  chart: ReactNode;
+  signals: ReactNode;
   settings: ReactNode;
 }
 
-export function Layout({ feed, settings }: LayoutProps) {
-  const [tab, setTab] = useState<Tab>("feed");
+const TABS: { key: Tab; label: string }[] = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "chart", label: "Chart" },
+  { key: "signals", label: "Signals" },
+  { key: "settings", label: "Settings" },
+];
+
+export function Layout({ dashboard, chart, signals, settings }: LayoutProps) {
+  const [tab, setTab] = useState<Tab>("dashboard");
+
+  const content = { dashboard, chart, signals, settings }[tab];
 
   return (
     <div className="min-h-screen bg-surface text-white flex flex-col">
-      <main className="flex-1 overflow-y-auto pb-16">{tab === "feed" ? feed : settings}</main>
+      <main className="flex-1 overflow-y-auto pb-16">{content}</main>
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-gray-800 flex safe-bottom">
-        <TabButton active={tab === "feed"} onClick={() => setTab("feed")} label="Signals" />
-        <TabButton active={tab === "settings"} onClick={() => setTab("settings")} label="Settings" />
+        {TABS.map(({ key, label }) => (
+          <TabButton key={key} active={tab === key} onClick={() => setTab(key)} label={label} />
+        ))}
       </nav>
     </div>
   );

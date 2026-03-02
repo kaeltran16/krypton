@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://krypton:krypton@localhost:5432/krypton"
     redis_url: str = "redis://localhost:6379/0"
 
+    # okx private api
+    okx_api_key: str = ""
+    okx_api_secret: str = ""
+    okx_passphrase: str = ""
+    okx_demo: bool = True
+
     # pairs and timeframes
     pairs: list[str] = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     timeframes: list[str] = ["15m", "1h", "4h"]

@@ -17,6 +17,18 @@ def test_parse_long_short_response_valid():
     assert result["long_short_ratio"] == 1.25
 
 
+def test_parse_long_short_response_array_row():
+    raw = {
+        "code": "0",
+        "data": [
+            ["1709042400000", "1.25"]
+        ],
+    }
+    result = parse_long_short_response(raw, "BTC-USDT-SWAP")
+    assert result is not None
+    assert result["long_short_ratio"] == 1.25
+
+
 def test_parse_long_short_response_invalid():
     """Invalid response returns None."""
     result = parse_long_short_response({"code": "1"}, "BTC-USDT-SWAP")
@@ -35,7 +47,7 @@ async def test_poller_fetches_for_all_pairs():
     mock_response = MagicMock()
     mock_response.json.return_value = {
         "code": "0",
-        "data": [{"ts": "1709042400000", "longShortRatio": "1.5"}],
+        "data": [["1709042400000", "1.5"]],
     }
     mock_response.raise_for_status = MagicMock()
 
@@ -55,3 +67,10 @@ async def test_poller_fetches_for_all_pairs():
         await poller.fetch_once()
 
     assert mock_callback.call_count == 2
+    assert mock_client.get.await_count == 2
+    first_call = mock_client.get.await_args_list[0]
+    second_call = mock_client.get.await_args_list[1]
+    assert first_call.kwargs["params"] == {"ccy": "BTC", "period": "5m"}
+    assert second_call.kwargs["params"] == {"ccy": "ETH", "period": "5m"}
+
+

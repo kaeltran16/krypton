@@ -16,7 +16,7 @@ async def test_connection_manager_broadcast_matching():
     signal = {"pair": "BTC-USDT-SWAP", "timeframe": "1h", "direction": "LONG", "final_score": 75}
     await manager.broadcast(signal)
 
-    mock_ws.send_json.assert_called_once_with({"type": "signal", "data": signal})
+    mock_ws.send_json.assert_called_once_with({"type": "signal", "signal": signal})
 
 
 @pytest.mark.asyncio
@@ -81,3 +81,12 @@ def test_websocket_handles_malformed_json(app):
         with client.websocket_connect("/ws/signals?api_key=test-key") as ws:
             ws.send_text("not-json")
             ws.send_text('{"type": "subscribe", "pairs": ["BTC-USDT-SWAP"], "timeframes": ["1h"]}')
+
+
+def test_websocket_accepts_header_api_key(app):
+    from starlette.testclient import TestClient
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/signals", headers={"X-API-Key": "test-key"}) as ws:
+            ws.send_text('{"type": "subscribe", "pairs": ["BTC-USDT-SWAP"], "timeframes": ["1h"]}')
+

@@ -1,8 +1,13 @@
+import json
+
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
 
 from app.api.auth import require_settings_api_key
 from app.db.models import Signal
+from app.engine.traditional import compute_technical_score, compute_order_flow_score
+from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels
 
 
 def _signal_to_dict(signal: Signal) -> dict:
@@ -60,5 +65,49 @@ def create_router() -> APIRouter:
             if not signal:
                 raise HTTPException(status_code=404, detail="Signal not found")
             return _signal_to_dict(signal)
+
+    @router.post("/test-signal")
+    async def test_signal(
+        request: Request,
+        _key: str = auth,
+        pair: str = Query("BTC-USDT-SWAP"),
+        timeframe: str = Query("1h"),
+    ):
+        redis = request.app.state.redis
+        manager = request.app.state.manager
+        db = request.app.state.db
+
+        cache_key = f"candles:{pair}:{timeframe}"
+        raw_candles = await redis.lrange(cache_key, -50, -1)
+        if len(raw_candles) < 50:
+            raise HTTPException(400, f"Not enough candles: {len(raw_candles)}/50")
+
+        candles_data = [json.loads(c) for c in raw_candles]
+        df = pd.DataFrame(candles_data)
+        tech = compute_technical_score(df)
+        flow = compute_order_flow_score(request.app.state.order_flow.get(pair, {}))
+        prelim = compute_preliminary_score(tech["score"], flow["score"], 0.60, 0.40)
+        final = compute_final_score(prelim, None)
+        direction = "LONG" if final > 0 else "SHORT"
+        atr = tech["indicators"].get("atr", 200)
+        levels = calculate_levels(direction, float(candles_data[-1]["close"]), atr, None)
+
+        signal_data = {
+            "pair": pair,
+            "timeframe": timeframe,
+            "direction": direction,
+            "final_score": final,
+            "traditional_score": tech["score"],
+            "llm_opinion": "skipped",
+            "llm_confidence": None,
+            "explanation": None,
+            **levels,
+            "raw_indicators": tech["indicators"],
+        }
+
+        from app.main import persist_signal
+        await persist_signal(db, signal_data)
+        await manager.broadcast(signal_data)
+        return signal_data
 
     return router

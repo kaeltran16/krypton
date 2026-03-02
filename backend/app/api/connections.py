@@ -27,7 +27,18 @@ class ConnectionManager:
         for ws, sub in list(self.connections.items()):
             if signal["pair"] in sub["pairs"] and signal["timeframe"] in sub["timeframes"]:
                 try:
-                    await ws.send_json({"type": "signal", "data": signal})
+                    await ws.send_json({"type": "signal", "signal": signal})
+                except Exception:
+                    dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+    async def broadcast_candle(self, candle: dict):
+        dead = []
+        for ws, sub in list(self.connections.items()):
+            if candle["pair"] in sub["pairs"] and candle["timeframe"] in sub["timeframes"]:
+                try:
+                    await ws.send_json({"type": "candle", "candle": candle})
                 except Exception:
                     dead.append(ws)
         for ws in dead:

@@ -88,6 +88,23 @@ def test_parse_funding_rate_message():
     assert result["next_funding_rate"] == 0.00012
 
 
+def test_parse_funding_rate_message_blank_next_rate():
+    raw = {
+        "arg": {"channel": "funding-rate", "instId": "BTC-USDT-SWAP"},
+        "data": [
+            {
+                "fundingRate": "0.00015",
+                "fundingTime": "1709049600000",
+                "nextFundingRate": "",
+            }
+        ],
+    }
+    result = parse_funding_rate_message(raw)
+    assert result is not None
+    assert result["funding_rate"] == 0.00015
+    assert result["next_funding_rate"] is None
+
+
 def test_parse_funding_rate_message_invalid():
     result = parse_funding_rate_message({"event": "subscribe"})
     assert result is None
@@ -120,19 +137,42 @@ def test_parse_open_interest_message_invalid():
     assert result is None
 
 
+def test_parse_open_interest_message_blank_oi():
+    raw = {
+        "arg": {"channel": "open-interest", "instId": "BTC-USDT-SWAP"},
+        "data": [
+            {
+                "oi": "",
+                "ts": "1709042400000",
+            }
+        ],
+    }
+    result = parse_open_interest_message(raw)
+    assert result is None
+
+
 # --- subscription building ---
 
-def test_build_subscribe_args():
-    """Build correct subscription args for pairs and timeframes."""
+def test_build_candle_args():
+    """Build correct candle subscription args for business endpoint."""
     client = OKXWebSocketClient(
         pairs=["BTC-USDT-SWAP", "ETH-USDT-SWAP"],
         timeframes=["15m", "1h"],
     )
-    args = client.build_subscribe_args()
-    # 2 pairs * 2 timeframes (candles) + 2 pairs (funding-rate) + 2 pairs (open-interest) = 8
-    assert len(args) == 8
+    args = client._build_candle_args()
+    assert len(args) == 4
     assert {"channel": "candle15m", "instId": "BTC-USDT-SWAP"} in args
     assert {"channel": "candle1H", "instId": "ETH-USDT-SWAP"} in args
+
+
+def test_build_public_args():
+    """Build correct public subscription args for funding-rate and open-interest."""
+    client = OKXWebSocketClient(
+        pairs=["BTC-USDT-SWAP", "ETH-USDT-SWAP"],
+        timeframes=["15m", "1h"],
+    )
+    args = client._build_public_args()
+    assert len(args) == 4
     assert {"channel": "funding-rate", "instId": "BTC-USDT-SWAP"} in args
     assert {"channel": "open-interest", "instId": "ETH-USDT-SWAP"} in args
 
@@ -140,6 +180,7 @@ def test_build_subscribe_args():
 def test_timeframe_to_channel_mapping():
     """Timeframe strings map to OKX channel names."""
     client = OKXWebSocketClient(pairs=["BTC-USDT-SWAP"], timeframes=["15m", "1h", "4h"])
-    args = client.build_subscribe_args()
-    channels = {a["channel"] for a in args}
-    assert channels == {"candle15m", "candle1H", "candle4H", "funding-rate", "open-interest"}
+    candle_args = client._build_candle_args()
+    channels = {a["channel"] for a in candle_args}
+    assert channels == {"candle15m", "candle1H", "candle4H"}
+

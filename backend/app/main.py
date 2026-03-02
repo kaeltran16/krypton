@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.config import Settings
+from app.exchange.okx_client import OKXClient
 from app.db.database import Database
 from app.db.models import Candle, Signal
 from app.collector.ws_client import OKXWebSocketClient
@@ -199,6 +200,27 @@ async def handle_candle(app: FastAPI, candle: dict):
     )
 
 
+async def handle_candle_tick(app: FastAPI, candle: dict):
+    """Handle all candle ticks (confirmed and unconfirmed)."""
+    manager = app.state.manager
+
+    tick = {
+        "pair": candle["pair"],
+        "timeframe": candle["timeframe"],
+        "timestamp": candle["timestamp"].isoformat() if hasattr(candle["timestamp"], "isoformat") else candle["timestamp"],
+        "open": candle["open"],
+        "high": candle["high"],
+        "low": candle["low"],
+        "close": candle["close"],
+        "volume": candle["volume"],
+        "confirmed": candle["confirmed"],
+    }
+    await manager.broadcast_candle(tick)
+
+    if candle["confirmed"]:
+        await handle_candle(app, candle)
+
+
 async def handle_funding_rate(app: FastAPI, data: dict):
     flow = app.state.order_flow.setdefault(data["pair"], {})
     flow["funding_rate"] = data["funding_rate"]
@@ -235,10 +257,20 @@ async def lifespan(app: FastAPI):
     prompt_path = Path(__file__).parent / "prompts" / "signal_analysis.txt"
     app.state.prompt_template = load_prompt_template(prompt_path) if prompt_path.exists() else ""
 
+    if settings.okx_api_key:
+        app.state.okx_client = OKXClient(
+            api_key=settings.okx_api_key,
+            api_secret=settings.okx_api_secret,
+            passphrase=settings.okx_passphrase,
+            demo=settings.okx_demo,
+        )
+    else:
+        app.state.okx_client = None
+
     ws_client = OKXWebSocketClient(
         pairs=settings.pairs,
         timeframes=settings.timeframes,
-        on_candle=lambda c: handle_candle(app, c),
+        on_candle=lambda c: handle_candle_tick(app, c),
         on_funding_rate=lambda d: handle_funding_rate(app, d),
         on_open_interest=lambda d: handle_open_interest(app, d),
     )
@@ -284,6 +316,12 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.push import router as push_router
     app.include_router(push_router)
+
+    from app.api.candles import router as candles_router
+    app.include_router(candles_router)
+
+    from app.api.account import router as account_router
+    app.include_router(account_router)
 
     return app
 

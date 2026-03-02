@@ -9,6 +9,7 @@ import websockets
 logger = logging.getLogger(__name__)
 
 OKX_WS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
+OKX_WS_BUSINESS = "wss://ws.okx.com:8443/ws/v5/business"
 
 TIMEFRAME_CHANNEL_MAP = {
     "15m": "candle15m",
@@ -17,6 +18,12 @@ TIMEFRAME_CHANNEL_MAP = {
 }
 
 CHANNEL_TIMEFRAME_MAP = {v: k for k, v in TIMEFRAME_CHANNEL_MAP.items()}
+
+
+def _parse_float(value) -> float | None:
+    if value in (None, ""):
+        return None
+    return float(value)
 
 
 def parse_candle_message(msg: dict) -> dict | None:
@@ -35,15 +42,21 @@ def parse_candle_message(msg: dict) -> dict | None:
         return None
 
     row = data[0]
+    if len(row) < 9:
+        return None
+    parsed_values = [_parse_float(value) for value in row[1:6]]
+    if any(value is None for value in parsed_values):
+        return None
+
     return {
         "pair": arg["instId"],
         "timeframe": timeframe,
         "timestamp": datetime.fromtimestamp(int(row[0]) / 1000, tz=timezone.utc),
-        "open": float(row[1]),
-        "high": float(row[2]),
-        "low": float(row[3]),
-        "close": float(row[4]),
-        "volume": float(row[5]),
+        "open": parsed_values[0],
+        "high": parsed_values[1],
+        "low": parsed_values[2],
+        "close": parsed_values[3],
+        "volume": parsed_values[4],
         "confirmed": row[8] == "1",
     }
 
@@ -59,10 +72,14 @@ def parse_funding_rate_message(msg: dict) -> dict | None:
         return None
 
     row = data[0]
+    funding_rate = _parse_float(row.get("fundingRate"))
+    if funding_rate is None:
+        return None
+
     return {
         "pair": arg["instId"],
-        "funding_rate": float(row["fundingRate"]),
-        "next_funding_rate": float(row["nextFundingRate"]),
+        "funding_rate": funding_rate,
+        "next_funding_rate": _parse_float(row.get("nextFundingRate")),
         "funding_time": datetime.fromtimestamp(int(row["fundingTime"]) / 1000, tz=timezone.utc),
     }
 
@@ -78,9 +95,13 @@ def parse_open_interest_message(msg: dict) -> dict | None:
         return None
 
     row = data[0]
+    open_interest = _parse_float(row.get("oi"))
+    if open_interest is None:
+        return None
+
     return {
         "pair": arg["instId"],
-        "open_interest": float(row["oi"]),
+        "open_interest": open_interest,
         "timestamp": datetime.fromtimestamp(int(row["ts"]) / 1000, tz=timezone.utc),
     }
 
@@ -99,40 +120,48 @@ class OKXWebSocketClient:
         self.on_candle = on_candle
         self.on_funding_rate = on_funding_rate
         self.on_open_interest = on_open_interest
-        self._ws = None
         self._running = False
 
-    def build_subscribe_args(self) -> list[dict]:
+    def _build_candle_args(self) -> list[dict]:
         args = []
         for pair in self.pairs:
             for tf in self.timeframes:
                 channel = TIMEFRAME_CHANNEL_MAP.get(tf)
                 if channel:
                     args.append({"channel": channel, "instId": pair})
+        return args
+
+    def _build_public_args(self) -> list[dict]:
+        args = []
+        for pair in self.pairs:
             args.append({"channel": "funding-rate", "instId": pair})
             args.append({"channel": "open-interest", "instId": pair})
         return args
 
     async def connect(self):
         self._running = True
+        await asyncio.gather(
+            self._run_loop(OKX_WS_BUSINESS, self._build_candle_args(), "business"),
+            self._run_loop(OKX_WS_PUBLIC, self._build_public_args(), "public"),
+        )
+
+    async def _run_loop(self, url: str, subscribe_args: list[dict], label: str):
         backoff = 1
         while self._running:
             try:
-                async with websockets.connect(OKX_WS_PUBLIC) as ws:
-                    self._ws = ws
+                async with websockets.connect(url) as ws:
                     backoff = 1
-                    await self._subscribe(ws)
+                    await self._subscribe(ws, subscribe_args, label)
                     await self._listen(ws)
             except (websockets.ConnectionClosed, ConnectionError, OSError) as e:
-                logger.warning("OKX WS disconnected: %s. Reconnecting in %ds...", e, backoff)
+                logger.warning("OKX WS %s disconnected: %s. Reconnecting in %ds...", label, e, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)
 
-    async def _subscribe(self, ws):
-        subscribe_args = self.build_subscribe_args()
+    async def _subscribe(self, ws, subscribe_args: list[dict], label: str):
         msg = {"op": "subscribe", "args": subscribe_args}
         await ws.send(json.dumps(msg))
-        logger.info("Subscribed to %d channels", len(subscribe_args))
+        logger.info("Subscribed to %d channels on %s", len(subscribe_args), label)
 
     async def _listen(self, ws):
         async for raw in ws:
@@ -145,10 +174,7 @@ class OKXWebSocketClient:
             try:
                 candle = parse_candle_message(msg)
                 if candle and self.on_candle:
-                    if candle["confirmed"]:
-                        await self.on_candle(candle)
-                    else:
-                        logger.debug("Unconfirmed candle for %s %s, skipping", candle["pair"], candle["timeframe"])
+                    await self.on_candle(candle)
                     continue
 
                 funding = parse_funding_rate_message(msg)
@@ -164,5 +190,4 @@ class OKXWebSocketClient:
 
     async def stop(self):
         self._running = False
-        if self._ws:
-            await self._ws.close()
+

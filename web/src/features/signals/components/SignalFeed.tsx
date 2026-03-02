@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { useSignalStore } from "../store";
 import { useSignalWebSocket } from "../hooks/useSignalWebSocket";
 import { SignalCard } from "./SignalCard";
 import { SignalDetail } from "./SignalDetail";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { OrderDialog } from "../../trading/components/OrderDialog";
+import type { Signal } from "../types";
 
 export function SignalFeed() {
   useSignalWebSocket();
   const { signals, selectedSignal, selectSignal, clearSelection } =
     useSignalStore();
+  const [tradingSignal, setTradingSignal] = useState<Signal | null>(null);
 
   return (
     <div className="p-4">
@@ -27,12 +31,14 @@ export function SignalFeed() {
               key={signal.id}
               signal={signal}
               onSelect={selectSignal}
+              onExecute={setTradingSignal}
             />
           ))}
         </div>
       )}
 
       <SignalDetail signal={selectedSignal} onClose={clearSelection} />
+      <OrderDialog signal={tradingSignal} onClose={() => setTradingSignal(null)} />
     </div>
   );
 }
