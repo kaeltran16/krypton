@@ -10,6 +10,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from datetime import datetime, timezone
+from sqlalchemy import select
+
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
 from app.db.database import Database
@@ -240,6 +243,71 @@ async def handle_long_short_data(app: FastAPI, data: dict):
     flow["long_short_ratio"] = data["long_short_ratio"]
 
 
+async def check_pending_signals(app: FastAPI):
+    """Check all PENDING signals against recent candles for outcome resolution."""
+    db = app.state.db
+    redis = app.state.redis
+
+    from app.engine.outcome_resolver import resolve_signal_outcome
+
+    async with db.session_factory() as session:
+        result = await session.execute(
+            select(Signal).where(Signal.outcome == "PENDING").order_by(Signal.created_at.desc()).limit(50)
+        )
+        pending = result.scalars().all()
+
+        for signal in pending:
+            # Check expiry (24h)
+            age = (datetime.now(timezone.utc) - signal.created_at).total_seconds()
+            if age > 86400:
+                signal.outcome = "EXPIRED"
+                signal.outcome_at = datetime.now(timezone.utc)
+                signal.outcome_duration_minutes = round(age / 60)
+                continue
+
+            cache_key = f"candles:{signal.pair}:{signal.timeframe}"
+            raw_candles = await redis.lrange(cache_key, -200, -1)
+            if not raw_candles:
+                continue
+
+            import json as _json
+            candles_data = [_json.loads(c) for c in raw_candles]
+
+            # Only check candles after signal creation
+            signal_ts = signal.created_at.isoformat()
+            candles_after = [c for c in candles_data if c["timestamp"] > signal_ts]
+            if not candles_after:
+                continue
+
+            signal_dict = {
+                "direction": signal.direction,
+                "entry": float(signal.entry),
+                "stop_loss": float(signal.stop_loss),
+                "take_profit_1": float(signal.take_profit_1),
+                "take_profit_2": float(signal.take_profit_2),
+                "created_at": signal.created_at,
+            }
+
+            # Parse candle floats
+            parsed = []
+            for c in candles_after:
+                parsed.append({
+                    "high": float(c.get("high", c.get("h", 0))),
+                    "low": float(c.get("low", c.get("l", 0))),
+                    "close": float(c.get("close", c.get("c", 0))),
+                    "timestamp": c["timestamp"],
+                })
+
+            outcome = resolve_signal_outcome(signal_dict, parsed)
+            if outcome:
+                signal.outcome = outcome["outcome"]
+                signal.outcome_at = outcome["outcome_at"]
+                signal.outcome_pnl_pct = outcome["outcome_pnl_pct"]
+                signal.outcome_duration_minutes = outcome["outcome_duration_minutes"]
+
+        await session.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = Settings()
@@ -283,12 +351,23 @@ async def lifespan(app: FastAPI):
     ws_task = asyncio.create_task(ws_client.connect())
     poller_task = asyncio.create_task(rest_poller.run())
 
+    async def outcome_loop():
+        while True:
+            try:
+                await check_pending_signals(app)
+            except Exception as e:
+                logger.error(f"Outcome check failed: {e}")
+            await asyncio.sleep(60)
+
+    outcome_task = asyncio.create_task(outcome_loop())
+
     yield
 
     await ws_client.stop()
     rest_poller.stop()
     ws_task.cancel()
     poller_task.cancel()
+    outcome_task.cancel()
     await redis.close()
     await db.close()
 
