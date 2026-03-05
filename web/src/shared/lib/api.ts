@@ -1,5 +1,5 @@
 import { API_BASE_URL, API_KEY } from "./constants";
-import type { Signal } from "../../features/signals/types";
+import type { Signal, SignalStats } from "../../features/signals/types";
 
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
@@ -83,6 +83,9 @@ export const api = {
     const query = new URLSearchParams({ pair, timeframe, limit: String(limit) });
     return request<CandleData[]>(`/api/candles?${query}`);
   },
+
+  getSignalStats: (days = 7) =>
+    request<SignalStats>(`/api/signals/stats?days=${days}`),
 
   placeOrder: (order: OrderRequest) =>
     request<OrderResult>("/api/account/order", {
