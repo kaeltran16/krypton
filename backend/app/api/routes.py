@@ -27,6 +27,10 @@ def _signal_to_dict(signal: Signal) -> dict:
             "take_profit_1": float(signal.take_profit_1),
             "take_profit_2": float(signal.take_profit_2),
         },
+        "outcome": signal.outcome,
+        "outcome_pnl_pct": float(signal.outcome_pnl_pct) if signal.outcome_pnl_pct else None,
+        "outcome_duration_minutes": signal.outcome_duration_minutes,
+        "outcome_at": signal.outcome_at.isoformat() if signal.outcome_at else None,
         "created_at": signal.created_at.isoformat() if signal.created_at else None,
     }
 
@@ -53,6 +57,78 @@ def create_router() -> APIRouter:
             query = query.limit(limit)
             result = await session.execute(query)
             return [_signal_to_dict(s) for s in result.scalars().all()]
+
+    @router.get("/signals/stats")
+    async def get_signal_stats(
+        request: Request,
+        _key: str = auth,
+        days: int = Query(7, ge=1, le=90),
+    ):
+        redis = request.app.state.redis
+        cache_key = f"signal_stats:{days}d"
+
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
+        db = request.app.state.db
+        async with db.session_factory() as session:
+            from datetime import datetime, timezone, timedelta
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            result = await session.execute(
+                select(Signal)
+                .where(Signal.created_at >= cutoff)
+                .where(Signal.outcome != "PENDING")
+            )
+            resolved = result.scalars().all()
+
+            if not resolved:
+                stats = {"win_rate": 0, "avg_rr": 0, "total_resolved": 0, "total_wins": 0, "total_losses": 0, "by_pair": {}, "by_timeframe": {}}
+            else:
+                wins = [s for s in resolved if s.outcome in ("TP1_HIT", "TP2_HIT")]
+                losses = [s for s in resolved if s.outcome == "SL_HIT"]
+                expired = [s for s in resolved if s.outcome == "EXPIRED"]
+
+                total = len(resolved)
+                win_count = len(wins)
+                loss_count = len(losses)
+                win_rate = round(win_count / total * 100, 1) if total > 0 else 0
+
+                avg_win = sum(float(s.outcome_pnl_pct or 0) for s in wins) / max(len(wins), 1)
+                avg_loss = abs(sum(float(s.outcome_pnl_pct or 0) for s in losses) / max(len(losses), 1))
+                avg_rr = round(avg_win / max(avg_loss, 0.01), 2)
+
+                by_pair = {}
+                for s in resolved:
+                    p = by_pair.setdefault(s.pair, {"wins": 0, "total": 0})
+                    p["total"] += 1
+                    if s.outcome in ("TP1_HIT", "TP2_HIT"):
+                        p["wins"] += 1
+                for p in by_pair.values():
+                    p["win_rate"] = round(p["wins"] / p["total"] * 100, 1)
+
+                by_timeframe = {}
+                for s in resolved:
+                    t = by_timeframe.setdefault(s.timeframe, {"wins": 0, "total": 0})
+                    t["total"] += 1
+                    if s.outcome in ("TP1_HIT", "TP2_HIT"):
+                        t["wins"] += 1
+                for t in by_timeframe.values():
+                    t["win_rate"] = round(t["wins"] / t["total"] * 100, 1)
+
+                stats = {
+                    "win_rate": win_rate,
+                    "avg_rr": avg_rr,
+                    "total_resolved": total,
+                    "total_wins": win_count,
+                    "total_losses": loss_count,
+                    "total_expired": len(expired),
+                    "by_pair": by_pair,
+                    "by_timeframe": by_timeframe,
+                }
+
+            await redis.set(cache_key, json.dumps(stats), ex=300)
+            return stats
 
     @router.get("/signals/{signal_id}")
     async def get_signal(request: Request, signal_id: int, _key: str = auth):
