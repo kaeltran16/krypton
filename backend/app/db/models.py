@@ -57,6 +57,13 @@ class Signal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # outcome tracking
+    outcome: Mapped[str] = mapped_column(
+        String(16), default="PENDING", server_default="PENDING", nullable=False
+    )
+    outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome_pnl_pct: Mapped[float | None] = mapped_column(Numeric(10, 4))
+    outcome_duration_minutes: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (
         Index("ix_signal_pair_tf_created", "pair", "timeframe", "created_at"),

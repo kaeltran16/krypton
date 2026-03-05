@@ -39,3 +39,22 @@ def test_signal_model():
     assert signal.direction == "LONG"
     assert signal.final_score == 78
     assert signal.raw_indicators["rsi"] == 32
+
+
+def test_signal_outcome_fields():
+    signal = Signal(
+        pair="BTC-USDT-SWAP",
+        timeframe="15m",
+        direction="LONG",
+        final_score=78,
+        traditional_score=72,
+        entry=Decimal("67420"),
+        stop_loss=Decimal("66890"),
+        take_profit_1=Decimal("67950"),
+        take_profit_2=Decimal("68480"),
+        outcome="PENDING",
+    )
+    assert signal.outcome == "PENDING"
+    assert signal.outcome_at is None
+    assert signal.outcome_pnl_pct is None
+    assert signal.outcome_duration_minutes is None
