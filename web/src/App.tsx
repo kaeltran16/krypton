@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Layout } from "./shared/components/Layout";
 import { HomeView } from "./features/home/components/HomeView";
 import { ChartView } from "./features/chart/components/ChartView";
+import { SignalsView } from "./features/signals/components/SignalsView";
 import { JournalView } from "./features/signals/components/JournalView";
 import { MorePage } from "./features/more/components/MorePage";
 import { useSignalWebSocket } from "./features/signals/hooks/useSignalWebSocket";
@@ -17,7 +18,8 @@ export default function App() {
     <Layout
       home={<HomeView pair={selectedPair} />}
       chart={<ChartView pair={selectedPair} />}
-      signals={<JournalView />}
+      signals={<SignalsView />}
+      journal={<JournalView />}
       more={<MorePage />}
       price={price}
       change24h={change24h}

@@ -5,13 +5,20 @@ import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
 
 export function useSignalWebSocket() {
-  const { addSignal, setConnected } = useSignalStore();
-  const { pairs, timeframes, threshold } = useSettingsStore();
+  const pairs = useSettingsStore((s) => s.pairs);
+  const timeframes = useSettingsStore((s) => s.timeframes);
+  const threshold = useSettingsStore((s) => s.threshold);
   const wsRef = useRef<WebSocketManager | null>(null);
   const thresholdRef = useRef(threshold);
   thresholdRef.current = threshold;
 
+  const pairsKey = JSON.stringify(pairs);
+  const timeframesKey = JSON.stringify(timeframes);
+
   useEffect(() => {
+    const currentPairs = JSON.parse(pairsKey);
+    const currentTimeframes = JSON.parse(timeframesKey);
+
     const params = new URLSearchParams();
     if (API_KEY) params.set("api_key", API_KEY);
     const qs = params.toString();
@@ -22,18 +29,18 @@ export function useSignalWebSocket() {
     wsRef.current = ws;
 
     ws.onConnected = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ type: "subscribe", pairs, timeframes }));
+      useSignalStore.getState().setConnected(true);
+      ws.send(JSON.stringify({ type: "subscribe", pairs: currentPairs, timeframes: currentTimeframes }));
     };
 
-    ws.onDisconnected = () => setConnected(false);
+    ws.onDisconnected = () => useSignalStore.getState().setConnected(false);
 
     ws.onMessage = (data: any) => {
       if (
         data.type === "signal" &&
         Math.abs(data.signal.final_score) >= thresholdRef.current
       ) {
-        addSignal(data.signal);
+        useSignalStore.getState().addSignal(data.signal);
       } else if (data.type === "candle" && data.candle) {
         useSignalStore.getState().notifyCandleListeners(data.candle);
       }
@@ -41,7 +48,7 @@ export function useSignalWebSocket() {
 
     ws.connect();
     return () => ws.disconnect();
-  }, [pairs, timeframes, addSignal, setConnected]);
+  }, [pairsKey, timeframesKey]);
 
   return wsRef;
 }

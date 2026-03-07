@@ -81,22 +81,22 @@ export function CalendarView() {
         <div className="bg-card rounded-lg p-3">
           <div className="grid grid-cols-4 gap-2 text-center text-xs">
             <div>
-              <div className="font-mono font-bold text-white">{summary.total_signals}</div>
-              <div className="text-gray-500">Signals</div>
+              <div className="font-mono font-bold text-foreground">{summary.total_signals}</div>
+              <div className="text-muted">Signals</div>
             </div>
             <div>
               <div className={`font-mono font-bold ${summary.net_pnl >= 0 ? "text-long" : "text-short"}`}>
                 {summary.net_pnl >= 0 ? "+" : ""}{summary.net_pnl.toFixed(1)}%
               </div>
-              <div className="text-gray-500">Net P&L</div>
+              <div className="text-muted">Net P&L</div>
             </div>
             <div>
               <div className="font-mono font-bold text-long">{summary.best_day?.slice(8) ?? "—"}</div>
-              <div className="text-gray-500">Best Day</div>
+              <div className="text-muted">Best Day</div>
             </div>
             <div>
               <div className="font-mono font-bold text-short">{summary.worst_day?.slice(8) ?? "—"}</div>
-              <div className="text-gray-500">Worst Day</div>
+              <div className="text-muted">Worst Day</div>
             </div>
           </div>
         </div>
@@ -104,16 +104,16 @@ export function CalendarView() {
 
       {/* Month navigation */}
       <div className="flex items-center justify-between">
-        <button onClick={prevMonth} className="text-gray-400 hover:text-white px-2 py-1 text-lg">&larr;</button>
+        <button onClick={prevMonth} className="text-muted hover:text-foreground px-2 py-1 text-lg">&larr;</button>
         <span className="text-sm font-medium">{getMonthName(year, month)}</span>
-        <button onClick={nextMonth} className="text-gray-400 hover:text-white px-2 py-1 text-lg">&rarr;</button>
+        <button onClick={nextMonth} className="text-muted hover:text-foreground px-2 py-1 text-lg">&rarr;</button>
       </div>
 
       {loading ? (
         <div className="h-64 bg-card rounded-lg animate-pulse" />
       ) : error ? (
         <div className="text-center py-8">
-          <p className="text-gray-500 text-sm mb-2">Failed to load calendar</p>
+          <p className="text-muted text-sm mb-2">Failed to load calendar</p>
           <button onClick={() => { setLoading(true); setError(false); api.getSignalCalendar(formatMonth(year, month)).then(setData).catch(() => setError(true)).finally(() => setLoading(false)); }} className="text-xs text-long">Retry</button>
         </div>
       ) : (
@@ -123,7 +123,7 @@ export function CalendarView() {
             {/* Weekday headers */}
             <div className="grid grid-cols-7 gap-0.5 mb-1">
               {WEEKDAYS.map((d) => (
-                <div key={d} className="text-center text-[10px] text-gray-500 py-1">{d}</div>
+                <div key={d} className="text-center text-[10px] text-muted py-1">{d}</div>
               ))}
             </div>
 
@@ -152,15 +152,15 @@ export function CalendarView() {
                     key={dayNum}
                     onClick={() => setSelectedDay(isSelected ? null : dateStr)}
                     className={`aspect-square rounded-md flex flex-col items-center justify-center p-0.5 transition-colors ${bgTint} ${
-                      isSelected ? "ring-1 ring-long" : ""
-                    } ${isToday ? "border border-gray-600" : ""}`}
+                      isSelected ? "ring-1 ring-accent" : ""
+                    } ${isToday ? "border border-border" : ""}`}
                   >
-                    <span className={`text-xs ${isToday ? "text-long font-bold" : "text-gray-400"}`}>
+                    <span className={`text-xs ${isToday ? "text-accent font-bold" : "text-muted"}`}>
                       {dayNum}
                     </span>
                     {dayData && (
                       <>
-                        <span className="text-[8px] text-gray-500">{dayData.signal_count}s</span>
+                        <span className="text-[8px] text-muted">{dayData.signal_count}s</span>
                         <span className={`text-[8px] font-mono ${dayData.net_pnl >= 0 ? "text-long" : "text-short"}`}>
                           {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(1)}
                         </span>
@@ -184,26 +184,26 @@ function DaySignalsList({ date, dayData }: { date: string; dayData?: CalendarDay
   if (!dayData || dayData.signal_count === 0) {
     return (
       <div className="bg-card rounded-lg p-3 text-center">
-        <p className="text-gray-500 text-sm">No signals on {date}</p>
+        <p className="text-muted text-sm">No signals on {date}</p>
       </div>
     );
   }
 
   return (
     <div className="bg-card rounded-lg p-3">
-      <h3 className="text-xs text-gray-400 mb-2">{date}</h3>
+      <h3 className="text-xs text-muted mb-2">{date}</h3>
       <div className="grid grid-cols-3 gap-2 text-center text-sm">
         <div>
-          <div className="font-mono font-bold text-white">{dayData.signal_count}</div>
-          <div className="text-xs text-gray-500">Signals</div>
+          <div className="font-mono font-bold text-foreground">{dayData.signal_count}</div>
+          <div className="text-xs text-muted">Signals</div>
         </div>
         <div>
           <div className="font-mono font-bold text-long">{dayData.wins}W</div>
-          <div className="text-xs text-gray-500">Wins</div>
+          <div className="text-xs text-muted">Wins</div>
         </div>
         <div>
           <div className="font-mono font-bold text-short">{dayData.losses}L</div>
-          <div className="text-xs text-gray-500">Losses</div>
+          <div className="text-xs text-muted">Losses</div>
         </div>
       </div>
       <div className={`text-center mt-2 font-mono font-bold ${dayData.net_pnl >= 0 ? "text-long" : "text-short"}`}>

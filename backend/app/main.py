@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
-from app.db.database import Database
+from app.db.database import Base, Database
 from app.db.models import Candle, Signal
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
@@ -313,6 +313,10 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     db = Database(settings.database_url)
     redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+
+    # Create tables if they don't exist
+    async with db.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     app.state.settings = settings
     app.state.db = db

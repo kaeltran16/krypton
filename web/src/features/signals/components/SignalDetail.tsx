@@ -32,21 +32,21 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
     <dialog ref={ref} onClose={onClose} onClick={(e) => {
       if (e.target === ref.current) onClose();
     }}>
-      <div className="p-4 border-b border-gray-800">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
             <span className="text-lg font-bold">{signal.pair}</span>
-            <span className="ml-2 text-sm text-gray-400">{signal.timeframe}</span>
+            <span className="ml-2 text-sm text-muted">{signal.timeframe}</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+          <button onClick={onClose} className="text-muted hover:text-foreground text-xl leading-none">&times;</button>
         </div>
         <div className={`text-2xl font-mono font-bold mt-1 ${color}`}>
           {signal.direction} {formatScore(signal.final_score)}
         </div>
       </div>
 
-      <div className="p-4 border-b border-gray-800">
-        <h3 className="text-sm text-gray-400 mb-2">Score Breakdown</h3>
+      <div className="p-4 border-b border-border">
+        <h3 className="text-sm text-muted mb-2">Score Breakdown</h3>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div>
             Traditional: <span className="font-mono">{formatScore(signal.traditional_score)}</span>
@@ -58,14 +58,14 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       </div>
 
       {signal.explanation && (
-        <div className="p-4 border-b border-gray-800">
-          <h3 className="text-sm text-gray-400 mb-2">AI Analysis</h3>
-          <p className="text-sm text-gray-300 leading-relaxed">{signal.explanation}</p>
+        <div className="p-4 border-b border-border">
+          <h3 className="text-sm text-muted mb-2">AI Analysis</h3>
+          <p className="text-sm text-foreground leading-relaxed">{signal.explanation}</p>
         </div>
       )}
 
-      <div className="p-4 border-b border-gray-800">
-        <h3 className="text-sm text-gray-400 mb-2">Price Levels</h3>
+      <div className="p-4 border-b border-border">
+        <h3 className="text-sm text-muted mb-2">Price Levels</h3>
         <div className="font-mono text-sm space-y-1">
           <LevelRow label="Entry" value={signal.levels.entry} />
           <LevelRow label="Stop Loss" value={signal.levels.stop_loss} className="text-short" />
@@ -75,8 +75,8 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       </div>
 
       {signal.outcome && signal.outcome !== "PENDING" && (
-        <div className="p-4 border-b border-gray-800">
-          <h3 className="text-sm text-gray-400 mb-2">Outcome</h3>
+        <div className="p-4 border-b border-border">
+          <h3 className="text-sm text-muted mb-2">Outcome</h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>Result: <span className={`font-mono font-bold ${signal.outcome.includes("TP") ? "text-long" : "text-short"}`}>{signal.outcome.replace("_", " ")}</span></div>
             {signal.outcome_pnl_pct != null && (
@@ -138,8 +138,8 @@ function JournalSection({ signal }: { signal: Signal }) {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm text-gray-400">Your Notes</h3>
-        {saving && <span className="text-xs text-gray-500">Saving...</span>}
+        <h3 className="text-sm text-muted">Your Notes</h3>
+        {saving && <span className="text-xs text-muted">Saving...</span>}
       </div>
 
       <div className="flex gap-1.5 mb-3">
@@ -152,9 +152,9 @@ function JournalSection({ signal }: { signal: Signal }) {
                 ? value === "TRADED"
                   ? "bg-long/20 text-long border border-long/40"
                   : value === "SKIPPED"
-                    ? "bg-gray-700 text-gray-300 border border-gray-600"
-                    : "bg-gray-700 text-white border border-gray-600"
-                : "text-gray-500 border border-gray-800"
+                    ? "bg-card-hover text-muted border border-border"
+                    : "bg-card-hover text-foreground border border-border"
+                : "text-muted border border-border"
             }`}
           >
             {label}
@@ -172,9 +172,9 @@ function JournalSection({ signal }: { signal: Signal }) {
         maxLength={500}
         rows={3}
         placeholder="Add a note about this signal..."
-        className="w-full bg-surface border border-gray-800 rounded-lg p-2.5 text-sm text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-gray-600"
+        className="w-full bg-card-hover border border-border rounded-lg p-2.5 text-sm text-foreground placeholder-dim resize-none focus:outline-none focus:border-accent/50"
       />
-      <div className="text-xs text-gray-600 text-right mt-1">{note.length}/500</div>
+      <div className="text-xs text-dim text-right mt-1">{note.length}/500</div>
     </div>
   );
 }
@@ -188,7 +188,7 @@ interface LevelRowProps {
 function LevelRow({ label, value, className = "" }: LevelRowProps) {
   return (
     <div className="flex justify-between">
-      <span className={`text-gray-400 ${className}`}>{label}</span>
+      <span className={`text-muted ${className}`}>{label}</span>
       <span>{formatPrice(value)}</span>
     </div>
   );
