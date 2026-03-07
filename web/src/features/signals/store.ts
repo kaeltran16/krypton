@@ -10,6 +10,7 @@ interface SignalState {
   candleListeners: Set<(candle: any) => void>;
   addSignal: (signal: Signal) => void;
   setSignals: (signals: Signal[]) => void;
+  updateSignal: (id: number, patch: Partial<Signal>) => void;
   selectSignal: (signal: Signal) => void;
   clearSelection: () => void;
   setConnected: (connected: boolean) => void;
@@ -29,6 +30,14 @@ export const useSignalStore = create<SignalState>((set, get) => ({
       signals: [signal, ...state.signals].slice(0, MAX_SIGNALS),
     })),
   setSignals: (signals) => set({ signals: signals.slice(0, MAX_SIGNALS) }),
+  updateSignal: (id, patch) =>
+    set((state) => ({
+      signals: state.signals.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      selectedSignal:
+        state.selectedSignal?.id === id
+          ? { ...state.selectedSignal, ...patch }
+          : state.selectedSignal,
+    })),
   selectSignal: (signal) => set({ selectedSignal: signal }),
   clearSelection: () => set({ selectedSignal: null }),
   setConnected: (connected) => set({ connected }),

@@ -3,6 +3,7 @@ export type Confidence = "HIGH" | "MEDIUM" | "LOW";
 export type LlmOpinion = "confirm" | "caution" | "contradict";
 export type Timeframe = "15m" | "1h" | "4h";
 export type SignalOutcome = "PENDING" | "TP1_HIT" | "TP2_HIT" | "SL_HIT" | "EXPIRED";
+export type UserStatus = "OBSERVED" | "TRADED" | "SKIPPED";
 
 export interface SignalLevels {
   entry: number;
@@ -27,6 +28,8 @@ export interface Signal {
   outcome_duration_minutes: number | null;
   outcome_at: string | null;
   created_at: string;
+  user_note: string | null;
+  user_status: UserStatus;
 }
 
 export interface SignalStats {
@@ -36,6 +39,27 @@ export interface SignalStats {
   total_wins: number;
   total_losses: number;
   total_expired?: number;
-  by_pair: Record<string, { wins: number; total: number; win_rate: number }>;
+  by_pair: Record<string, { wins: number; losses: number; total: number; win_rate: number; avg_pnl: number }>;
   by_timeframe: Record<string, { wins: number; total: number; win_rate: number }>;
+  equity_curve: { date: string; cumulative_pnl: number }[];
+  hourly_performance: { hour: number; avg_pnl: number; count: number }[];
+  streaks: { current: number; best_win: number; worst_loss: number };
+}
+
+export interface CalendarDay {
+  date: string;
+  signal_count: number;
+  net_pnl: number;
+  wins: number;
+  losses: number;
+}
+
+export interface CalendarResponse {
+  days: CalendarDay[];
+  monthly_summary: {
+    total_signals: number;
+    net_pnl: number;
+    best_day: string | null;
+    worst_day: string | null;
+  };
 }

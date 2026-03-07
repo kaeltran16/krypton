@@ -1,5 +1,5 @@
 import { API_BASE_URL, API_KEY } from "./constants";
-import type { Signal, SignalStats } from "../../features/signals/types";
+import type { Signal, SignalStats, CalendarResponse, UserStatus } from "../../features/signals/types";
 
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
@@ -86,6 +86,15 @@ export const api = {
 
   getSignalStats: (days = 7) =>
     request<SignalStats>(`/api/signals/stats?days=${days}`),
+
+  patchSignalJournal: (id: number, patch: { status?: UserStatus; note?: string }) =>
+    request<Signal>(`/api/signals/${id}/journal`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  getSignalCalendar: (month: string) =>
+    request<CalendarResponse>(`/api/signals/calendar?month=${month}`),
 
   placeOrder: (order: OrderRequest) =>
     request<OrderResult>("/api/account/order", {

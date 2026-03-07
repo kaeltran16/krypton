@@ -64,6 +64,11 @@ class Signal(Base):
     outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     outcome_pnl_pct: Mapped[float | None] = mapped_column(Numeric(10, 4))
     outcome_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    # journal fields
+    user_note: Mapped[str | None] = mapped_column(String(500))
+    user_status: Mapped[str] = mapped_column(
+        String(16), default="OBSERVED", server_default="OBSERVED", nullable=False
+    )
 
     __table_args__ = (
         Index("ix_signal_pair_tf_created", "pair", "timeframe", "created_at"),
