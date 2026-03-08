@@ -8,11 +8,7 @@ import type { Portfolio, Position } from "../../../shared/lib/api";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
 
-interface Props {
-  pair: string;
-}
-
-export function HomeView({ pair }: Props) {
+export function HomeView() {
   const { portfolio, positions, loading: accountLoading, error, refresh } = useAccount();
   const { stats, loading: statsLoading } = useSignalStats();
   const { news: recentNews, loading: newsLoading } = useRecentNews(5);

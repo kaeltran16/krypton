@@ -195,10 +195,6 @@ export function CandlestickChart({ candles, enabledIndicators }: Props) {
       }
     }
 
-    // Check if we still need oscillator pane
-    const needsOscPane = [...enabledIndicators].some(
-      (id) => INDICATOR_MAP.get(id)?.pane === "oscillator"
-    );
     // If we had a pane but no longer need it, we need to recreate the chart
     // For simplicity, we'll just leave the pane (it'll be empty and tiny)
 

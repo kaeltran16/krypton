@@ -19,7 +19,7 @@ export default function App() {
     <>
       <NewsAlertToast />
       <Layout
-        home={<HomeView pair={selectedPair} />}
+        home={<HomeView />}
         chart={<ChartView pair={selectedPair} />}
         signals={<SignalsView />}
         news={<NewsView />}

@@ -98,7 +98,7 @@ function JournalSection({ signal }: { signal: Signal }) {
   const updateSignal = useSignalStore((s) => s.updateSignal);
   const [note, setNote] = useState(signal.user_note ?? "");
   const [saving, setSaving] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Reset note when signal changes
   useEffect(() => {

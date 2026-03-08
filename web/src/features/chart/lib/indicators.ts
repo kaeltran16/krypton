@@ -521,7 +521,7 @@ export function detectSupportResistance(
 
   // Use ATR for adaptive zone tolerance
   const atr = calcATR(candles, 14);
-  const lastAtr = atr.findLast((v) => v !== null) ?? (currentPrice * 0.005);
+  const lastAtr = [...atr].reverse().find((v): v is number => v !== null) ?? (currentPrice * 0.005);
   const tolerance = lastAtr * 0.5;
 
   // Collect swing highs and swing lows (local extremes)

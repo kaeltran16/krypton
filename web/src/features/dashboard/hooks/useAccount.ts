@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { api, type Portfolio, type Position } from "../../../shared/lib/api";
+import { api, type Portfolio } from "../../../shared/lib/api";
 
 export function useAccount(pollInterval = 10000) {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
