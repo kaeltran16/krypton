@@ -1,25 +1,27 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api, type CandleData } from "../../../shared/lib/api";
-import type { Timeframe } from "../../signals/types";
+
+type ChartTimeframe = "15m" | "1h" | "4h" | "1D";
 
 const OKX_WS_URL = "wss://ws.okx.com:8443/ws/v5/business";
 const OKX_REST_URL = "https://www.okx.com/api/v5/market/candles";
 
-const TF_CHANNEL: Record<Timeframe, string> = {
+const TF_CHANNEL: Partial<Record<ChartTimeframe, string>> = {
   "15m": "candle15m",
   "1h": "candle1H",
   "4h": "candle4H",
 };
 
-const TF_BAR: Record<Timeframe, string> = {
+const TF_BAR: Record<ChartTimeframe, string> = {
   "15m": "15m",
   "1h": "1H",
   "4h": "4H",
+  "1D": "1D",
 };
 
 const MIN_CANDLES = 60;
 
-async function fetchOkxCandles(pair: string, timeframe: Timeframe): Promise<CandleData[]> {
+async function fetchOkxCandles(pair: string, timeframe: ChartTimeframe): Promise<CandleData[]> {
   const bar = TF_BAR[timeframe];
   const res = await fetch(`${OKX_REST_URL}?instId=${pair}&bar=${bar}&limit=100`);
   if (!res.ok) return [];
@@ -41,7 +43,7 @@ function parseOkxCandle(raw: string[]): CandleData {
   };
 }
 
-export function useChartData(pair: string, timeframe: Timeframe) {
+export function useChartData(pair: string, timeframe: ChartTimeframe) {
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
   const wsRef = useRef<WebSocket | null>(null);
@@ -49,16 +51,21 @@ export function useChartData(pair: string, timeframe: Timeframe) {
   const fetchCandles = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getCandles(pair, timeframe);
+      const raw = await api.getCandles(pair, timeframe);
+      // Backend returns ISO string timestamps from Redis; normalize to ms
+      const data = raw.map((c) => ({
+        ...c,
+        timestamp: typeof c.timestamp === "number" ? c.timestamp : new Date(c.timestamp as any).getTime(),
+      }));
       if (data.length >= MIN_CANDLES) {
         setCandles(data);
       } else {
-        const okxData = await fetchOkxCandles(pair, timeframe as Timeframe);
+        const okxData = await fetchOkxCandles(pair, timeframe);
         setCandles(okxData.length > data.length ? okxData : data);
       }
     } catch {
       try {
-        const okxData = await fetchOkxCandles(pair, timeframe as Timeframe);
+        const okxData = await fetchOkxCandles(pair, timeframe);
         setCandles(okxData);
       } catch {
         setCandles([]);

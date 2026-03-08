@@ -6,6 +6,9 @@ You are a crypto futures trading analyst. Analyze the following data for {pair} 
 ## Order Flow Metrics
 {order_flow}
 
+## Recent News Context
+{news}
+
 ## Current Assessment
 Preliminary Score: {preliminary_score} (Direction: {direction})
 

@@ -9,6 +9,8 @@ _YAML_SECTION_PREFIX = {
     "collector": "collector_",
     "engine": "engine_",
     "api": "api_",
+    "onchain": "onchain_",
+    "news": "news_",
 }
 
 
@@ -56,8 +58,29 @@ class Settings(BaseSettings):
     engine_signal_threshold: int = 50
     engine_llm_threshold: int = 30
     engine_llm_timeout_seconds: int = 30
-    engine_traditional_weight: float = 0.60
+    engine_traditional_weight: float = 0.50
+    engine_flow_weight: float = 0.25
+    engine_onchain_weight: float = 0.25
     engine_llm_weight: float = 0.40
+
+    # on-chain data
+    onchain_enabled: bool = True
+    onchain_poll_interval_seconds: int = 300
+    onchain_tier2_poll_interval_seconds: int = 1800
+    cryptoquant_api_key: str = ""
+
+    # news
+    news_poll_interval_seconds: int = 150
+    news_llm_context_window_minutes: int = 30
+    news_high_impact_push_enabled: bool = True
+    news_llm_daily_budget: int = 200
+    news_relevance_keywords: list[str] = [
+        "interest rate", "Fed", "CPI", "inflation", "sanctions",
+        "war", "tariff", "regulation", "crypto ban", "SEC",
+    ]
+    news_rss_feeds: list[dict] = []
+    cryptopanic_api_key: str = ""
+    news_api_key: str = ""
 
     # push notifications
     vapid_private_key: str = ""

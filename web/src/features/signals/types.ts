@@ -12,6 +12,15 @@ export interface SignalLevels {
   take_profit_2: number;
 }
 
+export interface RiskMetrics {
+  position_size_usd: number;
+  position_size_base: number;
+  risk_amount_usd: number;
+  risk_pct: number;
+  tp1_rr: number | null;
+  tp2_rr: number | null;
+}
+
 export interface Signal {
   id: number;
   pair: string;
@@ -30,6 +39,18 @@ export interface Signal {
   created_at: string;
   user_note: string | null;
   user_status: UserStatus;
+  risk_metrics: RiskMetrics | null;
+  correlated_news_ids: number[] | null;
+}
+
+export interface PerformanceMetrics {
+  sharpe_ratio: number | null;
+  max_drawdown_pct: number;
+  profit_factor: number | null;
+  expectancy: number | null;
+  avg_hold_time_minutes: number | null;
+  best_trade: { pnl_pct: number; pair: string; timeframe: string; direction: string } | null;
+  worst_trade: { pnl_pct: number; pair: string; timeframe: string; direction: string } | null;
 }
 
 export interface SignalStats {
@@ -44,6 +65,9 @@ export interface SignalStats {
   equity_curve: { date: string; cumulative_pnl: number }[];
   hourly_performance: { hour: number; avg_pnl: number; count: number }[];
   streaks: { current: number; best_win: number; worst_loss: number };
+  performance: PerformanceMetrics;
+  drawdown_series: { date: string; drawdown: number }[];
+  pnl_distribution: { bucket: number; count: number }[];
 }
 
 export interface CalendarDay {

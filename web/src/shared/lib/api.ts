@@ -1,5 +1,6 @@
 import { API_BASE_URL, API_KEY } from "./constants";
 import type { Signal, SignalStats, CalendarResponse, UserStatus } from "../../features/signals/types";
+import type { NewsEvent } from "../../features/news/types";
 
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
@@ -46,6 +47,47 @@ export interface CandleData {
   volume: number;
 }
 
+export interface Portfolio {
+  total_equity: number;
+  unrealized_pnl: number;
+  available_balance: number;
+  used_margin: number;
+  total_exposure: number;
+  margin_utilization: number;
+  positions: Position[];
+}
+
+export interface RiskMetrics {
+  position_size_usd: number;
+  position_size_base: number;
+  risk_amount_usd: number;
+  risk_pct: number;
+  tp1_rr: number | null;
+  tp2_rr: number | null;
+}
+
+export interface RiskSettings {
+  risk_per_trade: number;
+  max_position_size_usd: number | null;
+  daily_loss_limit_pct: number;
+  max_concurrent_positions: number;
+  max_exposure_pct: number;
+  cooldown_after_loss_minutes: number | null;
+  max_risk_per_trade_pct: number;
+  updated_at: string | null;
+}
+
+export interface RiskRule {
+  rule: string;
+  status: "OK" | "WARNING" | "BLOCKED";
+  reason: string;
+}
+
+export interface RiskCheckResult {
+  status: "OK" | "WARNING" | "BLOCKED";
+  rules: RiskRule[];
+}
+
 export interface OrderRequest {
   pair: string;
   side: "buy" | "sell";
@@ -53,6 +95,8 @@ export interface OrderRequest {
   order_type?: string;
   sl_price?: string;
   tp_price?: string;
+  override?: boolean;
+  override_rules?: string[];
 }
 
 export interface OrderResult {
@@ -79,6 +123,22 @@ export const api = {
 
   getPositions: () => request<Position[]>("/api/account/positions"),
 
+  getPortfolio: () => request<Portfolio>("/api/account/portfolio"),
+
+  getRiskSettings: () => request<RiskSettings>("/api/risk/settings"),
+
+  updateRiskSettings: (settings: Partial<RiskSettings>) =>
+    request<RiskSettings>("/api/risk/settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+
+  checkRisk: (params: { pair: string; direction: string; size_usd: number }) =>
+    request<RiskCheckResult>("/api/risk/check", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
   getCandles: (pair: string, timeframe: string, limit = 200) => {
     const query = new URLSearchParams({ pair, timeframe, limit: String(limit) });
     return request<CandleData[]>(`/api/candles?${query}`);
@@ -101,4 +161,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify(order),
     }),
+
+  getNews: (params?: {
+    category?: string;
+    impact?: string;
+    sentiment?: string;
+    pair?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.category) query.set("category", params.category);
+    if (params?.impact) query.set("impact", params.impact);
+    if (params?.sentiment) query.set("sentiment", params.sentiment);
+    if (params?.pair) query.set("pair", params.pair);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return request<NewsEvent[]>(`/api/news${qs ? `?${qs}` : ""}`);
+  },
+
+  getRecentNews: (limit = 20) =>
+    request<NewsEvent[]>(`/api/news/recent?limit=${limit}`),
 };

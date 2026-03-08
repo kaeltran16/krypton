@@ -43,3 +43,17 @@ class ConnectionManager:
                     dead.append(ws)
         for ws in dead:
             self.disconnect(ws)
+
+    async def broadcast_news(self, alert: dict):
+        """Broadcast a news_alert to all connected clients.
+
+        News alerts are not filtered by pair/timeframe — all clients receive them.
+        """
+        dead = []
+        for ws in list(self.connections):
+            try:
+                await ws.send_json(alert)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)

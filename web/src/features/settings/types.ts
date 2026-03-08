@@ -6,6 +6,9 @@ export interface Settings {
   timeframes: Timeframe[];
   notificationsEnabled: boolean;
   apiBaseUrl: string;
+  onchainEnabled: boolean;
+  newsAlertsEnabled: boolean;
+  newsContextWindow: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -14,4 +17,7 @@ export const DEFAULT_SETTINGS: Settings = {
   timeframes: ["15m", "1h", "4h"],
   notificationsEnabled: true,
   apiBaseUrl: import.meta.env.VITE_API_URL ?? "http://localhost:8000",
+  onchainEnabled: true,
+  newsAlertsEnabled: true,
+  newsContextWindow: 30,
 };

@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { CandlestickChart } from "./CandlestickChart";
-import { IndicatorSheet, getStoredIndicators, getStudies, hasOscillator } from "./IndicatorSheet";
+import { IndicatorSheet, getStoredIndicators, hasOscillator } from "./IndicatorSheet";
+import { useChartData } from "../hooks/useChartData";
 import { useLivePrice } from "../../../shared/hooks/useLivePrice";
 import { formatPrice } from "../../../shared/lib/format";
 
@@ -16,9 +17,9 @@ export function ChartView({ pair }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(getStoredIndicators);
   const { price, open24h, high24h, low24h, vol24h, change24h } = useLivePrice(pair);
+  const { candles } = useChartData(pair, timeframe);
 
-  const studies = useMemo(() => getStudies(enabledIds), [enabledIds]);
-  const fullScreen = useMemo(() => hasOscillator(enabledIds), [enabledIds]);
+  const fullScreen = hasOscillator(enabledIds);
 
   const handleToggle = useCallback((id: string) => {
     setEnabledIds((prev) => {
@@ -75,8 +76,8 @@ export function ChartView({ pair }: Props) {
 
       {/* Chart */}
       <div className="flex-1 min-h-0 px-2">
-        <div className="relative w-full h-full rounded-lg overflow-hidden">
-          <CandlestickChart pair={pair} timeframe={timeframe} studies={studies} />
+        <div className="w-full h-full rounded-lg overflow-hidden">
+          <CandlestickChart candles={candles} enabledIndicators={enabledIds} />
         </div>
       </div>
 

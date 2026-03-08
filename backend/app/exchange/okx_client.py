@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 OKX_REST_BASE = "https://www.okx.com"
 
 
+def _safe_float(val, default=0.0) -> float:
+    """OKX returns empty strings for missing numeric fields."""
+    if val is None or val == "":
+        return default
+    return float(val)
+
+
 def _sign_request(timestamp: str, method: str, path: str, body: str, secret: str) -> str:
     message = timestamp + method.upper() + path + body
     mac = hmac.new(secret.encode(), message.encode(), hashlib.sha256)
@@ -28,14 +35,14 @@ def parse_balance_response(raw: dict) -> dict | None:
         return None
     data = raw["data"][0]
     return {
-        "total_equity": float(data.get("totalEq", 0)),
-        "unrealized_pnl": float(data.get("upl", 0)),
+        "total_equity": _safe_float(data.get("totalEq")),
+        "unrealized_pnl": _safe_float(data.get("upl")),
         "currencies": [
             {
                 "currency": d["ccy"],
-                "available": float(d.get("availBal", 0)),
-                "frozen": float(d.get("frozenBal", 0)),
-                "equity": float(d.get("eq", 0)),
+                "available": _safe_float(d.get("availBal")),
+                "frozen": _safe_float(d.get("frozenBal")),
+                "equity": _safe_float(d.get("eq")),
             }
             for d in data.get("details", [])
         ],
@@ -47,17 +54,17 @@ def parse_positions_response(raw: dict) -> list[dict]:
         return []
     positions = []
     for p in raw["data"]:
-        if float(p.get("pos", 0)) == 0:
+        if _safe_float(p.get("pos")) == 0:
             continue
         positions.append({
             "pair": p["instId"],
             "side": "long" if p.get("posSide") == "long" else "short",
-            "size": float(p["pos"]),
-            "avg_price": float(p.get("avgPx", 0)),
-            "mark_price": float(p.get("markPx", 0)),
-            "unrealized_pnl": float(p.get("upl", 0)),
-            "liquidation_price": float(p.get("liqPx", 0)) if p.get("liqPx") else None,
-            "margin": float(p.get("margin", 0)),
+            "size": _safe_float(p.get("pos")),
+            "avg_price": _safe_float(p.get("avgPx")),
+            "mark_price": _safe_float(p.get("markPx")),
+            "unrealized_pnl": _safe_float(p.get("upl")),
+            "liquidation_price": _safe_float(p.get("liqPx")) or None,
+            "margin": _safe_float(p.get("margin")),
             "leverage": p.get("lever", "0"),
         })
     return positions
@@ -75,6 +82,38 @@ def parse_order_response(raw: dict) -> dict:
         "order_id": order.get("ordId"),
         "client_order_id": order.get("clOrdId"),
     }
+
+
+def parse_instruments_response(raw: dict) -> dict[str, dict]:
+    """Parse instruments response into {instId: {lot_size, min_order_size, tick_size}}."""
+    if raw.get("code") != "0" or not raw.get("data"):
+        return {}
+    instruments = {}
+    for inst in raw["data"]:
+        instruments[inst["instId"]] = {
+            "lot_size": _safe_float(inst.get("lotSz"), 1),
+            "min_order_size": _safe_float(inst.get("minSz"), 1),
+            "tick_size": _safe_float(inst.get("tickSz"), 0.01),
+        }
+    return instruments
+
+
+def parse_fills_response(raw: dict) -> list[dict]:
+    """Parse fills history response into list of fill dicts."""
+    if raw.get("code") != "0" or not raw.get("data"):
+        return []
+    fills = []
+    for f in raw["data"]:
+        fills.append({
+            "inst_id": f["instId"],
+            "side": f["side"],
+            "fill_sz": _safe_float(f.get("fillSz")),
+            "fill_px": _safe_float(f.get("fillPx")),
+            "pnl": _safe_float(f.get("pnl")),
+            "fee": _safe_float(f.get("fee")),
+            "ts": int(f.get("ts", 0)),
+        })
+    return fills
 
 
 class OKXClient:
@@ -112,6 +151,25 @@ class OKXClient:
             resp = await client.get(path, headers=self._headers("GET", path))
             resp.raise_for_status()
             return parse_positions_response(resp.json())
+
+    async def get_instruments(self, inst_type: str = "SWAP") -> dict[str, dict]:
+        """Fetch instrument specs (lot size, min order, tick size). Uses Redis cache (1h)."""
+        path = f"/api/v5/public/instruments?instType={inst_type}"
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.get(path)
+            resp.raise_for_status()
+            return parse_instruments_response(resp.json())
+
+    async def get_fills_today(self) -> list[dict]:
+        """Fetch today's (UTC) fills from OKX."""
+        now = datetime.now(timezone.utc)
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        begin_ms = str(int(start_of_day.timestamp() * 1000))
+        path = f"/api/v5/trade/fills-history?instType=SWAP&begin={begin_ms}"
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.get(path, headers=self._headers("GET", path.split("?")[0]))
+            resp.raise_for_status()
+            return parse_fills_response(resp.json())
 
     async def place_order(
         self,

@@ -2,7 +2,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
+    Float,
     Index,
     Integer,
     Numeric,
@@ -69,9 +71,59 @@ class Signal(Base):
     user_status: Mapped[str] = mapped_column(
         String(16), default="OBSERVED", server_default="OBSERVED", nullable=False
     )
+    # risk metrics (position sizing data, nullable)
+    risk_metrics: Mapped[dict | None] = mapped_column(JSONB)
+    # news correlation
+    correlated_news_ids: Mapped[list | None] = mapped_column(JSONB)
 
     __table_args__ = (
         Index("ix_signal_pair_tf_created", "pair", "timeframe", "created_at"),
+    )
+
+
+class RiskSettings(Base):
+    __tablename__ = "risk_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    risk_per_trade: Mapped[float] = mapped_column(Float, default=0.01)
+    max_position_size_usd: Mapped[float | None] = mapped_column(Float)
+    daily_loss_limit_pct: Mapped[float] = mapped_column(Float, default=0.03)
+    max_concurrent_positions: Mapped[int] = mapped_column(Integer, default=3)
+    max_exposure_pct: Mapped[float] = mapped_column(Float, default=1.5)
+    cooldown_after_loss_minutes: Mapped[int | None] = mapped_column(Integer)
+    max_risk_per_trade_pct: Mapped[float] = mapped_column(Float, default=0.02)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_risk_settings_singleton"),
+    )
+
+
+class NewsEvent(Base):
+    __tablename__ = "news_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    headline: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    category: Mapped[str] = mapped_column(String(16), nullable=False)
+    impact: Mapped[str | None] = mapped_column(String(16))
+    sentiment: Mapped[str | None] = mapped_column(String(16))
+    affected_pairs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    llm_summary: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("url", name="uq_news_url"),
+        UniqueConstraint("fingerprint", name="uq_news_fingerprint"),
+        Index("ix_news_impact_published", "impact", "published_at"),
     )
 
 

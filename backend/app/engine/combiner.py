@@ -6,10 +6,21 @@ CONFIDENCE_MULTIPLIER = {"HIGH": 1.0, "MEDIUM": 0.6, "LOW": 0.3}
 def compute_preliminary_score(
     technical_score: int,
     order_flow_score: int,
-    tech_weight: float = 0.60,
-    flow_weight: float = 0.40,
+    tech_weight: float = 0.50,
+    flow_weight: float = 0.25,
+    onchain_score: int = 0,
+    onchain_weight: float = 0.25,
 ) -> int:
-    return round(technical_score * tech_weight + order_flow_score * flow_weight)
+    total = tech_weight + flow_weight + onchain_weight
+    if abs(total - 1.0) > 0.01:
+        tech_weight, flow_weight, onchain_weight = (
+            tech_weight / total, flow_weight / total, onchain_weight / total,
+        )
+    return round(
+        technical_score * tech_weight
+        + order_flow_score * flow_weight
+        + onchain_score * onchain_weight
+    )
 
 
 def compute_final_score(

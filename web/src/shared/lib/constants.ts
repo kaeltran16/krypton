@@ -11,4 +11,5 @@ export const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 export const AVAILABLE_PAIRS = [
   "BTC-USDT-SWAP",
   "ETH-USDT-SWAP",
+  "WIF-USDT-SWAP",
 ] as const;

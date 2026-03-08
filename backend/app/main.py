@@ -4,19 +4,20 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
 from app.db.database import Base, Database
-from app.db.models import Candle, Signal
+from app.db.models import Candle, NewsEvent, Signal
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
@@ -24,8 +25,48 @@ from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
+from app.engine.risk import PositionSizer
 
 logger = logging.getLogger(__name__)
+
+
+async def _fetch_news_context(db, pair: str, window_minutes: int = 30) -> tuple[str, list[int]]:
+    """Fetch recent high/medium impact news for LLM context and correlation.
+
+    Returns (news_text_for_prompt, list_of_correlated_news_ids).
+    """
+    symbol = pair.split("-")[0].upper()
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    try:
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(NewsEvent)
+                .where(NewsEvent.published_at >= cutoff)
+                .where(NewsEvent.impact.in_(["high", "medium"]))
+                .where(
+                    NewsEvent.affected_pairs.op("@>")(f'["{symbol}"]')
+                    | NewsEvent.affected_pairs.op("@>")(f'["ALL"]')
+                )
+                .order_by(NewsEvent.published_at.desc())
+                .limit(10)
+            )
+            events = result.scalars().all()
+    except Exception:
+        return "No recent news available.", []
+
+    if not events:
+        return "No recent news available.", []
+
+    lines = []
+    ids = []
+    for e in events:
+        impact_tag = f"[{e.impact.upper()}]" if e.impact else ""
+        sentiment_tag = f"({e.sentiment})" if e.sentiment else ""
+        summary = e.llm_summary or ""
+        lines.append(f"- {impact_tag} {e.headline} {sentiment_tag} — {summary}")
+        ids.append(e.id)
+
+    return "\n".join(lines), ids
 
 
 def _pipeline_done_callback(task: asyncio.Task, tasks: set):
@@ -73,6 +114,8 @@ async def persist_signal(db: Database, signal_data: dict):
                 take_profit_1=signal_data["take_profit_1"],
                 take_profit_2=signal_data["take_profit_2"],
                 raw_indicators=signal_data.get("raw_indicators"),
+                risk_metrics=signal_data.get("risk_metrics"),
+                correlated_news_ids=signal_data.get("correlated_news_ids"),
             )
             session.add(row)
             await session.commit()
@@ -115,12 +158,44 @@ async def run_pipeline(app: FastAPI, candle: dict):
     flow_metrics = order_flow.get(pair, {})
     flow_result = compute_order_flow_score(flow_metrics)
 
+    # On-chain scoring (if available)
+    onchain_score = 0
+    onchain_available = False
+    if getattr(settings, "onchain_enabled", False):
+        try:
+            from app.engine.onchain_scorer import compute_onchain_score
+            onchain_score = await compute_onchain_score(pair, redis)
+            onchain_available = onchain_score != 0
+        except Exception as e:
+            logger.debug(f"On-chain scoring skipped: {e}")
+
+    # Compute weights with fallback redistribution when on-chain is unavailable
+    tech_w = settings.engine_traditional_weight
+    flow_w = settings.engine_flow_weight
+    onchain_w = settings.engine_onchain_weight
+    if not onchain_available:
+        tech_w = tech_w + onchain_w * 0.6
+        flow_w = flow_w + onchain_w * 0.4
+        onchain_w = 0.0
+
     preliminary = compute_preliminary_score(
         tech_result["score"],
         flow_result["score"],
-        settings.engine_traditional_weight,
-        1 - settings.engine_traditional_weight,
+        tech_w,
+        flow_w,
+        onchain_score,
+        onchain_w,
     )
+
+    # Fetch news context for LLM gate and signal correlation
+    news_context = "No recent news available."
+    correlated_news_ids = None
+    try:
+        window = getattr(settings, "news_llm_context_window_minutes", 30)
+        news_context, correlated_news_ids = await _fetch_news_context(db, pair, window)
+        correlated_news_ids = correlated_news_ids or None
+    except Exception as e:
+        logger.debug(f"News context fetch skipped: {e}")
 
     llm_response = None
     if abs(preliminary) >= settings.engine_llm_threshold and prompt_template:
@@ -131,6 +206,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 timeframe=timeframe,
                 indicators=json.dumps(tech_result["indicators"], indent=2),
                 order_flow=json.dumps(flow_result["details"], indent=2),
+                news=news_context,
                 preliminary_score=str(preliminary),
                 direction="LONG" if preliminary > 0 else "SHORT",
                 candles=json.dumps(candles_data[-20:], indent=2),
@@ -169,9 +245,82 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "raw_indicators": tech_result["indicators"],
     }
 
+    # Enrich with risk metrics if OKX client is available
+    risk_metrics = None
+    okx_client = getattr(app.state, "okx_client", None)
+    if okx_client:
+        try:
+            balance = await okx_client.get_balance()
+            if balance:
+                equity = balance["total_equity"]
+                # Load risk settings from DB
+                from app.db.models import RiskSettings
+                risk_per_trade = 0.01
+                max_pos_usd = None
+                try:
+                    async with db.session_factory() as session:
+                        result = await session.execute(
+                            select(RiskSettings).where(RiskSettings.id == 1)
+                        )
+                        rs = result.scalar_one_or_none()
+                        if rs:
+                            risk_per_trade = rs.risk_per_trade
+                            max_pos_usd = rs.max_position_size_usd
+                except Exception:
+                    pass
+
+                sizer = PositionSizer(equity, risk_per_trade, max_pos_usd)
+
+                # Try to get instrument specs for lot size
+                lot_size = None
+                min_order_size = None
+                try:
+                    cache_key_inst = f"instruments:{pair}"
+                    cached_inst = await redis.get(cache_key_inst)
+                    if cached_inst:
+                        import json as _j
+                        inst = _j.loads(cached_inst)
+                        lot_size = inst.get("lot_size")
+                        min_order_size = inst.get("min_order_size")
+                    else:
+                        instruments = await okx_client.get_instruments()
+                        if pair in instruments:
+                            inst = instruments[pair]
+                            lot_size = inst.get("lot_size")
+                            min_order_size = inst.get("min_order_size")
+                            await redis.set(cache_key_inst, json.dumps(inst), ex=3600)
+                except Exception:
+                    pass
+
+                risk_metrics = sizer.calculate(
+                    entry=levels["entry"],
+                    stop_loss=levels["stop_loss"],
+                    take_profit_1=levels.get("take_profit_1"),
+                    take_profit_2=levels.get("take_profit_2"),
+                    lot_size=lot_size,
+                    min_order_size=min_order_size,
+                )
+        except Exception as e:
+            logger.debug(f"Risk metrics enrichment skipped: {e}")
+
+    signal_data["risk_metrics"] = risk_metrics
+    signal_data["correlated_news_ids"] = correlated_news_ids
+
     await persist_signal(db, signal_data)
     await manager.broadcast(signal_data)
     logger.info(f"Signal emitted: {pair} {timeframe} {direction} score={final}")
+
+    # Dispatch Web Push for signal
+    try:
+        from app.push.dispatch import dispatch_push_for_signal
+        await dispatch_push_for_signal(
+            session_factory=db.session_factory,
+            signal=signal_data,
+            vapid_private_key=settings.vapid_private_key,
+            vapid_claims_email=settings.vapid_claims_email,
+        )
+    except Exception as e:
+        logger.debug(f"Signal push dispatch skipped: {e}")
 
 
 async def handle_candle(app: FastAPI, candle: dict):
@@ -308,15 +457,71 @@ async def check_pending_signals(app: FastAPI):
         await session.commit()
 
 
+OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H"}
+
+
+async def backfill_candles(redis, db, pairs: list[str], timeframes: list[str]):
+    """Fetch historical candles from OKX REST API and seed Redis + DB."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        for pair in pairs:
+            for tf in timeframes:
+                cache_key = f"candles:{pair}:{tf}"
+                bar = OKX_BAR_MAP.get(tf)
+                if not bar:
+                    continue
+
+                try:
+                    resp = await client.get(
+                        "https://www.okx.com/api/v5/market/candles",
+                        params={"instId": pair, "bar": bar, "limit": "100"},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                except Exception as e:
+                    logger.error(f"Backfill fetch failed for {pair}:{tf}: {e}")
+                    continue
+
+                rows = data.get("data", [])
+                if not rows:
+                    logger.warning(f"Backfill: no data returned for {pair}:{tf}")
+                    continue
+
+                # OKX returns newest-first; reverse for chronological order
+                rows.reverse()
+
+                # Clear stale cache to avoid ordering issues with leftover live candles
+                await redis.delete(cache_key)
+
+                pipe = redis.pipeline()
+                for row in rows:
+                    ts = datetime.fromtimestamp(int(row[0]) / 1000, tz=timezone.utc)
+                    candle = {
+                        "timestamp": ts.isoformat(),
+                        "open": float(row[1]),
+                        "high": float(row[2]),
+                        "low": float(row[3]),
+                        "close": float(row[4]),
+                        "volume": float(row[5]),
+                    }
+                    pipe.rpush(cache_key, json.dumps(candle))
+
+                    await persist_candle(db, {
+                        "pair": pair,
+                        "timeframe": tf,
+                        "timestamp": ts,
+                        **{k: candle[k] for k in ("open", "high", "low", "close", "volume")},
+                    })
+
+                pipe.ltrim(cache_key, -200, -1)
+                await pipe.execute()
+                logger.info(f"Backfilled {len(rows)} candles for {pair}:{tf}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = Settings()
     db = Database(settings.database_url)
     redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-
-    # Create tables if they don't exist
-    async with db.engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     app.state.settings = settings
     app.state.db = db
@@ -338,6 +543,8 @@ async def lifespan(app: FastAPI):
         )
     else:
         app.state.okx_client = None
+
+    await backfill_candles(redis, db, settings.pairs, settings.timeframes)
 
     ws_client = OKXWebSocketClient(
         pairs=settings.pairs,
@@ -365,6 +572,40 @@ async def lifespan(app: FastAPI):
 
     outcome_task = asyncio.create_task(outcome_loop())
 
+    # On-chain collector
+    onchain_task = None
+    if settings.onchain_enabled:
+        from app.collector.onchain import OnChainCollector
+        onchain_collector = OnChainCollector(
+            pairs=settings.pairs,
+            redis=redis,
+            poll_interval=settings.onchain_poll_interval_seconds,
+            tier2_interval=settings.onchain_tier2_poll_interval_seconds,
+            cryptoquant_api_key=settings.cryptoquant_api_key,
+        )
+        onchain_task = asyncio.create_task(onchain_collector.run())
+
+    # News collector
+    from app.collector.news import NewsCollector
+    news_collector = NewsCollector(
+        pairs=settings.pairs,
+        db=db,
+        redis=redis,
+        ws_manager=ws_manager,
+        poll_interval=settings.news_poll_interval_seconds,
+        cryptopanic_api_key=settings.cryptopanic_api_key,
+        news_api_key=settings.news_api_key,
+        openrouter_api_key=settings.openrouter_api_key,
+        openrouter_model=settings.openrouter_model,
+        relevance_keywords=settings.news_relevance_keywords,
+        rss_feeds=settings.news_rss_feeds,
+        llm_daily_budget=settings.news_llm_daily_budget,
+        high_impact_push_enabled=settings.news_high_impact_push_enabled,
+        vapid_private_key=settings.vapid_private_key,
+        vapid_claims_email=settings.vapid_claims_email,
+    )
+    news_task = asyncio.create_task(news_collector.run())
+
     yield
 
     await ws_client.stop()
@@ -372,6 +613,11 @@ async def lifespan(app: FastAPI):
     ws_task.cancel()
     poller_task.cancel()
     outcome_task.cancel()
+    news_collector.stop()
+    news_task.cancel()
+    if onchain_task:
+        onchain_collector.stop()
+        onchain_task.cancel()
     await redis.close()
     await db.close()
 
@@ -405,6 +651,12 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.account import router as account_router
     app.include_router(account_router)
+
+    from app.api.risk import router as risk_router
+    app.include_router(risk_router)
+
+    from app.api.news import router as news_router
+    app.include_router(news_router)
 
     return app
 

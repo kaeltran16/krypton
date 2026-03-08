@@ -3,6 +3,7 @@ import { WebSocketManager } from "../../../shared/lib/websocket";
 import { WS_BASE_URL, API_KEY } from "../../../shared/lib/constants";
 import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
+import { useNewsStore } from "../../news/store";
 
 export function useSignalWebSocket() {
   const pairs = useSettingsStore((s) => s.pairs);
@@ -43,6 +44,8 @@ export function useSignalWebSocket() {
         useSignalStore.getState().addSignal(data.signal);
       } else if (data.type === "candle" && data.candle) {
         useSignalStore.getState().notifyCandleListeners(data.candle);
+      } else if (data.type === "news_alert" && data.news) {
+        useNewsStore.getState().addAlert(data.news);
       }
     };
 

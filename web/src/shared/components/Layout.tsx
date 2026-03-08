@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { TickerBar } from "./TickerBar";
 
-type Tab = "home" | "chart" | "signals" | "journal" | "more";
+type Tab = "home" | "chart" | "signals" | "news" | "more";
 
 interface LayoutProps {
   home: ReactNode;
   chart: ReactNode;
   signals: ReactNode;
-  journal: ReactNode;
+  news: ReactNode;
   more: ReactNode;
   price: number | null;
   change24h: number | null;
@@ -16,12 +16,12 @@ interface LayoutProps {
 }
 
 export function Layout({
-  home, chart, signals, journal, more,
+  home, chart, signals, news, more,
   price, change24h, selectedPair, onPairChange,
 }: LayoutProps) {
   const [tab, setTab] = useState<Tab>("home");
 
-  const content = { home, chart, signals, journal, more }[tab];
+  const content = { home, chart, signals, news, more }[tab];
 
   return (
     <div className="min-h-screen bg-surface text-foreground flex flex-col">
@@ -36,7 +36,7 @@ export function Layout({
         <TabButton active={tab === "home"} onClick={() => setTab("home")} label="Home" icon={<IconHome />} />
         <TabButton active={tab === "chart"} onClick={() => setTab("chart")} label="Chart" icon={<IconChart />} />
         <TabButton active={tab === "signals"} onClick={() => setTab("signals")} label="Signals" icon={<IconSignals />} />
-        <TabButton active={tab === "journal"} onClick={() => setTab("journal")} label="Journal" icon={<IconJournal />} />
+        <TabButton active={tab === "news"} onClick={() => setTab("news")} label="News" icon={<IconNews />} />
         <TabButton active={tab === "more"} onClick={() => setTab("more")} label="More" icon={<IconMore />} />
       </nav>
     </div>
@@ -87,11 +87,13 @@ function IconSignals() {
   );
 }
 
-function IconJournal() {
+function IconNews() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+      <path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2" />
+      <path d="M18 14h-8" />
+      <path d="M15 18h-5" />
+      <path d="M10 6h8v4h-8z" />
     </svg>
   );
 }

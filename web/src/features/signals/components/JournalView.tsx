@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
 import { CalendarView } from "./CalendarView";
+import { DeepDiveView } from "./DeepDiveView";
 
-type JournalTab = "analytics" | "calendar";
+type JournalTab = "analytics" | "calendar" | "deepdive";
 
 const TABS: { key: JournalTab; label: string }[] = [
   { key: "analytics", label: "Analytics" },
   { key: "calendar", label: "Calendar" },
+  { key: "deepdive", label: "Deep Dive" },
 ];
 
 export function JournalView() {
@@ -34,6 +36,7 @@ export function JournalView() {
 
       {tab === "analytics" && <AnalyticsView />}
       {tab === "calendar" && <CalendarView />}
+      {tab === "deepdive" && <DeepDiveView />}
     </div>
   );
 }

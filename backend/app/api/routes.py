@@ -1,4 +1,5 @@
 import json
+import math
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -43,6 +44,8 @@ def _signal_to_dict(signal: Signal) -> dict:
         "created_at": signal.created_at.isoformat() if signal.created_at else None,
         "user_note": signal.user_note,
         "user_status": signal.user_status,
+        "risk_metrics": signal.risk_metrics,
+        "correlated_news_ids": signal.correlated_news_ids,
     }
 
 
@@ -123,6 +126,143 @@ def _compute_hourly_performance(resolved: list[Signal]) -> list[dict]:
     return result
 
 
+def _compute_performance_metrics(resolved: list[Signal]) -> dict:
+    """Compute advanced performance metrics: Sharpe, max drawdown, profit factor, etc."""
+    metrics: dict = {
+        "sharpe_ratio": None,
+        "max_drawdown_pct": 0,
+        "profit_factor": None,
+        "expectancy": None,
+        "avg_hold_time_minutes": None,
+        "best_trade": None,
+        "worst_trade": None,
+    }
+
+    with_pnl = [s for s in resolved if s.outcome_pnl_pct is not None]
+    if not with_pnl:
+        return metrics
+
+    pnl_values = [float(s.outcome_pnl_pct) for s in with_pnl]
+
+    # Best/worst trade
+    best_idx = max(range(len(pnl_values)), key=lambda i: pnl_values[i])
+    worst_idx = min(range(len(pnl_values)), key=lambda i: pnl_values[i])
+    best_s = with_pnl[best_idx]
+    worst_s = with_pnl[worst_idx]
+    metrics["best_trade"] = {
+        "pnl_pct": round(pnl_values[best_idx], 2),
+        "pair": best_s.pair,
+        "timeframe": best_s.timeframe,
+        "direction": best_s.direction,
+    }
+    metrics["worst_trade"] = {
+        "pnl_pct": round(pnl_values[worst_idx], 2),
+        "pair": worst_s.pair,
+        "timeframe": worst_s.timeframe,
+        "direction": worst_s.direction,
+    }
+
+    # Profit factor
+    winning_pnl = sum(p for p in pnl_values if p > 0)
+    losing_pnl = sum(p for p in pnl_values if p < 0)
+    if losing_pnl != 0:
+        metrics["profit_factor"] = round(winning_pnl / abs(losing_pnl), 2)
+
+    # Expectancy
+    wins = [p for p in pnl_values if p > 0]
+    losses = [p for p in pnl_values if p <= 0]
+    total = len(pnl_values)
+    if total > 0:
+        win_rate = len(wins) / total
+        loss_rate = 1 - win_rate
+        avg_win = sum(wins) / len(wins) if wins else 0
+        avg_loss = abs(sum(losses) / len(losses)) if losses else 0
+        metrics["expectancy"] = round((win_rate * avg_win) - (loss_rate * avg_loss), 4)
+
+    # Avg hold time
+    hold_times = [s.outcome_duration_minutes for s in with_pnl if s.outcome_duration_minutes is not None]
+    if hold_times:
+        metrics["avg_hold_time_minutes"] = round(sum(hold_times) / len(hold_times), 1)
+
+    # Max drawdown from cumulative P&L
+    sorted_signals = sorted(
+        [s for s in with_pnl if s.outcome_at is not None],
+        key=lambda s: s.outcome_at,
+    )
+    if sorted_signals:
+        cumulative = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        for s in sorted_signals:
+            cumulative += float(s.outcome_pnl_pct)
+            if cumulative > peak:
+                peak = cumulative
+            dd = peak - cumulative
+            if dd > max_dd:
+                max_dd = dd
+        metrics["max_drawdown_pct"] = round(max_dd, 2)
+
+    # Sharpe ratio (annualized from daily returns)
+    daily_returns: dict[str, float] = {}
+    for s in sorted_signals:
+        day = s.outcome_at.strftime("%Y-%m-%d")
+        daily_returns[day] = daily_returns.get(day, 0) + float(s.outcome_pnl_pct)
+
+    if len(daily_returns) >= 7:
+        returns = list(daily_returns.values())
+        mean_r = sum(returns) / len(returns)
+        variance = sum((r - mean_r) ** 2 for r in returns) / len(returns)
+        std_r = math.sqrt(variance)
+        if std_r > 0:
+            metrics["sharpe_ratio"] = round((mean_r / std_r) * math.sqrt(365), 2)
+
+    return metrics
+
+
+def _compute_drawdown_series(resolved: list[Signal]) -> list[dict]:
+    """Compute drawdown % over time for charting."""
+    sorted_signals = sorted(
+        [s for s in resolved if s.outcome_pnl_pct is not None and s.outcome_at is not None],
+        key=lambda s: s.outcome_at,
+    )
+    if not sorted_signals:
+        return []
+
+    cumulative = 0.0
+    peak = 0.0
+    series = []
+    for s in sorted_signals:
+        cumulative += float(s.outcome_pnl_pct)
+        if cumulative > peak:
+            peak = cumulative
+        dd = -(peak - cumulative)
+        series.append({
+            "date": s.outcome_at.strftime("%Y-%m-%d"),
+            "drawdown": round(dd, 4),
+        })
+    return series
+
+
+def _compute_pnl_distribution(resolved: list[Signal]) -> list[dict]:
+    """Compute P&L distribution histogram buckets."""
+    pnl_values = [float(s.outcome_pnl_pct) for s in resolved if s.outcome_pnl_pct is not None]
+    if not pnl_values:
+        return []
+
+    min_pnl = min(pnl_values)
+    max_pnl = max(pnl_values)
+    if min_pnl == max_pnl:
+        return [{"bucket": round(min_pnl, 1), "count": len(pnl_values)}]
+
+    bucket_size = max((max_pnl - min_pnl) / 10, 0.5)
+    buckets: dict[float, int] = {}
+    for pnl in pnl_values:
+        key = round(math.floor(pnl / bucket_size) * bucket_size, 2)
+        buckets[key] = buckets.get(key, 0) + 1
+
+    return [{"bucket": k, "count": v} for k, v in sorted(buckets.items())]
+
+
 class JournalPatch(BaseModel):
     status: str | None = Field(None)
     note: str | None = Field(None, max_length=500)
@@ -181,6 +321,9 @@ def create_router() -> APIRouter:
                     "by_pair": {}, "by_timeframe": {},
                     "equity_curve": [], "hourly_performance": _compute_hourly_performance([]),
                     "streaks": {"current": 0, "best_win": 0, "worst_loss": 0},
+                    "performance": _compute_performance_metrics([]),
+                    "drawdown_series": [],
+                    "pnl_distribution": [],
                 }
             else:
                 wins = [s for s in resolved if s.outcome in ("TP1_HIT", "TP2_HIT")]
@@ -231,6 +374,9 @@ def create_router() -> APIRouter:
                     "equity_curve": _compute_equity_curve(resolved, downsample=days > 90),
                     "hourly_performance": _compute_hourly_performance(resolved),
                     "streaks": _compute_streaks(resolved),
+                    "performance": _compute_performance_metrics(resolved),
+                    "drawdown_series": _compute_drawdown_series(resolved),
+                    "pnl_distribution": _compute_pnl_distribution(resolved),
                 }
 
             await redis.set(cache_key, json.dumps(stats), ex=300)
@@ -355,7 +501,7 @@ def create_router() -> APIRouter:
         df = pd.DataFrame(candles_data)
         tech = compute_technical_score(df)
         flow = compute_order_flow_score(request.app.state.order_flow.get(pair, {}))
-        prelim = compute_preliminary_score(tech["score"], flow["score"], 0.60, 0.40)
+        prelim = compute_preliminary_score(tech["score"], flow["score"], 0.50, 0.25)
         final = compute_final_score(prelim, None)
         direction = "LONG" if final > 0 else "SHORT"
         atr = tech["indicators"].get("atr", 200)

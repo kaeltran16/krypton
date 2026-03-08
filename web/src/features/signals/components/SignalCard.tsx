@@ -57,9 +57,32 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
         <span>TP <span className="text-long">{formatPrice(signal.levels.take_profit_1)}</span></span>
       </div>
 
+      {/* Risk metrics */}
+      {signal.risk_metrics ? (
+        <div className="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-muted">
+          <span>Size <span className="text-foreground">{signal.risk_metrics.position_size_base.toFixed(4)}</span></span>
+          <span>Risk <span className="text-short">${signal.risk_metrics.risk_amount_usd.toFixed(0)} ({signal.risk_metrics.risk_pct}%)</span></span>
+          {signal.risk_metrics.tp1_rr != null && (
+            <span>R:R <span className="text-long">1:{signal.risk_metrics.tp1_rr}{signal.risk_metrics.tp2_rr != null ? ` / 1:${signal.risk_metrics.tp2_rr}` : ""}</span></span>
+          )}
+        </div>
+      ) : (
+        <RRFallback levels={signal.levels} />
+      )}
+
       {/* Footer: timestamp + badges */}
       <div className="flex items-center justify-between mt-2">
-        <span className="text-xs text-dim">{formatRelativeTime(signal.created_at)}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-dim">{formatRelativeTime(signal.created_at)}</span>
+          {signal.correlated_news_ids && signal.correlated_news_ids.length > 0 && (
+            <span className="text-[10px] px-1 py-0.5 rounded bg-accent/10 text-accent" title="Correlated news">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 inline-block mr-0.5 -mt-0.5">
+                <path d="M3 1h10a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 3v2h8V4H4zm0 4v1h5V8H4zm0 3v1h3v-1H4z" />
+              </svg>
+              {signal.correlated_news_ids.length}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           {signal.user_status === "TRADED" && (
             <span className="text-[10px] px-1.5 py-0.5 rounded border border-long/40 text-long">Traded</span>
@@ -87,6 +110,19 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
         </button>
       )}
     </button>
+  );
+}
+
+function RRFallback({ levels }: { levels: Signal["levels"] }) {
+  const slDist = Math.abs(levels.entry - levels.stop_loss);
+  if (slDist === 0) return null;
+  const tp1rr = (Math.abs(levels.take_profit_1 - levels.entry) / slDist).toFixed(1);
+  const tp2rr = (Math.abs(levels.take_profit_2 - levels.entry) / slDist).toFixed(1);
+  return (
+    <div className="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-muted">
+      <span>R:R <span className="text-long">1:{tp1rr} / 1:{tp2rr}</span></span>
+      <span className="text-dim italic">Connect OKX for sizing</span>
+    </div>
   );
 }
 

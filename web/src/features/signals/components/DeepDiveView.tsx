@@ -1,0 +1,248 @@
+import { useState } from "react";
+import { useSignalStats } from "../../home/hooks/useSignalStats";
+import { theme } from "../../../shared/theme";
+import type { SignalStats, PerformanceMetrics } from "../types";
+
+type Period = "7" | "30" | "365";
+
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "7", label: "7D" },
+  { value: "30", label: "30D" },
+  { value: "365", label: "All" },
+];
+
+export function DeepDiveView() {
+  const [period, setPeriod] = useState<Period>("30");
+  const { stats, loading } = useSignalStats(Number(period));
+
+  if (loading) {
+    return (
+      <div className="p-3 space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-24 bg-card rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!stats || stats.total_resolved < 5) {
+    return (
+      <div className="p-3">
+        <p className="text-muted text-center text-sm mt-12">
+          Need more resolved trades to show metrics
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 space-y-3 overflow-y-auto">
+      {/* Period selector */}
+      <div className="flex gap-1.5">
+        {PERIODS.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => setPeriod(value)}
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+              period === value ? "bg-accent/15 text-accent" : "text-muted border border-border"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <MetricsGrid perf={stats.performance} />
+      <BestWorstTrades perf={stats.performance} />
+      <DrawdownChart data={stats.drawdown_series} />
+      <PnlDistribution data={stats.pnl_distribution} />
+    </div>
+  );
+}
+
+function MetricsGrid({ perf }: { perf: PerformanceMetrics }) {
+  return (
+    <div className="bg-card rounded-lg p-3 border border-border">
+      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Performance Metrics</h3>
+      <div className="grid grid-cols-3 gap-3 text-center">
+        <MetricCell
+          label="Sharpe"
+          value={perf.sharpe_ratio != null ? String(perf.sharpe_ratio) : "—"}
+          tooltip={perf.sharpe_ratio == null ? "Not enough data (need 7+ days)" : undefined}
+          color={perf.sharpe_ratio != null && perf.sharpe_ratio > 0 ? "text-long" : perf.sharpe_ratio != null ? "text-short" : "text-dim"}
+        />
+        <MetricCell
+          label="Profit F"
+          value={perf.profit_factor != null ? String(perf.profit_factor) : "—"}
+          tooltip={perf.profit_factor == null ? "No losing trades" : undefined}
+          color={perf.profit_factor != null && perf.profit_factor > 1 ? "text-long" : perf.profit_factor != null ? "text-short" : "text-dim"}
+        />
+        <MetricCell
+          label="Max DD"
+          value={perf.max_drawdown_pct > 0 ? `-${perf.max_drawdown_pct}%` : "0%"}
+          color={perf.max_drawdown_pct > 3 ? "text-short" : "text-foreground"}
+        />
+        <MetricCell
+          label="Expectancy"
+          value={perf.expectancy != null ? `${perf.expectancy >= 0 ? "+" : ""}${perf.expectancy}%` : "—"}
+          color={perf.expectancy != null && perf.expectancy >= 0 ? "text-long" : perf.expectancy != null ? "text-short" : "text-dim"}
+        />
+        <MetricCell
+          label="Avg Hold"
+          value={perf.avg_hold_time_minutes != null ? formatHoldTime(perf.avg_hold_time_minutes) : "—"}
+          color="text-foreground"
+        />
+        <MetricCell
+          label="Trades"
+          value="—"
+          color="text-dim"
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricCell({ label, value, color, tooltip }: {
+  label: string;
+  value: string;
+  color: string;
+  tooltip?: string;
+}) {
+  return (
+    <div title={tooltip}>
+      <div className={`text-base font-mono font-bold ${color}`}>{value}</div>
+      <div className="text-[10px] text-muted">{label}</div>
+    </div>
+  );
+}
+
+function BestWorstTrades({ perf }: { perf: PerformanceMetrics }) {
+  if (!perf.best_trade && !perf.worst_trade) return null;
+
+  return (
+    <div className="bg-card rounded-lg p-3 border border-border">
+      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Notable Trades</h3>
+      <div className="space-y-1.5">
+        {perf.best_trade && (
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
+              <span className="text-muted">
+                {perf.best_trade.pair.replace("-USDT-SWAP", "")} {perf.best_trade.timeframe} {perf.best_trade.direction}
+              </span>
+            </div>
+            <span className="font-mono text-long">+{perf.best_trade.pnl_pct}%</span>
+          </div>
+        )}
+        {perf.worst_trade && (
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
+              <span className="text-muted">
+                {perf.worst_trade.pair.replace("-USDT-SWAP", "")} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
+              </span>
+            </div>
+            <span className="font-mono text-short">{perf.worst_trade.pnl_pct}%</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DrawdownChart({ data }: { data: SignalStats["drawdown_series"] }) {
+  if (data.length < 2) return null;
+
+  const width = 320;
+  const height = 100;
+  const pad = { top: 5, right: 10, bottom: 15, left: 10 };
+  const w = width - pad.left - pad.right;
+  const h = height - pad.top - pad.bottom;
+
+  const values = data.map((d) => d.drawdown);
+  const minVal = Math.min(...values, 0);
+  const range = Math.abs(minVal) || 1;
+
+  const points = data
+    .map((d, i) => {
+      const x = pad.left + (i / (data.length - 1)) * w;
+      const y = pad.top + (Math.abs(d.drawdown) / range) * h;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  // Fill area under the line
+  const firstX = pad.left;
+  const lastX = pad.left + w;
+  const fillPoints = `${firstX},${pad.top} ${points} ${lastX},${pad.top}`;
+
+  return (
+    <div className="bg-card rounded-lg p-3 border border-border">
+      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Drawdown</h3>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+        <polygon fill={theme.colors.short + "15"} points={fillPoints} />
+        <polyline fill="none" stroke={theme.colors.short} strokeWidth="1.5" strokeLinejoin="round" points={points} />
+        <text x={width - pad.right} y={height - 2} textAnchor="end" fontSize="8" fill={theme.colors.dim}>
+          {minVal.toFixed(1)}%
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
+  if (data.length === 0) return null;
+
+  const maxCount = Math.max(...data.map((d) => d.count));
+  const width = 320;
+  const height = 80;
+  const pad = { top: 5, right: 10, bottom: 15, left: 10 };
+  const w = width - pad.left - pad.right;
+  const h = height - pad.top - pad.bottom;
+  const barWidth = Math.max(w / data.length - 2, 4);
+
+  return (
+    <div className="bg-card rounded-lg p-3 border border-border">
+      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">P&L Distribution</h3>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+        {data.map((d, i) => {
+          const barH = (d.count / maxCount) * h;
+          const x = pad.left + (i / data.length) * w;
+          const y = pad.top + h - barH;
+          const fill = d.bucket >= 0 ? theme.colors.long : theme.colors.short;
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={barWidth}
+              height={barH}
+              fill={fill}
+              opacity={0.7}
+              rx={1}
+            />
+          );
+        })}
+        {/* zero line */}
+        {data.some(d => d.bucket < 0) && data.some(d => d.bucket >= 0) && (
+          <line
+            x1={pad.left + (data.findIndex(d => d.bucket >= 0) / data.length) * w}
+            y1={pad.top}
+            x2={pad.left + (data.findIndex(d => d.bucket >= 0) / data.length) * w}
+            y2={pad.top + h}
+            stroke={theme.colors.border}
+            strokeWidth="0.5"
+            strokeDasharray="3"
+          />
+        )}
+      </svg>
+    </div>
+  );
+}
+
+function formatHoldTime(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${hours.toFixed(1)}h`;
+  return `${(hours / 24).toFixed(1)}d`;
+}

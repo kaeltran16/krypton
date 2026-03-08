@@ -1,6 +1,7 @@
 pairs:
   - BTC-USDT-SWAP
   - ETH-USDT-SWAP
+  - WIF-USDT-SWAP
 
 timeframes:
   - 15m

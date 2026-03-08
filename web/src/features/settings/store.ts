@@ -9,11 +9,17 @@ interface SettingsState {
   timeframes: Timeframe[];
   notificationsEnabled: boolean;
   apiBaseUrl: string;
+  onchainEnabled: boolean;
+  newsAlertsEnabled: boolean;
+  newsContextWindow: number;
   setPairs: (pairs: string[]) => void;
   setThreshold: (threshold: number) => void;
   setTimeframes: (timeframes: Timeframe[]) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
   setApiBaseUrl: (url: string) => void;
+  setOnchainEnabled: (enabled: boolean) => void;
+  setNewsAlertsEnabled: (enabled: boolean) => void;
+  setNewsContextWindow: (minutes: number) => void;
   reset: () => void;
 }
 
@@ -27,6 +33,9 @@ export const useSettingsStore = create<SettingsState>()(
       setNotificationsEnabled: (enabled) =>
         set({ notificationsEnabled: enabled }),
       setApiBaseUrl: (url) => set({ apiBaseUrl: url }),
+      setOnchainEnabled: (enabled) => set({ onchainEnabled: enabled }),
+      setNewsAlertsEnabled: (enabled) => set({ newsAlertsEnabled: enabled }),
+      setNewsContextWindow: (minutes) => set({ newsContextWindow: minutes }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
     {
@@ -38,6 +47,9 @@ export const useSettingsStore = create<SettingsState>()(
         timeframes: state.timeframes,
         notificationsEnabled: state.notificationsEnabled,
         apiBaseUrl: state.apiBaseUrl,
+        onchainEnabled: state.onchainEnabled,
+        newsAlertsEnabled: state.newsAlertsEnabled,
+        newsContextWindow: state.newsContextWindow,
       }),
     },
   ),

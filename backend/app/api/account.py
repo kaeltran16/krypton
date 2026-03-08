@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
@@ -52,6 +53,47 @@ async def get_positions(request: Request, _key: str = require_settings_api_key()
     if not okx:
         raise HTTPException(503, "OKX client not configured")
     return await okx.get_positions()
+
+
+@router.get("/portfolio")
+async def get_portfolio(request: Request, _key: str = require_settings_api_key()):
+    okx = request.app.state.okx_client
+    if not okx:
+        raise HTTPException(503, "OKX client not configured")
+    try:
+        balance, positions = await asyncio.gather(
+            okx.get_balance(), okx.get_positions()
+        )
+        if balance is None:
+            raise HTTPException(502, "Failed to fetch balance from OKX")
+
+        equity = balance["total_equity"]
+        # Compute available balance from USDT currency
+        available = 0.0
+        for c in balance.get("currencies", []):
+            if c["currency"] == "USDT":
+                available = c["available"]
+                break
+
+        used_margin = sum(p.get("margin", 0) for p in positions)
+        total_exposure = sum(
+            abs(p.get("size", 0) * p.get("mark_price", 0)) for p in positions
+        )
+        margin_utilization = (used_margin / equity * 100) if equity > 0 else 0
+
+        return {
+            "total_equity": equity,
+            "unrealized_pnl": balance["unrealized_pnl"],
+            "available_balance": round(available, 2),
+            "used_margin": round(used_margin, 2),
+            "total_exposure": round(total_exposure, 2),
+            "margin_utilization": round(margin_utilization, 1),
+            "positions": positions,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Portfolio fetch failed: {str(e)}")
 
 
 @router.post("/order")
