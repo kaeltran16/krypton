@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from sqlalchemy import select, cast, literal
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
@@ -45,8 +46,8 @@ async def _fetch_news_context(db, pair: str, window_minutes: int = 30) -> tuple[
                 .where(NewsEvent.published_at >= cutoff)
                 .where(NewsEvent.impact.in_(["high", "medium"]))
                 .where(
-                    NewsEvent.affected_pairs.op("@>")(f'["{symbol}"]')
-                    | NewsEvent.affected_pairs.op("@>")(f'["ALL"]')
+                    NewsEvent.affected_pairs.op("@>")(cast(literal(f'["{symbol}"]'), JSONB))
+                    | NewsEvent.affected_pairs.op("@>")(cast(literal(f'["ALL"]'), JSONB))
                 )
                 .order_by(NewsEvent.published_at.desc())
                 .limit(10)

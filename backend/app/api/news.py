@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import select
+from sqlalchemy import select, cast, literal
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.api.auth import require_settings_api_key
 from app.db.models import NewsEvent
@@ -51,8 +52,8 @@ async def get_news(
             # Match pair symbol in affected_pairs JSONB array
             symbol = pair.split("-")[0].upper()
             query = query.where(
-                NewsEvent.affected_pairs.op("@>")(f'["{symbol}"]')
-                | NewsEvent.affected_pairs.op("@>")(f'["ALL"]')
+                NewsEvent.affected_pairs.op("@>")(cast(literal(f'["{symbol}"]'), JSONB))
+                | NewsEvent.affected_pairs.op("@>")(cast(literal(f'["ALL"]'), JSONB))
             )
         query = query.offset(offset).limit(limit)
         result = await session.execute(query)
