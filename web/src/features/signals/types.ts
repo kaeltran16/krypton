@@ -21,6 +21,13 @@ export interface RiskMetrics {
   tp2_rr: number | null;
 }
 
+export interface DetectedPattern {
+  name: string;
+  type: "candlestick" | "chart";
+  bias: "bullish" | "bearish" | "neutral";
+  strength: number;
+}
+
 export interface Signal {
   id: number;
   pair: string;
@@ -40,6 +47,7 @@ export interface Signal {
   user_note: string | null;
   user_status: UserStatus;
   risk_metrics: RiskMetrics | null;
+  detected_patterns: DetectedPattern[] | null;
   correlated_news_ids: number[] | null;
 }
 

@@ -5,6 +5,7 @@ import { subscribeToPush, unsubscribeFromPush } from "../../../shared/lib/push";
 import { useSignalStore } from "../../signals/store";
 import { api, type RiskSettings } from "../../../shared/lib/api";
 import type { Timeframe } from "../../signals/types";
+import { BacktestView } from "../../backtest/components/BacktestView";
 
 const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h"];
 
@@ -23,6 +24,7 @@ export function MorePage() {
   } = useSettingsStore();
   const connected = useSignalStore((s) => s.connected);
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "error">("idle");
+  const [showBacktest, setShowBacktest] = useState(false);
 
   async function handleNotificationToggle(enabled: boolean) {
     setNotificationsEnabled(enabled);
@@ -36,8 +38,29 @@ export function MorePage() {
     }
   }
 
+  if (showBacktest) {
+    return <BacktestView onBack={() => setShowBacktest(false)} />;
+  }
+
   return (
     <div className="p-3 space-y-4">
+      {/* BACKTESTER */}
+      <div>
+        <h2 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Tools</h2>
+        <button
+          onClick={() => setShowBacktest(true)}
+          className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
+        >
+          <div>
+            <span className="text-sm font-medium">Backtester</span>
+            <p className="text-[10px] text-dim mt-0.5">Test strategies against historical data</p>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      </div>
+
       {/* TRADING */}
       <SettingsGroup title="Trading">
         {/* Pairs */}

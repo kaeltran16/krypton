@@ -3,6 +3,7 @@ import type { Signal, UserStatus } from "../types";
 import { formatPrice, formatScore } from "../../../shared/lib/format";
 import { api } from "../../../shared/lib/api";
 import { useSignalStore } from "../store";
+import { PatternDetailRow } from "./PatternBadges";
 
 interface SignalDetailProps {
   signal: Signal | null;
@@ -56,6 +57,10 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
           </div>
         </div>
       </div>
+
+      {signal.detected_patterns && signal.detected_patterns.length > 0 && (
+        <PatternDetailRow patterns={signal.detected_patterns} />
+      )}
 
       {signal.explanation && (
         <div className="p-4 border-b border-border">

@@ -3,11 +3,11 @@ from app.engine.combiner import compute_preliminary_score, compute_final_score, 
 
 
 def test_preliminary_score_weighted():
-    """Preliminary score with default 3-way weights (50/25/25)."""
+    """Preliminary score with default 4-way weights (40/22/23/15)."""
     result = compute_preliminary_score(
-        technical_score=80, order_flow_score=60, onchain_score=40,
+        technical_score=80, order_flow_score=60, onchain_score=40, pattern_score=50,
     )
-    expected = round(80 * 0.50 + 60 * 0.25 + 40 * 0.25)
+    expected = round(80 * 0.40 + 60 * 0.22 + 40 * 0.23 + 50 * 0.15)
     assert result == expected
 
 
@@ -17,6 +17,7 @@ def test_preliminary_score_two_way_backward_compat():
         technical_score=80, order_flow_score=50,
         tech_weight=0.60, flow_weight=0.40,
         onchain_score=0, onchain_weight=0.0,
+        pattern_weight=0.0,
     )
     expected = round(80 * 0.60 + 50 * 0.40)
     assert result == expected
@@ -25,38 +26,40 @@ def test_preliminary_score_two_way_backward_compat():
 def test_preliminary_score_auto_normalization():
     """Weights that don't sum to 1.0 get auto-normalized."""
     result = compute_preliminary_score(
-        technical_score=100, order_flow_score=100, onchain_score=100,
-        tech_weight=0.50, flow_weight=0.50, onchain_weight=0.50,
+        technical_score=100, order_flow_score=100, onchain_score=100, pattern_score=100,
+        tech_weight=0.50, flow_weight=0.50, onchain_weight=0.50, pattern_weight=0.50,
     )
-    # After normalization each weight = 0.333..., so result ≈ 100
+    # After normalization each weight = 0.25, so result = 100
     assert result == 100
 
 
 def test_preliminary_score_fallback_redistribution():
     """When on-chain is unavailable, caller redistributes weights."""
-    # Simulating the fallback logic from run_pipeline
-    base_tech = 0.50
-    base_flow = 0.25
-    base_onchain = 0.25
-    tech_w = base_tech + base_onchain * 0.6  # 0.65
-    flow_w = base_flow + base_onchain * 0.4  # 0.35
+    # Simulating the fallback logic from run_pipeline with 4-way weights
+    base_tech = 0.40
+    base_flow = 0.22
+    base_onchain = 0.23
+    base_pattern = 0.15
+    tech_w = base_tech + base_onchain * 0.6  # 0.538
+    flow_w = base_flow + base_onchain * 0.4  # 0.312
 
     result = compute_preliminary_score(
-        technical_score=80, order_flow_score=60,
+        technical_score=80, order_flow_score=60, pattern_score=50,
         tech_weight=tech_w, flow_weight=flow_w,
         onchain_score=0, onchain_weight=0.0,
+        pattern_weight=base_pattern,
     )
-    expected = round(80 * 0.65 + 60 * 0.35)
+    expected = round(80 * tech_w + 60 * flow_w + 50 * base_pattern)
     assert result == expected
 
 
 def test_preliminary_score_custom_weights():
-    """Custom weights with all three components."""
+    """Custom weights with all four components."""
     result = compute_preliminary_score(
-        technical_score=70, order_flow_score=50, onchain_score=30,
-        tech_weight=0.60, flow_weight=0.20, onchain_weight=0.20,
+        technical_score=70, order_flow_score=50, onchain_score=30, pattern_score=60,
+        tech_weight=0.50, flow_weight=0.20, onchain_weight=0.15, pattern_weight=0.15,
     )
-    expected = round(70 * 0.60 + 50 * 0.20 + 30 * 0.20)
+    expected = round(70 * 0.50 + 50 * 0.20 + 30 * 0.15 + 60 * 0.15)
     assert result == expected
 
 

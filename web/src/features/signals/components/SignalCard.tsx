@@ -1,5 +1,6 @@
 import type { Signal } from "../types";
 import { formatScore, formatPrice, formatRelativeTime } from "../../../shared/lib/format";
+import { PatternBadges } from "./PatternBadges";
 
 interface SignalCardProps {
   signal: Signal;
@@ -49,6 +50,13 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
           />
         </div>
       </div>
+
+      {/* Pattern badges */}
+      {signal.detected_patterns && signal.detected_patterns.length > 0 && (
+        <div className="mt-1.5">
+          <PatternBadges patterns={signal.detected_patterns} compact />
+        </div>
+      )}
 
       {/* Price levels */}
       <div className="flex items-center gap-3 mt-2 text-xs font-mono text-muted">

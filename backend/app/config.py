@@ -58,10 +58,10 @@ class Settings(BaseSettings):
     engine_signal_threshold: int = 50
     engine_llm_threshold: int = 30
     engine_llm_timeout_seconds: int = 30
-    engine_traditional_weight: float = 0.50
-    engine_flow_weight: float = 0.25
-    engine_onchain_weight: float = 0.25
-    engine_llm_weight: float = 0.40
+    engine_traditional_weight: float = 0.40
+    engine_flow_weight: float = 0.22
+    engine_onchain_weight: float = 0.23
+    engine_pattern_weight: float = 0.15
 
     # on-chain data
     onchain_enabled: bool = True

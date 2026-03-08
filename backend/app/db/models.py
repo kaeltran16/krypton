@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -12,7 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -73,6 +74,8 @@ class Signal(Base):
     )
     # risk metrics (position sizing data, nullable)
     risk_metrics: Mapped[dict | None] = mapped_column(JSONB)
+    # detected candlestick/chart patterns
+    detected_patterns: Mapped[list | None] = mapped_column(JSONB)
     # news correlation
     correlated_news_ids: Mapped[list | None] = mapped_column(JSONB)
 
@@ -140,3 +143,23 @@ class PushSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class BacktestRun(Base):
+    __tablename__ = "backtest_runs"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="running", server_default="running", nullable=False
+    )
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    pairs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    date_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    date_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    results: Mapped[dict | None] = mapped_column(JSONB)

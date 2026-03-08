@@ -1,6 +1,7 @@
 import { API_BASE_URL, API_KEY } from "./constants";
 import type { Signal, SignalStats, CalendarResponse, UserStatus } from "../../features/signals/types";
 import type { NewsEvent } from "../../features/news/types";
+import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../features/backtest/types";
 
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
@@ -183,4 +184,47 @@ export const api = {
 
   getRecentNews: (limit = 20) =>
     request<NewsEvent[]>(`/api/news/recent?limit=${limit}`),
+
+  // Backtest
+  importCandles: (params: { pairs: string[]; timeframes: string[]; lookback_days: number }) =>
+    request<{ job_id: string; status: string }>("/api/backtest/import", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  getImportStatus: (jobId: string) =>
+    request<{ job_id: string; status: string; total_imported: number; errors: string[] }>(
+      `/api/backtest/import/${jobId}`,
+    ),
+
+  startBacktest: (config: BacktestConfig) =>
+    request<{ run_id: string; status: string }>("/api/backtest/run", {
+      method: "POST",
+      body: JSON.stringify(config),
+    }),
+
+  getBacktestRun: (runId: string) =>
+    request<BacktestRun>(`/api/backtest/run/${runId}`),
+
+  cancelBacktest: (runId: string) =>
+    request<{ run_id: string; status: string }>(`/api/backtest/run/${runId}/cancel`, {
+      method: "POST",
+    }),
+
+  listBacktestRuns: () =>
+    request<BacktestRunSummary[]>("/api/backtest/runs"),
+
+  getBacktestRunDetail: (runId: string) =>
+    request<BacktestRun>(`/api/backtest/runs/${runId}`),
+
+  compareBacktests: (runIds: string[]) =>
+    request<{ runs: BacktestRun[] }>("/api/backtest/compare", {
+      method: "POST",
+      body: JSON.stringify({ run_ids: runIds }),
+    }),
+
+  deleteBacktestRun: (runId: string) =>
+    request<{ deleted: string }>(`/api/backtest/runs/${runId}`, {
+      method: "DELETE",
+    }),
 };

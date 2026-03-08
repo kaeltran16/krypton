@@ -45,6 +45,7 @@ def _signal_to_dict(signal: Signal) -> dict:
         "user_note": signal.user_note,
         "user_status": signal.user_status,
         "risk_metrics": signal.risk_metrics,
+        "detected_patterns": signal.detected_patterns,
         "correlated_news_ids": signal.correlated_news_ids,
     }
 

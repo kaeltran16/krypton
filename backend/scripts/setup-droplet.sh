@@ -45,7 +45,7 @@ chmod 600 /home/$DEPLOY_USER/.ssh/authorized_keys
 echo "--- Hardening SSH ---"
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-systemctl restart sshd
+systemctl restart ssh
 
 # -----------------------------------------------
 # 4. Firewall (UFW)

@@ -24,6 +24,7 @@ from app.api.routes import create_router
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels
+from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
 
@@ -115,6 +116,7 @@ async def persist_signal(db: Database, signal_data: dict):
                 take_profit_2=signal_data["take_profit_2"],
                 raw_indicators=signal_data.get("raw_indicators"),
                 risk_metrics=signal_data.get("risk_metrics"),
+                detected_patterns=signal_data.get("detected_patterns"),
                 correlated_news_ids=signal_data.get("correlated_news_ids"),
             )
             session.add(row)
@@ -158,6 +160,16 @@ async def run_pipeline(app: FastAPI, candle: dict):
     flow_metrics = order_flow.get(pair, {})
     flow_result = compute_order_flow_score(flow_metrics)
 
+    # Pattern detection
+    detected_patterns = []
+    pat_score = 0
+    try:
+        detected_patterns = detect_candlestick_patterns(df)
+        indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
+        pat_score = compute_pattern_score(detected_patterns, indicator_ctx)
+    except Exception as e:
+        logger.debug(f"Pattern detection skipped: {e}")
+
     # On-chain scoring (if available)
     onchain_score = 0
     onchain_available = False
@@ -169,10 +181,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
         except Exception as e:
             logger.debug(f"On-chain scoring skipped: {e}")
 
-    # Compute weights with fallback redistribution when on-chain is unavailable
+    # Compute weights with fallback redistribution when sources are unavailable
     tech_w = settings.engine_traditional_weight
     flow_w = settings.engine_flow_weight
     onchain_w = settings.engine_onchain_weight
+    pattern_w = getattr(settings, "engine_pattern_weight", 0.15)
     if not onchain_available:
         tech_w = tech_w + onchain_w * 0.6
         flow_w = flow_w + onchain_w * 0.4
@@ -185,6 +198,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
         flow_w,
         onchain_score,
         onchain_w,
+        pat_score,
+        pattern_w,
     )
 
     # Fetch news context for LLM gate and signal correlation
@@ -243,6 +258,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "explanation": llm_response.explanation if llm_response else None,
         **levels,
         "raw_indicators": tech_result["indicators"],
+        "detected_patterns": detected_patterns or None,
     }
 
     # Enrich with risk metrics if OKX client is available
@@ -657,6 +673,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.news import router as news_router
     app.include_router(news_router)
+
+    from app.api.backtest import router as backtest_router
+    app.include_router(backtest_router)
 
     return app
 
