@@ -239,6 +239,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
     final = compute_final_score(preliminary, llm_response)
     direction = "LONG" if final > 0 else "SHORT"
 
+    logger.info(f"Pipeline {pair}:{timeframe} tech={tech_result['score']:.0f} flow={flow_result['score']:.0f} pattern={pat_score:.0f} preliminary={preliminary:.0f} final={final:.0f} threshold={settings.engine_signal_threshold}")
+
     if abs(final) < settings.engine_signal_threshold:
         return
 
