@@ -11,6 +11,14 @@ import type { BacktestRun, BacktestStats } from "../types";
 
 const CURVE_COLORS = ["#F0B90B", "#0ECB81", "#F6465D", "#3B82F6"];
 
+function formatDuration(minutes: number | null | undefined): string {
+  if (minutes == null) return "—";
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 const METRIC_ROWS: { label: string; key: keyof BacktestStats; format: (v: any) => string; higherBetter: boolean }[] = [
   { label: "Total Trades", key: "total_trades", format: (v) => String(v), higherBetter: true },
   { label: "Win Rate", key: "win_rate", format: (v) => `${v.toFixed(1)}%`, higherBetter: true },
