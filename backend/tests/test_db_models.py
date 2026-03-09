@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.db.models import Candle, Signal
+from app.db.models import Candle, OrderFlowSnapshot, Signal
 
 
 def test_candle_model():
@@ -58,3 +58,16 @@ def test_signal_outcome_fields():
     assert signal.outcome_at is None
     assert signal.outcome_pnl_pct is None
     assert signal.outcome_duration_minutes is None
+
+
+def test_order_flow_snapshot_instantiation():
+    snap = OrderFlowSnapshot(
+        pair="BTC-USDT-SWAP",
+        funding_rate=0.0001,
+        open_interest=500000000.0,
+        oi_change_pct=0.02,
+        long_short_ratio=1.3,
+    )
+    assert snap.pair == "BTC-USDT-SWAP"
+    assert snap.funding_rate == 0.0001
+    assert snap.long_short_ratio == 1.3

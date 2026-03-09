@@ -173,6 +173,24 @@ class PipelineSettings(Base):
     )
 
 
+class OrderFlowSnapshot(Base):
+    __tablename__ = "order_flow_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pair: Mapped[str] = mapped_column(String(32), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    funding_rate: Mapped[float | None] = mapped_column(Float)
+    open_interest: Mapped[float | None] = mapped_column(Float)
+    oi_change_pct: Mapped[float | None] = mapped_column(Float)
+    long_short_ratio: Mapped[float | None] = mapped_column(Float)
+
+    __table_args__ = (
+        Index("ix_oflow_pair_ts", "pair", "timestamp"),
+    )
+
+
 class BacktestRun(Base):
     __tablename__ = "backtest_runs"
 

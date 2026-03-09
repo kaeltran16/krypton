@@ -33,6 +33,7 @@ class BacktestConfig:
     tp2_atr_multiplier: float = 3.0
     risk_per_trade_pct: float = 1.0
     max_concurrent_positions: int = 3
+    ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
 
 
 @dataclass
@@ -58,6 +59,7 @@ def run_backtest(
     pair: str,
     config: BacktestConfig | None = None,
     cancel_flag: dict | None = None,
+    ml_predictor=None,
 ) -> dict:
     """Run a backtest on historical candles for a single pair.
 
@@ -93,57 +95,95 @@ def run_backtest(
 
         # Score current candle
         df = pd.DataFrame(window)
-        try:
-            tech_result = compute_technical_score(df)
-        except Exception:
-            continue
 
-        # Pattern detection
-        pat_score = 0
-        detected = []
-        if config.enable_patterns:
+        if ml_predictor is not None:
+            # ML scoring mode
             try:
-                detected = detect_candlestick_patterns(df)
-                indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-                pat_score = compute_pattern_score(detected, indicator_ctx)
+                from app.ml.features import build_feature_matrix
+                feature_matrix = build_feature_matrix(df)
+                prediction = ml_predictor.predict(feature_matrix)
+
+                if prediction["direction"] == "NEUTRAL" or prediction["confidence"] < config.ml_confidence_threshold:
+                    continue
+
+                direction = prediction["direction"]
+                score = int(prediction["confidence"] * 100)
+                if direction == "SHORT":
+                    score = -score
+
+                # Use compute_technical_score for ATR (same as rule-based path)
+                try:
+                    tech_result = compute_technical_score(df)
+                    atr = tech_result["indicators"].get("atr", 0)
+                except Exception:
+                    continue
+                if atr <= 0:
+                    continue
+
+                price = float(current["close"])
+                if direction == "LONG":
+                    sl = price - prediction["sl_atr"] * atr
+                    tp1 = price + prediction["tp1_atr"] * atr
+                    tp2 = price + prediction["tp2_atr"] * atr
+                else:
+                    sl = price + prediction["sl_atr"] * atr
+                    tp1 = price - prediction["tp1_atr"] * atr
+                    tp2 = price - prediction["tp2_atr"] * atr
+
+                detected = []
+
             except Exception:
-                pass
+                continue
+        else:
+            # Rule-based scoring mode (existing logic)
+            try:
+                tech_result = compute_technical_score(df)
+            except Exception:
+                continue
 
-        # Backtest uses only tech + pattern (no flow/onchain/LLM)
-        score = compute_preliminary_score(
-            technical_score=tech_result["score"],
-            order_flow_score=0,
-            tech_weight=config.tech_weight,
-            flow_weight=0.0,
-            onchain_score=0,
-            onchain_weight=0.0,
-            pattern_score=pat_score,
-            pattern_weight=config.pattern_weight,
-        )
+            pat_score = 0
+            detected = []
+            if config.enable_patterns:
+                try:
+                    detected = detect_candlestick_patterns(df)
+                    indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
+                    pat_score = compute_pattern_score(detected, indicator_ctx)
+                except Exception:
+                    pass
 
-        direction = "LONG" if score > 0 else "SHORT"
+            score = compute_preliminary_score(
+                technical_score=tech_result["score"],
+                order_flow_score=0,
+                tech_weight=config.tech_weight,
+                flow_weight=0.0,
+                onchain_score=0,
+                onchain_weight=0.0,
+                pattern_score=pat_score,
+                pattern_weight=config.pattern_weight,
+            )
 
-        if abs(score) < config.signal_threshold:
-            continue
+            direction = "LONG" if score > 0 else "SHORT"
+
+            if abs(score) < config.signal_threshold:
+                continue
+
+            atr = tech_result["indicators"].get("atr", 0)
+            if atr <= 0:
+                continue
+
+            price = float(current["close"])
+            if direction == "LONG":
+                sl = price - config.sl_atr_multiplier * atr
+                tp1 = price + config.tp1_atr_multiplier * atr
+                tp2 = price + config.tp2_atr_multiplier * atr
+            else:
+                sl = price + config.sl_atr_multiplier * atr
+                tp1 = price - config.tp1_atr_multiplier * atr
+                tp2 = price - config.tp2_atr_multiplier * atr
 
         # Enforce max concurrent positions
         if len(open_positions) >= config.max_concurrent_positions:
             continue
-
-        # Calculate levels using configurable ATR multipliers
-        atr = tech_result["indicators"].get("atr", 0)
-        if atr <= 0:
-            continue
-
-        price = float(current["close"])
-        if direction == "LONG":
-            sl = price - config.sl_atr_multiplier * atr
-            tp1 = price + config.tp1_atr_multiplier * atr
-            tp2 = price + config.tp2_atr_multiplier * atr
-        else:
-            sl = price + config.sl_atr_multiplier * atr
-            tp1 = price - config.tp1_atr_multiplier * atr
-            tp2 = price - config.tp2_atr_multiplier * atr
 
         ts = current["timestamp"]
         if isinstance(ts, datetime):

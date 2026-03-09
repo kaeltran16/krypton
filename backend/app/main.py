@@ -24,7 +24,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
 from app.db.database import Base, Database
-from app.db.models import Candle, NewsEvent, PipelineSettings, Signal
+from app.db.models import Candle, NewsEvent, OrderFlowSnapshot, PipelineSettings, Signal
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
@@ -133,6 +133,91 @@ async def persist_signal(db: Database, signal_data: dict):
         logger.error(f"Failed to persist signal {signal_data['pair']}: {e}")
 
 
+async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids=None):
+    """Persist signal, compute risk metrics, broadcast, and push."""
+    settings = app.state.settings
+    db = app.state.db
+    redis = app.state.redis
+    manager = app.state.manager
+
+    # Enrich with risk metrics if OKX client is available
+    risk_metrics = None
+    okx_client = getattr(app.state, "okx_client", None)
+    if okx_client:
+        try:
+            balance = await okx_client.get_balance()
+            if balance:
+                equity = balance["total_equity"]
+                from app.db.models import RiskSettings
+                risk_per_trade = 0.01
+                max_pos_usd = None
+                try:
+                    async with db.session_factory() as session:
+                        result = await session.execute(
+                            select(RiskSettings).where(RiskSettings.id == 1)
+                        )
+                        rs = result.scalar_one_or_none()
+                        if rs:
+                            risk_per_trade = rs.risk_per_trade
+                            max_pos_usd = rs.max_position_size_usd
+                except Exception:
+                    pass
+
+                sizer = PositionSizer(equity, risk_per_trade, max_pos_usd)
+
+                lot_size = None
+                min_order_size = None
+                try:
+                    cache_key_inst = f"instruments:{signal_data['pair']}"
+                    cached_inst = await redis.get(cache_key_inst)
+                    if cached_inst:
+                        import json as _j
+                        inst = _j.loads(cached_inst)
+                        lot_size = inst.get("lot_size")
+                        min_order_size = inst.get("min_order_size")
+                    else:
+                        instruments = await okx_client.get_instruments()
+                        if signal_data["pair"] in instruments:
+                            inst = instruments[signal_data["pair"]]
+                            lot_size = inst.get("lot_size")
+                            min_order_size = inst.get("min_order_size")
+                            await redis.set(cache_key_inst, json.dumps(inst), ex=3600)
+                except Exception:
+                    pass
+
+                risk_metrics = sizer.calculate(
+                    entry=levels["entry"],
+                    stop_loss=levels["stop_loss"],
+                    take_profit_1=levels.get("take_profit_1"),
+                    take_profit_2=levels.get("take_profit_2"),
+                    lot_size=lot_size,
+                    min_order_size=min_order_size,
+                )
+        except Exception as e:
+            logger.debug(f"Risk metrics enrichment skipped: {e}")
+
+    signal_data["risk_metrics"] = risk_metrics
+    signal_data["correlated_news_ids"] = correlated_news_ids
+
+    await persist_signal(db, signal_data)
+    await manager.broadcast(signal_data)
+    logger.info(
+        f"Signal emitted: {signal_data['pair']} {signal_data['timeframe']} "
+        f"{signal_data['direction']} score={signal_data['final_score']}"
+    )
+
+    try:
+        from app.push.dispatch import dispatch_push_for_signal
+        await dispatch_push_for_signal(
+            session_factory=db.session_factory,
+            signal=signal_data,
+            vapid_private_key=settings.vapid_private_key,
+            vapid_claims_email=settings.vapid_claims_email,
+        )
+    except Exception as e:
+        logger.debug(f"Signal push dispatch skipped: {e}")
+
+
 async def run_pipeline(app: FastAPI, candle: dict):
     settings = app.state.settings
     redis = app.state.redis
@@ -158,6 +243,130 @@ async def run_pipeline(app: FastAPI, candle: dict):
     candles_data = [json.loads(c) for c in raw_candles]
     df = pd.DataFrame(candles_data)
 
+    # --- ML scoring path ---
+    pair_slug = pair.replace("-", "_").lower()
+    ml_predictors = getattr(app.state, "ml_predictors", {})
+    ml_predictor = ml_predictors.get(pair_slug)
+    if ml_predictor is not None:
+        try:
+            from app.ml.features import build_feature_matrix
+            from app.ml.ensemble import compute_ensemble_signal
+
+            # Include order flow features if model was trained with them
+            flow_for_features = None
+            if getattr(ml_predictor, "flow_used", False):
+                flow_data = order_flow.get(pair, {})
+                if flow_data:
+                    flow_for_features = [{
+                        "funding_rate": flow_data.get("funding_rate", 0),
+                        "oi_change_pct": flow_data.get("open_interest_change_pct", 0),
+                        "long_short_ratio": flow_data.get("long_short_ratio", 1.0),
+                    }] * len(df)
+
+            feature_matrix = build_feature_matrix(df, order_flow=flow_for_features)
+            ml_prediction = ml_predictor.predict(feature_matrix)
+
+            tech_result = compute_technical_score(df)
+            flow_metrics = order_flow.get(pair, {})
+
+            # Fetch news context for LLM prompt
+            news_context = "No recent news available."
+            correlated_news_ids = None
+            try:
+                window = getattr(settings, "news_llm_context_window_minutes", 30)
+                news_context, correlated_news_ids = await _fetch_news_context(db, pair, window)
+                correlated_news_ids = correlated_news_ids or None
+            except Exception as e:
+                logger.debug(f"News context fetch skipped: {e}")
+
+            # Only call LLM when ML confidence exceeds threshold
+            llm_response_dict = None
+            ml_confidence_threshold = getattr(settings, "ml_confidence_threshold", 0.65)
+            ml_llm_threshold = getattr(settings, "ml_llm_threshold", 0.65)
+            if prompt_template and ml_prediction["confidence"] >= ml_llm_threshold:
+                try:
+                    rendered = render_prompt(
+                        template=prompt_template,
+                        pair=pair, timeframe=timeframe,
+                        indicators=json.dumps(tech_result["indicators"], indent=2),
+                        order_flow=json.dumps(flow_metrics, indent=2),
+                        news=news_context,
+                        preliminary_score=str(int(ml_prediction["confidence"] * 100)),
+                        direction=ml_prediction["direction"],
+                        candles=json.dumps(candles_data[-20:], indent=2),
+                    )
+                    llm_resp = await call_openrouter(
+                        prompt=rendered,
+                        api_key=settings.openrouter_api_key,
+                        model=settings.openrouter_model,
+                        timeout=settings.engine_llm_timeout_seconds,
+                    )
+                    if llm_resp:
+                        llm_response_dict = {
+                            "opinion": llm_resp.opinion,
+                            "confidence": llm_resp.confidence,
+                        }
+                except Exception as e:
+                    logger.error(f"LLM call failed in ML path: {e}")
+
+            ensemble = compute_ensemble_signal(
+                ml_prediction, llm_response_dict,
+                min_confidence=ml_confidence_threshold,
+            )
+
+            if not ensemble["emit"]:
+                logger.info(
+                    f"ML pipeline {pair}:{timeframe} "
+                    f"dir={ml_prediction['direction']} "
+                    f"conf={ml_prediction['confidence']:.2f} — not emitted"
+                )
+                return
+
+            direction = ensemble["direction"]
+            atr = tech_result["indicators"].get("atr", 200)
+            price = float(candle["close"])
+
+            if direction == "LONG":
+                levels = {
+                    "entry": price,
+                    "stop_loss": price - ensemble["sl_atr"] * atr,
+                    "take_profit_1": price + ensemble["tp1_atr"] * atr,
+                    "take_profit_2": price + ensemble["tp2_atr"] * atr,
+                }
+            else:
+                levels = {
+                    "entry": price,
+                    "stop_loss": price + ensemble["sl_atr"] * atr,
+                    "take_profit_1": price - ensemble["tp1_atr"] * atr,
+                    "take_profit_2": price - ensemble["tp2_atr"] * atr,
+                }
+
+            final_score = int(ensemble["confidence"] * 100)
+            if direction == "SHORT":
+                final_score = -final_score
+
+            signal_data = {
+                "pair": pair,
+                "timeframe": timeframe,
+                "direction": direction,
+                "final_score": final_score,
+                "traditional_score": 0,
+                "llm_opinion": llm_response_dict["opinion"] if llm_response_dict else "skipped",
+                "llm_confidence": llm_response_dict.get("confidence") if llm_response_dict else None,
+                "explanation": f"ML model confidence: {ml_prediction['confidence']:.2f}",
+                **levels,
+                "raw_indicators": tech_result["indicators"],
+                "detected_patterns": None,
+                "correlated_news_ids": correlated_news_ids,
+            }
+
+            await _emit_signal(app, signal_data, levels, correlated_news_ids)
+            return  # ML path handled — skip rule-based scoring
+
+        except Exception as e:
+            logger.error(f"ML scoring failed for {pair}:{timeframe}: {e}", exc_info=True)
+            # Fall through to rule-based scoring as fallback
+
     try:
         tech_result = compute_technical_score(df)
     except Exception as e:
@@ -166,6 +375,22 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     flow_metrics = order_flow.get(pair, {})
     flow_result = compute_order_flow_score(flow_metrics)
+
+    # Persist order flow snapshot for ML training data
+    if flow_metrics:
+        try:
+            async with db.session_factory() as session:
+                snap = OrderFlowSnapshot(
+                    pair=pair,
+                    funding_rate=flow_metrics.get("funding_rate"),
+                    open_interest=flow_metrics.get("open_interest"),
+                    oi_change_pct=flow_metrics.get("open_interest_change_pct"),
+                    long_short_ratio=flow_metrics.get("long_short_ratio"),
+                )
+                session.add(snap)
+                await session.commit()
+        except Exception as e:
+            logger.debug(f"Order flow snapshot save skipped: {e}")
 
     # Pattern detection
     detected_patterns = []
@@ -279,82 +504,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "detected_patterns": detected_patterns or None,
     }
 
-    # Enrich with risk metrics if OKX client is available
-    risk_metrics = None
-    okx_client = getattr(app.state, "okx_client", None)
-    if okx_client:
-        try:
-            balance = await okx_client.get_balance()
-            if balance:
-                equity = balance["total_equity"]
-                # Load risk settings from DB
-                from app.db.models import RiskSettings
-                risk_per_trade = 0.01
-                max_pos_usd = None
-                try:
-                    async with db.session_factory() as session:
-                        result = await session.execute(
-                            select(RiskSettings).where(RiskSettings.id == 1)
-                        )
-                        rs = result.scalar_one_or_none()
-                        if rs:
-                            risk_per_trade = rs.risk_per_trade
-                            max_pos_usd = rs.max_position_size_usd
-                except Exception:
-                    pass
-
-                sizer = PositionSizer(equity, risk_per_trade, max_pos_usd)
-
-                # Try to get instrument specs for lot size
-                lot_size = None
-                min_order_size = None
-                try:
-                    cache_key_inst = f"instruments:{pair}"
-                    cached_inst = await redis.get(cache_key_inst)
-                    if cached_inst:
-                        import json as _j
-                        inst = _j.loads(cached_inst)
-                        lot_size = inst.get("lot_size")
-                        min_order_size = inst.get("min_order_size")
-                    else:
-                        instruments = await okx_client.get_instruments()
-                        if pair in instruments:
-                            inst = instruments[pair]
-                            lot_size = inst.get("lot_size")
-                            min_order_size = inst.get("min_order_size")
-                            await redis.set(cache_key_inst, json.dumps(inst), ex=3600)
-                except Exception:
-                    pass
-
-                risk_metrics = sizer.calculate(
-                    entry=levels["entry"],
-                    stop_loss=levels["stop_loss"],
-                    take_profit_1=levels.get("take_profit_1"),
-                    take_profit_2=levels.get("take_profit_2"),
-                    lot_size=lot_size,
-                    min_order_size=min_order_size,
-                )
-        except Exception as e:
-            logger.debug(f"Risk metrics enrichment skipped: {e}")
-
-    signal_data["risk_metrics"] = risk_metrics
-    signal_data["correlated_news_ids"] = correlated_news_ids
-
-    await persist_signal(db, signal_data)
-    await manager.broadcast(signal_data)
-    logger.info(f"Signal emitted: {pair} {timeframe} {direction} score={final}")
-
-    # Dispatch Web Push for signal
-    try:
-        from app.push.dispatch import dispatch_push_for_signal
-        await dispatch_push_for_signal(
-            session_factory=db.session_factory,
-            signal=signal_data,
-            vapid_private_key=settings.vapid_private_key,
-            vapid_claims_email=settings.vapid_claims_email,
-        )
-    except Exception as e:
-        logger.debug(f"Signal push dispatch skipped: {e}")
+    await _emit_signal(app, signal_data, levels, correlated_news_ids)
 
 
 async def handle_candle(app: FastAPI, candle: dict):
@@ -670,6 +820,12 @@ async def lifespan(app: FastAPI):
     app.state.news_collector = news_collector
     news_task = asyncio.create_task(news_collector.run())
 
+    # Load per-pair ML predictors if enabled
+    app.state.ml_predictors = {}
+    if getattr(settings, "ml_enabled", False):
+        from app.api.ml import _reload_predictors
+        _reload_predictors(app, settings)
+
     yield
 
     await ws_client.stop()
@@ -727,6 +883,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.pipeline_settings import router as pipeline_router
     app.include_router(pipeline_router)
+
+    from app.api.ml import router as ml_router
+    app.include_router(ml_router)
 
     return app
 

@@ -229,6 +229,36 @@ export const api = {
       method: "DELETE",
     }),
 
+  // ML
+  getMLStatus: () =>
+    request<{ ml_enabled: boolean; loaded_pairs: string[] }>("/api/ml/status"),
+
+  startMLTraining: (params: {
+    timeframe?: string;
+    epochs?: number;
+    lookback_days?: number;
+  }) =>
+    request<{ job_id: string; status: string }>("/api/ml/train", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  getMLTrainingStatus: (jobId: string) =>
+    request<{ job_id: string; status: string; progress: Record<string, unknown>; result?: Record<string, unknown> }>(
+      `/api/ml/train/${jobId}`,
+    ),
+
+  startMLBackfill: (params: { timeframe?: string; lookback_days?: number }) =>
+    request<{ job_id: string; status: string }>("/api/ml/backfill", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  getMLBackfillStatus: (jobId: string) =>
+    request<{ job_id: string; status: string; progress: Record<string, unknown>; result?: Record<string, unknown> }>(
+      `/api/ml/backfill/${jobId}`,
+    ),
+
   // Pipeline settings
   getPipelineSettings: () =>
     request<PipelineSettingsAPI>("/api/pipeline/settings"),

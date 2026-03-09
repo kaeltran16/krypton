@@ -243,3 +243,42 @@ class TestResolvePositions:
         closed = []
         _resolve_positions(open_pos, candle, closed)
         assert closed[0].outcome == "SL_HIT"
+
+
+class TestMLBacktest:
+
+    def test_ml_mode_runs(self):
+        """ML backtest should work with a dummy predictor."""
+        candles = _make_candle_series(n=120)
+        config = BacktestConfig(signal_threshold=20, max_concurrent_positions=5)
+
+        class MockPredictor:
+            seq_len = 50
+            def predict(self, features):
+                import numpy as np
+                return {
+                    "direction": "LONG" if np.random.random() > 0.5 else "SHORT",
+                    "confidence": 0.75,
+                    "sl_atr": 1.5, "tp1_atr": 2.0, "tp2_atr": 3.0,
+                }
+
+        result = run_backtest(candles, "BTC-USDT-SWAP", config, ml_predictor=MockPredictor())
+        assert "trades" in result
+        assert "stats" in result
+
+    def test_ml_mode_produces_trades(self):
+        """ML backtest should produce some trades."""
+        candles = _make_candle_series(n=150, trend=15)
+        config = BacktestConfig(signal_threshold=10, max_concurrent_positions=5)
+
+        class AlwaysLongPredictor:
+            seq_len = 50
+            def predict(self, features):
+                return {
+                    "direction": "LONG",
+                    "confidence": 0.90,
+                    "sl_atr": 1.5, "tp1_atr": 2.0, "tp2_atr": 3.0,
+                }
+
+        result = run_backtest(candles, "BTC-USDT-SWAP", config, ml_predictor=AlwaysLongPredictor())
+        assert result["stats"]["total_trades"] > 0

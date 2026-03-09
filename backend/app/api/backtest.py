@@ -43,6 +43,8 @@ class RunRequest(BaseModel):
     tp1_atr_multiplier: float = Field(default=2.0, gt=0)
     tp2_atr_multiplier: float = Field(default=3.0, gt=0)
     max_concurrent_positions: int = Field(default=3, ge=1, le=20)
+    ml_mode: bool = False  # use ML model instead of rule-based scoring
+    ml_confidence_threshold: float = Field(default=0.65, ge=0.1, le=1.0)
 
 
 class CompareRequest(BaseModel):
@@ -151,6 +153,7 @@ async def start_backtest(body: RunRequest, request: Request):
                 tp1_atr_multiplier=body.tp1_atr_multiplier,
                 tp2_atr_multiplier=body.tp2_atr_multiplier,
                 max_concurrent_positions=body.max_concurrent_positions,
+                ml_confidence_threshold=body.ml_confidence_threshold,
             )
 
             all_trades = []
@@ -184,8 +187,18 @@ async def start_backtest(body: RunRequest, request: Request):
                 if not candles:
                     continue
 
+                # Load per-pair ML predictor if ml_mode requested
+                ml_predictor = None
+                if body.ml_mode:
+                    predictors = getattr(request.app.state, "ml_predictors", {})
+                    pair_slug = pair.replace("-", "_").lower()
+                    ml_predictor = predictors.get(pair_slug)
+                    if ml_predictor is None:
+                        raise ValueError(f"No ML model for {pair}. Train via POST /api/ml/train")
+
                 result = await asyncio.to_thread(
                     run_backtest, candles, pair, bt_config, cancel_flags.get(run_id),
+                    ml_predictor,
                 )
                 all_trades.extend(result["trades"])
                 all_stats_parts.append(result["stats"])

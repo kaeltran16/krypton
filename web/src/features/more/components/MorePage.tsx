@@ -182,6 +182,9 @@ export function MorePage() {
       {/* DATA SOURCES */}
       <DataSourcesSection />
 
+      {/* ML MODEL */}
+      <MLStatusSection />
+
       {/* RISK MANAGEMENT */}
       <RiskManagementSection />
 
@@ -193,6 +196,88 @@ export function MorePage() {
         </div>
       </SettingsGroup>
     </div>
+  );
+}
+
+function MLStatusSection() {
+  const [status, setStatus] = useState<{ ml_enabled: boolean; loaded_pairs: string[] } | null>(null);
+  const [training, setTraining] = useState(false);
+  const [trainStatus, setTrainStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getMLStatus().then(setStatus).catch(() => {});
+  }, []);
+
+  async function handleTrain() {
+    setTraining(true);
+    setTrainStatus("starting...");
+    try {
+      const { job_id } = await api.startMLTraining({ timeframe: "1h", epochs: 100 });
+      // Poll for completion
+      const interval = setInterval(async () => {
+        try {
+          const result = await api.getMLTrainingStatus(job_id);
+          setTrainStatus(result.status);
+          if (result.status !== "running") {
+            clearInterval(interval);
+            setTraining(false);
+            // Refresh status
+            api.getMLStatus().then(setStatus).catch(() => {});
+          }
+        } catch {
+          clearInterval(interval);
+          setTraining(false);
+          setTrainStatus("error");
+        }
+      }, 3000);
+    } catch {
+      setTraining(false);
+      setTrainStatus("failed to start");
+    }
+  }
+
+  return (
+    <SettingsGroup title="ML Model">
+      <div className="px-3 py-3 border-b border-border flex items-center justify-between">
+        <div>
+          <span className="text-sm">Status</span>
+          {status && (
+            <p className="text-[10px] text-dim mt-0.5">
+              {status.loaded_pairs.length > 0
+                ? `Loaded: ${status.loaded_pairs.map((p) => p.replace("_", "-").toUpperCase()).join(", ")}`
+                : "No models trained yet"}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className={`w-2 h-2 rounded-full ${status?.loaded_pairs.length ? "bg-long" : "bg-muted"}`} />
+          <span className="text-sm text-muted">
+            {status?.loaded_pairs.length ? "Ready" : "Inactive"}
+          </span>
+        </div>
+      </div>
+      <div className="px-3 py-3 flex items-center justify-between">
+        <div>
+          <span className="text-sm">Train Model</span>
+          {trainStatus && (
+            <p className="text-[10px] text-dim mt-0.5">
+              {trainStatus === "running" ? "Training in progress..." : `Last: ${trainStatus}`}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleTrain}
+          disabled={training}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+            training
+              ? "bg-card-hover text-dim"
+              : "bg-accent/15 text-accent border border-accent/30"
+          }`}
+        >
+          {training ? "Training..." : "Train"}
+        </button>
+      </div>
+    </SettingsGroup>
   );
 }
 

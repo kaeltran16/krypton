@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     cryptopanic_api_key: str = ""
     news_api_key: str = ""
 
+    # ML model
+    ml_enabled: bool = False
+    ml_confidence_threshold: float = 0.65
+    ml_llm_threshold: float = 0.65  # only call LLM above this ML confidence
+    ml_checkpoint_dir: str = "models"
+
     # push notifications
     vapid_private_key: str = ""
     vapid_claims_email: str = ""

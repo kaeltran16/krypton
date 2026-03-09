@@ -60,6 +60,8 @@ const defaultConfig: BacktestConfig = {
   tp1_atr_multiplier: 2.0,
   tp2_atr_multiplier: 3.0,
   max_concurrent_positions: 3,
+  ml_mode: false,
+  ml_confidence_threshold: 65,
 };
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,6 +87,7 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
         ...config,
         tech_weight: config.tech_weight / 100,
         pattern_weight: config.pattern_weight / 100,
+        ml_confidence_threshold: config.ml_confidence_threshold / 100,
       };
       const { run_id } = await api.startBacktest(payload);
       get().pollRun(run_id);
