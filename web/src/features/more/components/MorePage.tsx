@@ -20,6 +20,7 @@ function toggleItem<T>(list: T[], item: T, minOne = true): T[] {
 export function MorePage() {
   const {
     pairs, timeframes, threshold, notificationsEnabled, apiBaseUrl,
+    loading, syncError,
     setPairs, setTimeframes, setThreshold, setNotificationsEnabled, setApiBaseUrl,
   } = useSettingsStore();
   const connected = useSignalStore((s) => s.connected);
@@ -42,8 +43,23 @@ export function MorePage() {
     return <BacktestView onBack={() => setShowBacktest(false)} />;
   }
 
+  if (loading) {
+    return (
+      <div className="p-3 space-y-4">
+        <div className="h-32 bg-card rounded-lg animate-pulse border border-border" />
+        <div className="h-24 bg-card rounded-lg animate-pulse border border-border" />
+        <div className="h-24 bg-card rounded-lg animate-pulse border border-border" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-3 space-y-4">
+      {syncError && (
+        <div className="bg-short/10 border border-short/30 rounded-lg px-3 py-2 text-xs text-short">
+          Settings sync failed — changes may not be saved
+        </div>
+      )}
       {/* BACKTESTER */}
       <div>
         <h2 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Tools</h2>

@@ -2,6 +2,7 @@ import { API_BASE_URL, API_KEY } from "./constants";
 import type { Signal, SignalStats, CalendarResponse, UserStatus } from "../../features/signals/types";
 import type { NewsEvent } from "../../features/news/types";
 import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../features/backtest/types";
+import type { PipelineSettingsAPI } from "../../features/settings/types";
 
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
@@ -226,5 +227,15 @@ export const api = {
   deleteBacktestRun: (runId: string) =>
     request<{ deleted: string }>(`/api/backtest/runs/${runId}`, {
       method: "DELETE",
+    }),
+
+  // Pipeline settings
+  getPipelineSettings: () =>
+    request<PipelineSettingsAPI>("/api/pipeline/settings"),
+
+  updatePipelineSettings: (patch: Partial<Omit<PipelineSettingsAPI, "updated_at">>) =>
+    request<PipelineSettingsAPI>("/api/pipeline/settings", {
+      method: "PUT",
+      body: JSON.stringify(patch),
     }),
 };

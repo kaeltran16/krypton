@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -142,6 +143,33 @@ class PushSubscription(Base):
     threshold: Mapped[int] = mapped_column(Integer, default=50)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PipelineSettings(Base):
+    __tablename__ = "pipeline_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    pairs: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
+    )
+    timeframes: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=["15m", "1h", "4h"]
+    )
+    signal_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    onchain_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    news_alerts_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    news_context_window: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=30
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_pipeline_settings_singleton"),
     )
 
 

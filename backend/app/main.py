@@ -24,7 +24,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
 from app.db.database import Base, Database
-from app.db.models import Candle, NewsEvent, Signal
+from app.db.models import Candle, NewsEvent, PipelineSettings, Signal
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
@@ -564,6 +564,29 @@ async def lifespan(app: FastAPI):
     app.state.manager = ws_manager
     app.state.order_flow = {}
     app.state.pipeline_tasks = set()
+    app.state.pipeline_settings_lock = asyncio.Lock()
+
+    # Load PipelineSettings from DB and patch onto in-memory settings
+    _db_to_settings = {
+        "signal_threshold": "engine_signal_threshold",
+        "news_alerts_enabled": "news_high_impact_push_enabled",
+        "news_context_window": "news_llm_context_window_minutes",
+    }
+    try:
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(PipelineSettings).where(PipelineSettings.id == 1)
+            )
+            ps = result.scalar_one_or_none()
+            if ps:
+                for db_field in ("pairs", "timeframes", "signal_threshold", "onchain_enabled", "news_alerts_enabled", "news_context_window"):
+                    settings_field = _db_to_settings.get(db_field, db_field)
+                    object.__setattr__(settings, settings_field, getattr(ps, db_field))
+                logger.info("Pipeline settings loaded from DB")
+            else:
+                logger.warning("No PipelineSettings row found; using config defaults")
+    except Exception as e:
+        logger.warning("Failed to load PipelineSettings from DB: %s", e)
 
     prompt_path = Path(__file__).parent / "prompts" / "signal_analysis.txt"
     app.state.prompt_template = load_prompt_template(prompt_path) if prompt_path.exists() else ""
@@ -593,7 +616,11 @@ async def lifespan(app: FastAPI):
         on_data=lambda d: handle_long_short_data(app, d),
     )
 
+    app.state.ws_client = ws_client
+    app.state.rest_poller = rest_poller
+
     ws_task = asyncio.create_task(ws_client.connect())
+    app.state.ws_task = ws_task
     poller_task = asyncio.create_task(rest_poller.run())
 
     async def outcome_loop():
@@ -608,6 +635,7 @@ async def lifespan(app: FastAPI):
 
     # On-chain collector
     onchain_task = None
+    onchain_collector = None
     if settings.onchain_enabled:
         from app.collector.onchain import OnChainCollector
         onchain_collector = OnChainCollector(
@@ -618,6 +646,7 @@ async def lifespan(app: FastAPI):
             cryptoquant_api_key=settings.cryptoquant_api_key,
         )
         onchain_task = asyncio.create_task(onchain_collector.run())
+    app.state.onchain_collector = onchain_collector
 
     # News collector
     from app.collector.news import NewsCollector
@@ -638,6 +667,7 @@ async def lifespan(app: FastAPI):
         vapid_private_key=settings.vapid_private_key,
         vapid_claims_email=settings.vapid_claims_email,
     )
+    app.state.news_collector = news_collector
     news_task = asyncio.create_task(news_collector.run())
 
     yield
@@ -694,6 +724,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.backtest import router as backtest_router
     app.include_router(backtest_router)
+
+    from app.api.pipeline_settings import router as pipeline_router
+    app.include_router(pipeline_router)
 
     return app
 
