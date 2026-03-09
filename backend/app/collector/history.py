@@ -90,7 +90,7 @@ async def _import_pair_timeframe(
         if after:
             params["after"] = after
 
-        # Try long history endpoint first, fall back to regular
+        # OKX only provides /history-candles (no long-history variant)
         for endpoint in (
             "https://www.okx.com/api/v5/market/history-candles",
         ):
@@ -119,8 +119,8 @@ async def _import_pair_timeframe(
                 progress_callback(job_id, {
                     "pair": pair,
                     "timeframe": timeframe,
-                    "imported": imported,
-                    "status": "importing",
+                    "total_imported": imported,
+                    "status": "running",
                 })
             except Exception:
                 pass

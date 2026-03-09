@@ -15,15 +15,17 @@ const METRIC_ROWS: { label: string; key: keyof BacktestStats; format: (v: any) =
   { label: "Total Trades", key: "total_trades", format: (v) => String(v), higherBetter: true },
   { label: "Win Rate", key: "win_rate", format: (v) => `${v.toFixed(1)}%`, higherBetter: true },
   { label: "Net P&L", key: "net_pnl", format: (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`, higherBetter: true },
+  { label: "Avg P&L", key: "avg_pnl", format: (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`, higherBetter: true },
+  { label: "Avg R:R", key: "avg_rr", format: (v) => v.toFixed(2), higherBetter: true },
   { label: "Max Drawdown", key: "max_drawdown", format: (v) => `${v.toFixed(2)}%`, higherBetter: false },
   { label: "Profit Factor", key: "profit_factor", format: (v) => v != null ? v.toFixed(2) : "—", higherBetter: true },
   { label: "Sharpe Ratio", key: "sharpe_ratio", format: (v) => v != null ? v.toFixed(2) : "—", higherBetter: true },
   { label: "Sortino Ratio", key: "sortino_ratio", format: (v) => v != null ? v.toFixed(2) : "—", higherBetter: true },
-  { label: "Avg Duration", key: "avg_duration_minutes", format: (v) => `${Math.round(v)}m`, higherBetter: false },
+  { label: "Avg Duration", key: "avg_duration_minutes", format: (v) => formatDuration(v), higherBetter: false },
 ];
 
 export function BacktestCompare() {
-  const { runs, fetchRuns, compareIds, toggleCompareId, compareResult, compareLoading, runCompare, setTab } = useBacktestStore();
+  const { runs, fetchRuns, compareIds, toggleCompareId, compareResult, compareLoading, runCompare, setTab, loadRunDetail } = useBacktestStore();
 
   useEffect(() => {
     fetchRuns();
@@ -74,6 +76,12 @@ export function BacktestCompare() {
               <span className={`text-sm font-mono ${run.net_pnl >= 0 ? "text-long" : "text-short"}`}>
                 {run.net_pnl >= 0 ? "+" : ""}{run.net_pnl.toFixed(2)}%
               </span>
+              <button
+                onClick={(e) => { e.preventDefault(); loadRunDetail(run.id); }}
+                className="px-2 py-1 rounded text-[10px] text-accent border border-accent/30 hover:bg-accent/10 transition-colors"
+              >
+                View
+              </button>
             </label>
           ))}
         </div>
@@ -191,12 +199,16 @@ function CompareEquityCurves({ runs }: { runs: BacktestRun[] }) {
         priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(2)}%` },
       });
 
-      series.setData(
-        curve.map((d) => ({
-          time: (new Date(d.time).getTime() / 1000) as UTCTimestamp,
-          value: d.cumulative_pnl,
-        })),
-      );
+      const deduped = new Map<number, number>();
+      for (const d of curve) {
+        const t = new Date(d.time).getTime() / 1000;
+        deduped.set(t, d.cumulative_pnl);
+      }
+      const seriesData = Array.from(deduped, ([time, value]) => ({
+        time: time as UTCTimestamp,
+        value,
+      })).sort((a, b) => (a.time as number) - (b.time as number));
+      series.setData(seriesData);
     });
 
     chart.timeScale().fitContent();

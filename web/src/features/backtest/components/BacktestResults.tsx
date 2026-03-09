@@ -172,10 +172,15 @@ function EquityCurve({ data }: { data: { time: string; cumulative_pnl: number }[
       priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(2)}%` },
     });
 
-    const seriesData = data.map((d) => ({
-      time: (new Date(d.time).getTime() / 1000) as UTCTimestamp,
-      value: d.cumulative_pnl,
-    }));
+    const deduped = new Map<number, number>();
+    for (const d of data) {
+      const t = new Date(d.time).getTime() / 1000;
+      deduped.set(t, d.cumulative_pnl);
+    }
+    const seriesData = Array.from(deduped, ([time, value]) => ({
+      time: time as UTCTimestamp,
+      value,
+    })).sort((a, b) => (a.time as number) - (b.time as number));
 
     series.setData(seriesData);
     chart.timeScale().fitContent();

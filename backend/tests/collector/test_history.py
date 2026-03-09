@@ -136,7 +136,7 @@ class TestImportHistoricalCandles:
             )
 
         assert len(progress_calls) >= 1
-        assert progress_calls[0]["status"] == "importing"
+        assert progress_calls[0]["status"] == "running"
 
     @pytest.mark.asyncio
     async def test_on_conflict_do_nothing(self, mock_db):

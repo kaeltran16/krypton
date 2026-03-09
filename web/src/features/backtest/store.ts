@@ -52,7 +52,7 @@ const defaultConfig: BacktestConfig = {
   timeframe: "15m",
   date_from: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
   date_to: new Date().toISOString().slice(0, 10),
-  signal_threshold: 60,
+  signal_threshold: 30,
   tech_weight: 75,
   pattern_weight: 25,
   enable_patterns: true,
@@ -81,7 +81,12 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
     const { config } = get();
     set({ runLoading: true, runError: null, activeRun: null });
     try {
-      const { run_id } = await api.startBacktest(config);
+      const payload = {
+        ...config,
+        tech_weight: config.tech_weight / 100,
+        pattern_weight: config.pattern_weight / 100,
+      };
+      const { run_id } = await api.startBacktest(payload);
       get().pollRun(run_id);
     } catch (e: any) {
       set({ runLoading: false, runError: e.message || "Failed to start backtest" });

@@ -1,8 +1,14 @@
 import asyncio
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logging.basicConfig(
+    level=logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO").upper()),
+    format="%(levelname)s %(name)s: %(message)s",
+)
 
 import httpx
 import pandas as pd
@@ -182,15 +188,18 @@ async def run_pipeline(app: FastAPI, candle: dict):
         except Exception as e:
             logger.debug(f"On-chain scoring skipped: {e}")
 
-    # Compute weights with fallback redistribution when sources are unavailable
+    # Adaptive weight redistribution: zero unavailable sources, normalize rest
+    flow_available = bool(flow_metrics)
     tech_w = settings.engine_traditional_weight
-    flow_w = settings.engine_flow_weight
-    onchain_w = settings.engine_onchain_weight
+    flow_w = settings.engine_flow_weight if flow_available else 0.0
+    onchain_w = settings.engine_onchain_weight if onchain_available else 0.0
     pattern_w = getattr(settings, "engine_pattern_weight", 0.15)
-    if not onchain_available:
-        tech_w = tech_w + onchain_w * 0.6
-        flow_w = flow_w + onchain_w * 0.4
-        onchain_w = 0.0
+    total_w = tech_w + flow_w + onchain_w + pattern_w
+    if total_w > 0:
+        tech_w /= total_w
+        flow_w /= total_w
+        onchain_w /= total_w
+        pattern_w /= total_w
 
     preliminary = compute_preliminary_score(
         tech_result["score"],
@@ -239,7 +248,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
     final = compute_final_score(preliminary, llm_response)
     direction = "LONG" if final > 0 else "SHORT"
 
-    logger.info(f"Pipeline {pair}:{timeframe} tech={tech_result['score']:.0f} flow={flow_result['score']:.0f} pattern={pat_score:.0f} preliminary={preliminary:.0f} final={final:.0f} threshold={settings.engine_signal_threshold}")
+    active_sources = ["tech"]
+    if flow_available:
+        active_sources.append("flow")
+    if onchain_available:
+        active_sources.append("onchain")
+    active_sources.append("pattern")
+    logger.info(f"Pipeline {pair}:{timeframe} tech={tech_result['score']:.0f} flow={flow_result['score']:.0f} pattern={pat_score:.0f} preliminary={preliminary:.0f} final={final:.0f} threshold={settings.engine_signal_threshold} sources={'+'.join(active_sources)}")
 
     if abs(final) < settings.engine_signal_threshold:
         return

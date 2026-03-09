@@ -294,20 +294,7 @@ async def compare_runs(body: CompareRequest, request: Request):
     if len(runs) < 2:
         raise HTTPException(status_code=400, detail="Need at least 2 valid runs to compare")
 
-    comparison = []
-    for run in runs:
-        stats = (run.results or {}).get("stats", {})
-        comparison.append({
-            "run_id": run.id,
-            "created_at": run.created_at.isoformat() if run.created_at else None,
-            "config": run.config,
-            "pairs": run.pairs,
-            "timeframe": run.timeframe,
-            "stats": stats,
-            "equity_curve": stats.get("equity_curve", []),
-        })
-
-    return {"runs": comparison}
+    return {"runs": [_run_to_dict(run) for run in runs]}
 
 
 @router.delete("/runs/{run_id}", dependencies=[require_settings_api_key()])
