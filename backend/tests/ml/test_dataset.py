@@ -32,6 +32,27 @@ class TestCandleDataset:
         assert y_dir.shape == ()  # scalar
         assert y_reg.shape == (3,)  # sl, tp1, tp2
 
+    def test_noise_augmentation(self):
+        """When noise_std > 0, returned features should differ from original."""
+        n, nf = 100, 15
+        features = np.ones((n, nf), dtype=np.float32)
+        direction = np.zeros(n, dtype=np.int64)
+        sl = tp1 = tp2 = np.zeros(n, dtype=np.float32)
+        ds = CandleDataset(features, direction, sl, tp1, tp2, seq_len=10, noise_std=0.01)
+        x1, _, _ = ds[0]
+        # With constant input, noise should make output != 1.0
+        assert not torch.allclose(x1, torch.ones_like(x1)), "Noise should perturb features"
+
+    def test_no_noise_when_disabled(self):
+        """When noise_std=0.0 (default), features should be returned exactly."""
+        n, nf = 100, 15
+        features = np.ones((n, nf), dtype=np.float32)
+        direction = np.zeros(n, dtype=np.int64)
+        sl = tp1 = tp2 = np.zeros(n, dtype=np.float32)
+        ds = CandleDataset(features, direction, sl, tp1, tp2, seq_len=10, noise_std=0.0)
+        x1, _, _ = ds[0]
+        assert torch.allclose(x1, torch.ones_like(x1)), "No noise should leave features unchanged"
+
     def test_item_types(self, sample_data):
         features, direction, sl, tp1, tp2 = sample_data
         ds = CandleDataset(features, direction, sl, tp1, tp2, seq_len=50)

@@ -97,6 +97,17 @@ async def test_train_background_job_handles_no_data(ml_app, ml_client):
     assert "No pair had enough data" in data.get("error", "")
 
 
+async def test_train_accepts_seq_len_and_dropout(ml_client):
+    resp = await ml_client.post(
+        "/api/ml/train",
+        json={"seq_len": 75, "dropout": 0.4},
+        headers={"X-API-Key": "test-key"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "job_id" in data
+
+
 async def test_cancel_training(ml_app, ml_client):
     """Test cancelling a running job."""
     from app.api.ml import _get_train_jobs

@@ -30,6 +30,8 @@ class TrainRequest(BaseModel):
     hidden_size: int = Field(default=128, ge=32, le=512)
     num_layers: int = Field(default=2, ge=1, le=4)
     lr: float = Field(default=1e-3, gt=0)
+    seq_len: int = Field(default=50, ge=25, le=200)
+    dropout: float = Field(default=0.3, ge=0.0, le=0.7)
     label_horizon: int = Field(default=24, ge=4, le=96)
     label_threshold_pct: float = Field(default=1.5, gt=0, le=10)
 
@@ -146,8 +148,10 @@ async def start_training(body: TrainRequest, request: Request):
                 train_config = TrainConfig(
                     epochs=body.epochs,
                     batch_size=body.batch_size,
+                    seq_len=body.seq_len,
                     hidden_size=body.hidden_size,
                     num_layers=body.num_layers,
+                    dropout=body.dropout,
                     lr=body.lr,
                     checkpoint_dir=pair_checkpoint_dir,
                 )

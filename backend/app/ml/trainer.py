@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 
@@ -30,6 +31,9 @@ class TrainConfig:
     reg_loss_weight: float = 0.5
     val_ratio: float = 0.15
     patience: int = 20
+    warmup_epochs: int = 5
+    noise_std: float = 0.02
+    label_smoothing: float = 0.1
     checkpoint_dir: str = "models"
     neutral_subsample_ratio: float = 0.5  # keep only 50% of NEUTRAL samples to reduce imbalance
 
@@ -96,7 +100,7 @@ class Trainer:
         train_ds = CandleDataset(
             features[:split], direction[:split],
             sl_atr[:split], tp1_atr[:split], tp2_atr[:split],
-            seq_len=cfg.seq_len,
+            seq_len=cfg.seq_len, noise_std=cfg.noise_std,
         )
         train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True)
 
@@ -126,11 +130,18 @@ class Trainer:
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay,
         )
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", patience=10, factor=0.5,
-        )
+        warmup = cfg.warmup_epochs
+        total = cfg.epochs
 
-        cls_criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+        def lr_lambda(epoch):
+            if epoch < warmup:
+                return (epoch + 1) / warmup  # linear warmup
+            progress = (epoch - warmup) / max(total - warmup, 1)
+            return 0.5 * (1 + math.cos(math.pi * progress))  # cosine decay
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+        cls_criterion = nn.CrossEntropyLoss(weight=class_weights_tensor, label_smoothing=cfg.label_smoothing)
         reg_criterion = nn.SmoothL1Loss()
 
         best_val_loss = float("inf")
@@ -138,6 +149,7 @@ class Trainer:
         epochs_without_improvement = 0
         train_losses = []
         val_losses = []
+        lr_history = []
 
         os.makedirs(cfg.checkpoint_dir, exist_ok=True)
 
@@ -201,7 +213,10 @@ class Trainer:
 
                 avg_val_loss = val_loss / max(val_batches, 1)
                 val_losses.append(avg_val_loss)
-                scheduler.step(avg_val_loss)
+
+            # Step cosine scheduler and track LR
+            scheduler.step()
+            lr_history.append(optimizer.param_groups[0]["lr"])
 
             log_msg = f"Epoch {epoch+1}/{cfg.epochs} — train_loss={avg_train_loss:.4f}"
             if avg_val_loss is not None:
@@ -283,4 +298,5 @@ class Trainer:
             "best_epoch": best_epoch,
             "best_val_loss": best_val_loss,
             "version": version_tag,
+            "lr_history": lr_history,
         }

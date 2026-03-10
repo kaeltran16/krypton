@@ -237,6 +237,14 @@ export const api = {
     timeframe?: string;
     epochs?: number;
     lookback_days?: number;
+    batch_size?: number;
+    hidden_size?: number;
+    num_layers?: number;
+    lr?: number;
+    seq_len?: number;
+    dropout?: number;
+    label_horizon?: number;
+    label_threshold_pct?: number;
   }) =>
     request<{ job_id: string; status: string }>("/api/ml/train", {
       method: "POST",

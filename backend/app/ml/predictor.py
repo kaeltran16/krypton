@@ -33,7 +33,7 @@ class Predictor:
             input_size=config["input_size"],
             hidden_size=config["hidden_size"],
             num_layers=config["num_layers"],
-            dropout=0.0,  # no dropout at inference
+            dropout=config.get("dropout", 0.0),  # need matching architecture for state_dict
         ).to(self.device)
 
         # Load weights only — safe and fast

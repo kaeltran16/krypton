@@ -55,6 +55,48 @@ class TestTrainer:
             # Best checkpoint should exist
             assert os.path.exists(os.path.join(tmpdir, "best_model.pt"))
 
+    def test_cosine_lr_schedule(self, synthetic_data):
+        """LR should decrease over epochs with cosine schedule."""
+        features, direction, sl, tp1, tp2 = synthetic_data
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = TrainConfig(
+                epochs=10,
+                batch_size=32,
+                seq_len=50,
+                hidden_size=32,
+                num_layers=1,
+                lr=1e-3,
+                warmup_epochs=2,
+                patience=999,  # disable early stopping so all 10 epochs run
+                checkpoint_dir=tmpdir,
+            )
+            trainer = Trainer(config)
+            result = trainer.train(features, direction, sl, tp1, tp2)
+            assert "lr_history" in result
+            lrs = result["lr_history"]
+            assert len(lrs) == 10, "All 10 epochs should run"
+            # After warmup (epoch 2), LR should generally decrease
+            assert lrs[2] >= lrs[-1], "LR should decrease after warmup via cosine annealing"
+
+    def test_label_smoothing_applied(self, synthetic_data):
+        """Label smoothing should be configured and affect the loss function."""
+        features, direction, sl, tp1, tp2 = synthetic_data
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = TrainConfig(
+                epochs=2,
+                batch_size=32,
+                seq_len=50,
+                hidden_size=32,
+                num_layers=1,
+                label_smoothing=0.1,
+                checkpoint_dir=tmpdir,
+            )
+            assert config.label_smoothing == 0.1
+            trainer = Trainer(config)
+            result = trainer.train(features, direction, sl, tp1, tp2)
+            # Should train successfully with label smoothing
+            assert result["best_val_loss"] > 0
+
     def test_val_split(self, synthetic_data):
         features, direction, sl, tp1, tp2 = synthetic_data
         with tempfile.TemporaryDirectory() as tmpdir:

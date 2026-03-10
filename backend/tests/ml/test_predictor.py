@@ -50,6 +50,27 @@ class TestPredictor:
         assert result["direction"] in ("LONG", "SHORT", "NEUTRAL")
         assert 0 <= result["confidence"] <= 1
 
+    def test_predictor_loads_new_architecture(self):
+        """Predictor should load a model trained with BatchNorm + multi-scale pooling."""
+        import json
+        import tempfile
+        model_dir = tempfile.mkdtemp()
+        model = SignalLSTM(input_size=15, hidden_size=64, num_layers=2, dropout=0.3)
+        model_path = os.path.join(model_dir, "best_model.pt")
+        torch.save(model.state_dict(), model_path)
+        config = {
+            "input_size": 15, "hidden_size": 64, "num_layers": 2,
+            "dropout": 0.3, "seq_len": 50, "epoch": 1, "val_loss": 1.0,
+        }
+        with open(os.path.join(model_dir, "model_config.json"), "w") as f:
+            json.dump(config, f)
+
+        predictor = Predictor(model_path)
+        features = np.random.randn(50, 15).astype(np.float32)
+        result = predictor.predict(features)
+        assert result["direction"] in ("NEUTRAL", "LONG", "SHORT")
+        assert 0.0 <= result["confidence"] <= 1.0
+
     def test_predict_too_few_candles_returns_neutral(self, saved_model):
         predictor = Predictor(saved_model)
         features = np.random.randn(10, 15).astype(np.float32)
