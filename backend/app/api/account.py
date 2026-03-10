@@ -111,5 +111,8 @@ async def place_order(request: Request, order: OrderRequest, _key: str = require
         client_order_id=uuid.uuid4().hex[:16],
     )
     if not result["success"]:
-        raise HTTPException(400, result["error"])
+        msg = result["error"]
+        if "instrument" in msg.lower() and okx.demo:
+            msg = f"{order.pair} not available in OKX demo mode. Disable demo mode (OKX_DEMO=false) or use a supported instrument."
+        raise HTTPException(400, msg)
     return result
