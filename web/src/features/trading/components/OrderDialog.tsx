@@ -183,6 +183,11 @@ export function OrderDialog({ signal, onClose }: Props) {
             {result.success ? "Order placed successfully" : result.error}
           </div>
         )}
+        {result?.warning && (
+          <div className="p-3 rounded-lg text-sm bg-accent/10 text-accent">
+            {result.warning}
+          </div>
+        )}
       </div>
 
       <div className="p-4 border-t border-gray-800">

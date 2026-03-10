@@ -486,7 +486,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     atr = tech_result["indicators"].get("atr", 200)
     llm_levels = None
-    if llm_response and llm_response.opinion == "confirm" and llm_response.levels:
+    if llm_response and llm_response.opinion != "contradict" and llm_response.levels:
         llm_levels = llm_response.levels.model_dump()
     levels = calculate_levels(direction, float(candle["close"]), atr, llm_levels)
 

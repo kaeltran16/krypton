@@ -106,8 +106,6 @@ async def place_order(request: Request, order: OrderRequest, _key: str = require
         side=order.side,
         size=order.size,
         order_type=order.order_type,
-        sl_price=order.sl_price,
-        tp_price=order.tp_price,
         client_order_id=uuid.uuid4().hex[:16],
     )
     if not result["success"]:
@@ -115,4 +113,18 @@ async def place_order(request: Request, order: OrderRequest, _key: str = require
         if "instrument" in msg.lower() and okx.demo:
             msg = f"{order.pair} not available in OKX demo mode. Disable demo mode (OKX_DEMO=false) or use a supported instrument."
         raise HTTPException(400, msg)
+
+    if order.tp_price or order.sl_price:
+        algo_result = await okx.place_algo_order(
+            pair=order.pair,
+            side=order.side,
+            size=order.size,
+            tp_trigger_price=order.tp_price,
+            sl_trigger_price=order.sl_price,
+        )
+        if algo_result["success"]:
+            result["algo_id"] = algo_result["algo_id"]
+        else:
+            result["warning"] = f"Entry filled but TP/SL failed: {algo_result['error']}"
+
     return result
