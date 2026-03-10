@@ -4,6 +4,7 @@ import { WS_BASE_URL, API_KEY } from "../../../shared/lib/constants";
 import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
 import { useNewsStore } from "../../news/store";
+import { api } from "../../../shared/lib/api";
 
 export function useSignalWebSocket() {
   const pairs = useSettingsStore((s) => s.pairs);
@@ -19,6 +20,11 @@ export function useSignalWebSocket() {
   useEffect(() => {
     const currentPairs = JSON.parse(pairsKey);
     const currentTimeframes = JSON.parse(timeframesKey);
+
+    // load existing signals from the database
+    api.getSignals({ limit: 50 }).then((signals) => {
+      useSignalStore.getState().setSignals(signals);
+    }).catch(() => {});
 
     const params = new URLSearchParams();
     if (API_KEY) params.set("api_key", API_KEY);
