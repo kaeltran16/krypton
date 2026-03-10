@@ -10,7 +10,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://krypton:${POSTGRES_PASSWORD}@postgres:5432/krypton
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - ml-models:/app/models
+      - ./models:/app/models
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +67,6 @@ services:
 
 volumes:
   pgdata:
-  ml-models:
   certbot-etc:
   certbot-var:
   certbot-webroot:
