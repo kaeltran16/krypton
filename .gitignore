@@ -26,5 +26,8 @@ node_modules/
 *.db
 .DS_Store
 
+# ML model weights
+backend/models/
+
 # Claude Code
 .claude/
