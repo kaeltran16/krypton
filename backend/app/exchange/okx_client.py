@@ -177,8 +177,6 @@ class OKXClient:
         side: str,
         size: str,
         order_type: str = "market",
-        sl_price: str | None = None,
-        tp_price: str | None = None,
         client_order_id: str | None = None,
     ) -> dict:
         path = "/api/v5/trade/order"
@@ -191,12 +189,6 @@ class OKXClient:
         }
         if client_order_id:
             body_dict["clOrdId"] = client_order_id
-        if sl_price:
-            body_dict["slTriggerPx"] = sl_price
-            body_dict["slOrdPx"] = "-1"
-        if tp_price:
-            body_dict["tpTriggerPx"] = tp_price
-            body_dict["tpOrdPx"] = "-1"
         body = json.dumps(body_dict)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
             resp = await client.post(
@@ -206,3 +198,45 @@ class OKXClient:
             )
             resp.raise_for_status()
             return parse_order_response(resp.json())
+
+    async def place_algo_order(
+        self,
+        pair: str,
+        side: str,
+        size: str,
+        tp_trigger_price: str | None = None,
+        sl_trigger_price: str | None = None,
+    ) -> dict:
+        """Place a conditional algo order for TP/SL on an open position."""
+        path = "/api/v5/trade/order-algo"
+        # algo order side is the closing side (opposite of entry)
+        close_side = "sell" if side == "buy" else "buy"
+        body_dict = {
+            "instId": pair,
+            "tdMode": "cross",
+            "side": close_side,
+            "ordType": "conditional",
+            "sz": size,
+        }
+        if tp_trigger_price:
+            body_dict["tpTriggerPx"] = tp_trigger_price
+            body_dict["tpOrdPx"] = "-1"
+        if sl_trigger_price:
+            body_dict["slTriggerPx"] = sl_trigger_price
+            body_dict["slOrdPx"] = "-1"
+        body = json.dumps(body_dict)
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.post(
+                path,
+                content=body,
+                headers=self._headers("POST", path, body),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != "0":
+                msg = data.get("msg", "Unknown error")
+                if data.get("data") and data["data"][0].get("sMsg"):
+                    msg = data["data"][0]["sMsg"]
+                return {"success": False, "error": msg}
+            algo = data["data"][0]
+            return {"success": True, "algo_id": algo.get("algoId")}

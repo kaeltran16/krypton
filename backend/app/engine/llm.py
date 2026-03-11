@@ -10,6 +10,15 @@ logger = logging.getLogger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+SYSTEM_PROMPT = (
+    "You are a decisive crypto futures trader with 10 years of experience. "
+    "You trust quantitative signals and only override them when you see clear, "
+    "specific evidence in the data — not vague concerns about volatility or risk. "
+    "When indicators align, you confirm. You use caution only for concrete conflicts "
+    "like bearish divergence on a long setup, or exhaustion candles at resistance. "
+    "You contradict only when the data clearly says the trade will fail."
+)
+
 
 def load_prompt_template(path: Path) -> str:
     return path.read_text()
@@ -32,8 +41,11 @@ async def call_openrouter(
     }
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.5,
         "max_tokens": 1000,
     }
 

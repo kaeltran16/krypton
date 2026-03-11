@@ -164,6 +164,7 @@ export interface OrderResult {
   success: boolean;
   order_id?: string;
   error?: string;
+  warning?: string;
 }
 
 export const api = {
