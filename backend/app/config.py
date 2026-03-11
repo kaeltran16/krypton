@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -108,5 +109,5 @@ class Settings(BaseSettings):
                 yaml_config = load_yaml_config(path)
                 flat = _flatten_yaml(yaml_config)
                 for key, value in flat.items():
-                    if hasattr(self, key):
+                    if hasattr(self, key) and key.upper() not in os.environ:
                         object.__setattr__(self, key, value)

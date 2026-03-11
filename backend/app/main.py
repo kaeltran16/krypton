@@ -738,6 +738,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Failed to load PipelineSettings from DB: %s", e)
 
+    # Clean up stale backtest/ML runs orphaned by previous container restarts
+    try:
+        from app.db.models import BacktestRun
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(BacktestRun).where(BacktestRun.status == "running")
+            )
+            stale = result.scalars().all()
+            for run in stale:
+                run.status = "failed"
+            if stale:
+                await session.commit()
+                logger.info("Marked %d stale backtest run(s) as failed", len(stale))
+    except Exception as e:
+        logger.warning("Failed to clean up stale runs: %s", e)
+
     prompt_path = Path(__file__).parent / "prompts" / "signal_analysis.txt"
     app.state.prompt_template = load_prompt_template(prompt_path) if prompt_path.exists() else ""
 

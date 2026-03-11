@@ -6,6 +6,7 @@ import { useSignalStore } from "../../signals/store";
 import { api, type RiskSettings } from "../../../shared/lib/api";
 import type { Timeframe } from "../../signals/types";
 import { BacktestView } from "../../backtest/components/BacktestView";
+import { MLTrainingView } from "../../ml/components/MLTrainingView";
 
 const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h"];
 
@@ -26,6 +27,7 @@ export function MorePage() {
   const connected = useSignalStore((s) => s.connected);
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "error">("idle");
   const [showBacktest, setShowBacktest] = useState(false);
+  const [showMLTraining, setShowMLTraining] = useState(false);
 
   async function handleNotificationToggle(enabled: boolean) {
     setNotificationsEnabled(enabled);
@@ -41,6 +43,10 @@ export function MorePage() {
 
   if (showBacktest) {
     return <BacktestView onBack={() => setShowBacktest(false)} />;
+  }
+
+  if (showMLTraining) {
+    return <MLTrainingView onBack={() => setShowMLTraining(false)} />;
   }
 
   if (loading) {
@@ -60,21 +66,35 @@ export function MorePage() {
           Settings sync failed — changes may not be saved
         </div>
       )}
-      {/* BACKTESTER */}
+      {/* TOOLS */}
       <div>
         <h2 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Tools</h2>
-        <button
-          onClick={() => setShowBacktest(true)}
-          className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
-        >
-          <div>
-            <span className="text-sm font-medium">Backtester</span>
-            <p className="text-[10px] text-dim mt-0.5">Test strategies against historical data</p>
-          </div>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={() => setShowBacktest(true)}
+            className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
+          >
+            <div>
+              <span className="text-sm font-medium">Backtester</span>
+              <p className="text-[10px] text-dim mt-0.5">Test strategies against historical data</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowMLTraining(true)}
+            className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
+          >
+            <div>
+              <span className="text-sm font-medium">ML Training</span>
+              <p className="text-[10px] text-dim mt-0.5">Train models on historical data</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* TRADING */}
@@ -201,44 +221,14 @@ export function MorePage() {
 
 function MLStatusSection() {
   const [status, setStatus] = useState<{ ml_enabled: boolean; loaded_pairs: string[] } | null>(null);
-  const [training, setTraining] = useState(false);
-  const [trainStatus, setTrainStatus] = useState<string | null>(null);
 
   useEffect(() => {
     api.getMLStatus().then(setStatus).catch(() => {});
   }, []);
 
-  async function handleTrain() {
-    setTraining(true);
-    setTrainStatus("starting...");
-    try {
-      const { job_id } = await api.startMLTraining({ timeframe: "1h", epochs: 100 });
-      // Poll for completion
-      const interval = setInterval(async () => {
-        try {
-          const result = await api.getMLTrainingStatus(job_id);
-          setTrainStatus(result.status);
-          if (result.status !== "running") {
-            clearInterval(interval);
-            setTraining(false);
-            // Refresh status
-            api.getMLStatus().then(setStatus).catch(() => {});
-          }
-        } catch {
-          clearInterval(interval);
-          setTraining(false);
-          setTrainStatus("error");
-        }
-      }, 3000);
-    } catch {
-      setTraining(false);
-      setTrainStatus("failed to start");
-    }
-  }
-
   return (
     <SettingsGroup title="ML Model">
-      <div className="px-3 py-3 border-b border-border flex items-center justify-between">
+      <div className="px-3 py-3 flex items-center justify-between">
         <div>
           <span className="text-sm">Status</span>
           {status && (
@@ -255,27 +245,6 @@ function MLStatusSection() {
             {status?.loaded_pairs.length ? "Ready" : "Inactive"}
           </span>
         </div>
-      </div>
-      <div className="px-3 py-3 flex items-center justify-between">
-        <div>
-          <span className="text-sm">Train Model</span>
-          {trainStatus && (
-            <p className="text-[10px] text-dim mt-0.5">
-              {trainStatus === "running" ? "Training in progress..." : `Last: ${trainStatus}`}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={handleTrain}
-          disabled={training}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            training
-              ? "bg-card-hover text-dim"
-              : "bg-accent/15 text-accent border border-accent/30"
-          }`}
-        >
-          {training ? "Training..." : "Train"}
-        </button>
       </div>
     </SettingsGroup>
   );

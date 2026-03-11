@@ -4,6 +4,65 @@ import type { NewsEvent } from "../../features/news/types";
 import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../features/backtest/types";
 import type { PipelineSettingsAPI } from "../../features/settings/types";
 
+// ML Training Types
+export interface MLTrainRequest {
+  timeframe?: string;
+  lookback_days?: number;
+  epochs?: number;
+  batch_size?: number;
+  hidden_size?: number;
+  num_layers?: number;
+  lr?: number;
+  seq_len?: number;
+  dropout?: number;
+  label_horizon?: number;
+  label_threshold_pct?: number;
+}
+
+export interface MLTrainProgress {
+  epoch: number;
+  total_epochs: number;
+  train_loss: number;
+  val_loss: number;
+}
+
+export interface MLTrainResult {
+  best_epoch: number;
+  best_val_loss: number;
+  total_epochs: number;
+  total_samples: number;
+  flow_data_used: boolean;
+  version?: string;
+}
+
+export interface MLTrainJob {
+  job_id: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  progress?: Record<string, MLTrainProgress>;
+  result?: Record<string, MLTrainResult>;
+  error?: string;
+  created_at?: string;
+  params?: MLTrainRequest;
+}
+
+export interface MLStatus {
+  ml_enabled: boolean;
+  loaded_pairs: string[];
+}
+
+export interface MLBackfillRequest {
+  timeframe?: string;
+  lookback_days?: number;
+}
+
+export interface MLBackfillJob {
+  job_id: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  progress?: Record<string, number>;
+  result?: Record<string, number>;
+  error?: string;
+}
+
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
   ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
@@ -255,6 +314,11 @@ export const api = {
     request<{ job_id: string; status: string; progress: Record<string, unknown>; result?: Record<string, unknown> }>(
       `/api/ml/train/${jobId}`,
     ),
+
+  cancelMLTraining: (jobId: string) =>
+    request<{ job_id: string; status: string }>(`/api/ml/train/${jobId}/cancel`, {
+      method: "POST",
+    }),
 
   startMLBackfill: (params: { timeframe?: string; lookback_days?: number }) =>
     request<{ job_id: string; status: string }>("/api/ml/backfill", {
