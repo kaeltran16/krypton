@@ -12,7 +12,7 @@ export function OrderDialog({ signal, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [size, setSize] = useState("1");
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [result, setResult] = useState<{ success: boolean; error?: string; warning?: string } | null>(null);
   const [riskCheck, setRiskCheck] = useState<RiskCheckResult | null>(null);
   const [riskLoading, setRiskLoading] = useState(false);
   const [overrideText, setOverrideText] = useState("");
