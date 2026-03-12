@@ -86,8 +86,17 @@ class Settings(BaseSettings):
     # ML model
     ml_enabled: bool = True
     ml_confidence_threshold: float = 0.65
-    ml_llm_threshold: float = 0.65  # only call LLM above this ML confidence
     ml_checkpoint_dir: str = "models"
+
+    # unified ML blending
+    engine_ml_weight: float = 0.25
+    ml_sl_min_atr: float = 0.5
+    ml_sl_max_atr: float = 3.0
+    ml_tp1_min_atr: float = 1.0
+    ml_tp2_max_atr: float = 8.0
+    ml_rr_floor: float = 1.0
+    llm_caution_sl_factor: float = 0.8
+    engine_unified_shadow: bool = True
 
     # push notifications
     vapid_private_key: str = ""

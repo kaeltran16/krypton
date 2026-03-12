@@ -6,17 +6,28 @@ You are a crypto futures trading analyst. Analyze the following data for {pair} 
 ## Order Flow Metrics
 {order_flow}
 
+## Pattern Detection
+{patterns}
+
+## On-Chain Data
+{onchain}
+
+## ML Model Prediction
+{ml_context}
+
 ## Recent News Context
 {news}
 
 ## Current Assessment
-Preliminary Score: {preliminary_score} (Direction: {direction})
+Preliminary Indicator Score: {preliminary_score} (Direction: {direction})
+Blended Score (with ML): {blended_score}
+Indicator–ML Agreement: {agreement}
 
 ## Recent Price Action (last 20 candles)
 {candles}
 
 ## Instructions
-The traditional indicators already flagged a {direction} setup. Your job is to validate OR reject it — not to hedge.
+The quantitative signals already flagged a {direction} setup. Your job is to validate OR reject it — not to hedge.
 
 Provide your analysis as JSON with exactly these fields:
 - "opinion": one of "confirm", "caution", or "contradict"

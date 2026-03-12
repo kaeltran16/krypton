@@ -30,7 +30,7 @@ from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
-from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels
+from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels, blend_with_ml, compute_agreement
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
@@ -222,7 +222,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
     settings = app.state.settings
     redis = app.state.redis
     db = app.state.db
-    manager = app.state.manager
     order_flow = app.state.order_flow
     prompt_template = app.state.prompt_template
 
@@ -243,130 +242,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     candles_data = [json.loads(c) for c in raw_candles]
     df = pd.DataFrame(candles_data)
 
-    # --- ML scoring path ---
-    pair_slug = pair.replace("-", "_").lower()
-    ml_predictors = getattr(app.state, "ml_predictors", {})
-    ml_predictor = ml_predictors.get(pair_slug)
-    if ml_predictor is not None:
-        try:
-            from app.ml.features import build_feature_matrix
-            from app.ml.ensemble import compute_ensemble_signal
-
-            # Include order flow features if model was trained with them
-            flow_for_features = None
-            if getattr(ml_predictor, "flow_used", False):
-                flow_data = order_flow.get(pair, {})
-                if flow_data:
-                    flow_for_features = [{
-                        "funding_rate": flow_data.get("funding_rate", 0),
-                        "oi_change_pct": flow_data.get("open_interest_change_pct", 0),
-                        "long_short_ratio": flow_data.get("long_short_ratio", 1.0),
-                    }] * len(df)
-
-            feature_matrix = build_feature_matrix(df, order_flow=flow_for_features)
-            ml_prediction = ml_predictor.predict(feature_matrix)
-
-            tech_result = compute_technical_score(df)
-            flow_metrics = order_flow.get(pair, {})
-
-            # Fetch news context for LLM prompt
-            news_context = "No recent news available."
-            correlated_news_ids = None
-            try:
-                window = getattr(settings, "news_llm_context_window_minutes", 30)
-                news_context, correlated_news_ids = await _fetch_news_context(db, pair, window)
-                correlated_news_ids = correlated_news_ids or None
-            except Exception as e:
-                logger.debug(f"News context fetch skipped: {e}")
-
-            # Only call LLM when ML confidence exceeds threshold
-            llm_response_dict = None
-            ml_confidence_threshold = getattr(settings, "ml_confidence_threshold", 0.65)
-            ml_llm_threshold = getattr(settings, "ml_llm_threshold", 0.65)
-            if prompt_template and ml_prediction["confidence"] >= ml_llm_threshold:
-                try:
-                    rendered = render_prompt(
-                        template=prompt_template,
-                        pair=pair, timeframe=timeframe,
-                        indicators=json.dumps(tech_result["indicators"], indent=2),
-                        order_flow=json.dumps(flow_metrics, indent=2),
-                        news=news_context,
-                        preliminary_score=str(int(ml_prediction["confidence"] * 100)),
-                        direction=ml_prediction["direction"],
-                        candles=json.dumps(candles_data[-20:], indent=2),
-                    )
-                    llm_resp = await call_openrouter(
-                        prompt=rendered,
-                        api_key=settings.openrouter_api_key,
-                        model=settings.openrouter_model,
-                        timeout=settings.engine_llm_timeout_seconds,
-                    )
-                    if llm_resp:
-                        llm_response_dict = {
-                            "opinion": llm_resp.opinion,
-                            "confidence": llm_resp.confidence,
-                        }
-                except Exception as e:
-                    logger.error(f"LLM call failed in ML path: {e}")
-
-            ensemble = compute_ensemble_signal(
-                ml_prediction, llm_response_dict,
-                min_confidence=ml_confidence_threshold,
-            )
-
-            if not ensemble["emit"]:
-                logger.info(
-                    f"ML pipeline {pair}:{timeframe} "
-                    f"dir={ml_prediction['direction']} "
-                    f"conf={ml_prediction['confidence']:.2f} — not emitted"
-                )
-                return
-
-            direction = ensemble["direction"]
-            atr = tech_result["indicators"].get("atr", 200)
-            price = float(candle["close"])
-
-            if direction == "LONG":
-                levels = {
-                    "entry": price,
-                    "stop_loss": price - ensemble["sl_atr"] * atr,
-                    "take_profit_1": price + ensemble["tp1_atr"] * atr,
-                    "take_profit_2": price + ensemble["tp2_atr"] * atr,
-                }
-            else:
-                levels = {
-                    "entry": price,
-                    "stop_loss": price + ensemble["sl_atr"] * atr,
-                    "take_profit_1": price - ensemble["tp1_atr"] * atr,
-                    "take_profit_2": price - ensemble["tp2_atr"] * atr,
-                }
-
-            final_score = int(ensemble["confidence"] * 100)
-            if direction == "SHORT":
-                final_score = -final_score
-
-            signal_data = {
-                "pair": pair,
-                "timeframe": timeframe,
-                "direction": direction,
-                "final_score": final_score,
-                "traditional_score": 0,
-                "llm_opinion": llm_response_dict["opinion"] if llm_response_dict else "skipped",
-                "llm_confidence": llm_response_dict.get("confidence") if llm_response_dict else None,
-                "explanation": f"ML model confidence: {ml_prediction['confidence']:.2f}",
-                **levels,
-                "raw_indicators": tech_result["indicators"],
-                "detected_patterns": None,
-                "correlated_news_ids": correlated_news_ids,
-            }
-
-            await _emit_signal(app, signal_data, levels, correlated_news_ids)
-            return  # ML path handled — skip rule-based scoring
-
-        except Exception as e:
-            logger.error(f"ML scoring failed for {pair}:{timeframe}: {e}", exc_info=True)
-            # Fall through to rule-based scoring as fallback
-
+    # ── Step 1: Indicator scoring (always runs) ──
     try:
         tech_result = compute_technical_score(df)
     except Exception as e:
@@ -426,7 +302,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         onchain_w /= total_w
         pattern_w /= total_w
 
-    preliminary = compute_preliminary_score(
+    indicator_preliminary = compute_preliminary_score(
         tech_result["score"],
         flow_result["score"],
         tech_w,
@@ -437,7 +313,59 @@ async def run_pipeline(app: FastAPI, candle: dict):
         pattern_w,
     )
 
-    # Fetch news context for LLM gate and signal correlation
+    # ── Step 2: ML scoring (when available) ──
+    ml_score = None
+    ml_confidence = None
+    ml_prediction = None
+    ml_available = False
+
+    pair_slug = pair.replace("-", "_").lower()
+    ml_predictors = getattr(app.state, "ml_predictors", {})
+    ml_predictor = ml_predictors.get(pair_slug)
+
+    if ml_predictor is not None:
+        try:
+            from app.ml.features import build_feature_matrix
+
+            flow_for_features = None
+            if getattr(ml_predictor, "flow_used", False):
+                flow_data = order_flow.get(pair, {})
+                if flow_data:
+                    flow_for_features = [{
+                        "funding_rate": flow_data.get("funding_rate", 0),
+                        "oi_change_pct": flow_data.get("open_interest_change_pct", 0),
+                        "long_short_ratio": flow_data.get("long_short_ratio", 1.0),
+                    }] * len(df)
+
+            feature_matrix = build_feature_matrix(df, order_flow=flow_for_features)
+            ml_prediction = ml_predictor.predict(feature_matrix)
+
+            ml_direction = ml_prediction["direction"]
+            ml_confidence = ml_prediction["confidence"]
+
+            # Convert ML output to -100..+100 score
+            if ml_direction == "NEUTRAL":
+                ml_score = 0.0
+            elif ml_direction == "LONG":
+                ml_score = ml_confidence * 100
+            else:  # SHORT
+                ml_score = -ml_confidence * 100
+
+            ml_available = True
+        except Exception as e:
+            logger.error(f"ML scoring failed for {pair}:{timeframe}: {e}", exc_info=True)
+
+    # ── Step 3: Blend indicator + ML scores ──
+    blended = blend_with_ml(
+        indicator_preliminary,
+        ml_score,
+        ml_confidence,
+        ml_weight=settings.engine_ml_weight,
+        ml_confidence_threshold=settings.ml_confidence_threshold,
+    )
+    agreement = compute_agreement(indicator_preliminary, ml_score)
+
+    # ── Step 4: Fetch news context ──
     news_context = "No recent news available."
     correlated_news_ids = None
     try:
@@ -447,8 +375,23 @@ async def run_pipeline(app: FastAPI, candle: dict):
     except Exception as e:
         logger.debug(f"News context fetch skipped: {e}")
 
+    # ── Step 5: LLM gate (on blended score) ──
     llm_response = None
-    if abs(preliminary) >= settings.engine_llm_threshold and prompt_template:
+    if abs(blended) >= settings.engine_llm_threshold and prompt_template:
+        direction_label = "LONG" if blended > 0 else "SHORT"
+
+        # Build ML context string for LLM prompt
+        if ml_available and ml_prediction:
+            ml_context = (
+                f"Direction: {ml_prediction['direction']}, "
+                f"Confidence: {ml_confidence:.2f}, "
+                f"Suggested SL: {ml_prediction['sl_atr']:.2f}x ATR, "
+                f"TP1: {ml_prediction['tp1_atr']:.2f}x ATR, "
+                f"TP2: {ml_prediction['tp2_atr']:.2f}x ATR"
+            )
+        else:
+            ml_context = "ML model not available for this pair."
+
         try:
             rendered = render_prompt(
                 template=prompt_template,
@@ -456,9 +399,14 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 timeframe=timeframe,
                 indicators=json.dumps(tech_result["indicators"], indent=2),
                 order_flow=json.dumps(flow_result["details"], indent=2),
+                patterns=json.dumps(detected_patterns, indent=2) if detected_patterns else "No patterns detected.",
+                onchain=f"Score: {onchain_score}" if onchain_available else "On-chain data not available.",
+                ml_context=ml_context,
                 news=news_context,
-                preliminary_score=str(preliminary),
-                direction="LONG" if preliminary > 0 else "SHORT",
+                preliminary_score=str(indicator_preliminary),
+                direction=direction_label,
+                blended_score=str(blended),
+                agreement=agreement,
                 candles=json.dumps(candles_data[-20:], indent=2),
             )
             llm_response = await call_openrouter(
@@ -470,25 +418,83 @@ async def run_pipeline(app: FastAPI, candle: dict):
         except Exception as e:
             logger.error(f"LLM call failed for {pair}:{timeframe}: {e}")
 
-    final = compute_final_score(preliminary, llm_response)
+    # ── Step 6: Compute final score ──
+    final = compute_final_score(blended, llm_response)
     direction = "LONG" if final > 0 else "SHORT"
 
-    active_sources = ["tech"]
-    if flow_available:
-        active_sources.append("flow")
-    if onchain_available:
-        active_sources.append("onchain")
-    active_sources.append("pattern")
-    logger.info(f"Pipeline {pair}:{timeframe} tech={tech_result['score']:.0f} flow={flow_result['score']:.0f} pattern={pat_score:.0f} preliminary={preliminary:.0f} final={final:.0f} threshold={settings.engine_signal_threshold} sources={'+'.join(active_sources)}")
-
-    if abs(final) < settings.engine_signal_threshold:
+    # ── Step 7: Hard veto on LLM contradict ──
+    llm_opinion = llm_response.opinion if llm_response else None
+    if llm_opinion == "contradict":
+        _log_pipeline_evaluation(
+            pair=pair, timeframe=timeframe,
+            tech_score=tech_result["score"], flow_score=flow_result["score"],
+            onchain_score=onchain_score if onchain_available else None,
+            pattern_score=pat_score,
+            ml_score=ml_score, ml_confidence=ml_confidence,
+            indicator_preliminary=indicator_preliminary,
+            blended_score=blended, final_score=final,
+            llm_opinion=llm_opinion, ml_available=ml_available,
+            agreement=agreement, emitted=False,
+        )
+        logger.info(f"Pipeline {pair}:{timeframe} — LLM contradict hard veto (final={final})")
         return
 
+    # ── Step 8: Threshold check + emit ──
+    emitted = abs(final) >= settings.engine_signal_threshold
+
+    _log_pipeline_evaluation(
+        pair=pair, timeframe=timeframe,
+        tech_score=tech_result["score"], flow_score=flow_result["score"],
+        onchain_score=onchain_score if onchain_available else None,
+        pattern_score=pat_score,
+        ml_score=ml_score, ml_confidence=ml_confidence,
+        indicator_preliminary=indicator_preliminary,
+        blended_score=blended, final_score=final,
+        llm_opinion=llm_opinion, ml_available=ml_available,
+        agreement=agreement, emitted=emitted,
+    )
+
+    if not emitted:
+        return
+
+    # Shadow mode: log but don't persist or broadcast
+    if getattr(settings, "engine_unified_shadow", False):
+        logger.info(f"Pipeline {pair}:{timeframe} — shadow mode, would emit {direction} score={final}")
+        return
+
+    # ── Step 9: Calculate levels ──
     atr = tech_result["indicators"].get("atr", 200)
+
     llm_levels = None
     if llm_response and llm_response.opinion != "contradict" and llm_response.levels:
         llm_levels = llm_response.levels.model_dump()
-    levels = calculate_levels(direction, float(candle["close"]), atr, llm_levels)
+
+    ml_atr_multiples = None
+    if (
+        ml_available
+        and ml_prediction
+        and ml_confidence is not None
+        and ml_confidence >= settings.ml_confidence_threshold
+    ):
+        ml_atr_multiples = {
+            "sl_atr": ml_prediction["sl_atr"],
+            "tp1_atr": ml_prediction["tp1_atr"],
+            "tp2_atr": ml_prediction["tp2_atr"],
+        }
+
+    levels = calculate_levels(
+        direction=direction,
+        current_price=float(candle["close"]),
+        atr=atr,
+        llm_levels=llm_levels,
+        ml_atr_multiples=ml_atr_multiples,
+        llm_opinion=llm_opinion,
+        sl_bounds=(settings.ml_sl_min_atr, settings.ml_sl_max_atr),
+        tp1_min_atr=settings.ml_tp1_min_atr,
+        tp2_max_atr=settings.ml_tp2_max_atr,
+        rr_floor=settings.ml_rr_floor,
+        caution_sl_factor=settings.llm_caution_sl_factor,
+    )
 
     signal_data = {
         "pair": pair,
@@ -500,11 +506,43 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "llm_confidence": llm_response.confidence if llm_response else None,
         "explanation": llm_response.explanation if llm_response else None,
         **levels,
-        "raw_indicators": tech_result["indicators"],
+        "raw_indicators": {
+            **tech_result["indicators"],
+            "ml_score": ml_score,
+            "ml_confidence": ml_confidence,
+            "blended_score": blended,
+            "indicator_preliminary": indicator_preliminary,
+        },
         "detected_patterns": detected_patterns or None,
     }
 
     await _emit_signal(app, signal_data, levels, correlated_news_ids)
+
+
+def _log_pipeline_evaluation(
+    *, pair, timeframe, tech_score, flow_score, onchain_score,
+    pattern_score, ml_score, ml_confidence, indicator_preliminary,
+    blended_score, final_score, llm_opinion, ml_available, agreement, emitted,
+):
+    """Structured observability log for each pipeline evaluation."""
+    log_data = {
+        "pair": pair,
+        "timeframe": timeframe,
+        "tech_score": tech_score,
+        "flow_score": flow_score,
+        "onchain_score": onchain_score,
+        "pattern_score": pattern_score,
+        "ml_score": round(ml_score, 1) if ml_score is not None else None,
+        "ml_confidence": round(ml_confidence, 3) if ml_confidence is not None else None,
+        "indicator_preliminary": indicator_preliminary,
+        "blended_score": blended_score,
+        "final_score": final_score,
+        "llm_opinion": llm_opinion,
+        "ml_available": ml_available,
+        "agreement": agreement,
+        "emitted": emitted,
+    }
+    logger.info(f"Pipeline evaluation: {json.dumps(log_data)}")
 
 
 async def handle_candle(app: FastAPI, candle: dict):
