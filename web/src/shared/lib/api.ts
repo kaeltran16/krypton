@@ -173,11 +173,13 @@ export const api = {
     pair?: string;
     timeframe?: string;
     limit?: number;
+    since?: string;
   }) => {
     const query = new URLSearchParams();
     if (params?.pair) query.set("pair", params.pair);
     if (params?.timeframe) query.set("timeframe", params.timeframe);
     if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.since) query.set("since", params.since);
     const qs = query.toString();
     return request<Signal[]>(`/api/signals${qs ? `?${qs}` : ""}`);
   },

@@ -281,10 +281,14 @@ def create_router() -> APIRouter:
         pair: str | None = Query(None),
         timeframe: str | None = Query(None),
         limit: int = Query(50, ge=1, le=200),
+        since: datetime | None = Query(None),
     ):
         db = request.app.state.db
+        if since is None:
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
         async with db.session_factory() as session:
             query = select(Signal).order_by(Signal.created_at.desc())
+            query = query.where(Signal.created_at >= since)
             if pair:
                 query = query.where(Signal.pair == pair)
             if timeframe:
