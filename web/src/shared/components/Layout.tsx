@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { TickerBar } from "./TickerBar";
+import { hapticTap } from "../lib/haptics";
 
 type Tab = "home" | "chart" | "signals" | "news" | "more";
 
@@ -31,7 +32,7 @@ export function Layout({
         pair={selectedPair}
         onPairChange={onPairChange}
       />
-      <main className="flex-1 overflow-y-auto pb-16 scroll-container">{content}</main>
+      <main className="flex-1 overflow-y-auto pb-16 scroll-container transition-opacity duration-150 ease-in-out">{content}</main>
       <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-md border-t border-border flex safe-bottom z-30">
         <TabButton active={tab === "home"} onClick={() => setTab("home")} label="Home" icon={<IconHome />} />
         <TabButton active={tab === "chart"} onClick={() => setTab("chart")} label="Chart" icon={<IconChart />} />
@@ -48,8 +49,8 @@ function TabButton({ active, onClick, label, icon }: {
 }) {
   return (
     <button
-      onClick={onClick}
-      className={`flex-1 py-2 flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+      onClick={() => { hapticTap(); onClick(); }}
+      className={`flex-1 py-2 flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors min-h-[44px] ${
         active ? "text-accent" : "text-muted"
       }`}
     >

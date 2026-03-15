@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     collector_rest_poll_interval_seconds: int = 300
 
     # engine
-    engine_signal_threshold: int = 50
-    engine_llm_threshold: int = 30
+    engine_signal_threshold: int = 35
+    engine_llm_threshold: int = 25
     engine_llm_timeout_seconds: int = 30
     engine_traditional_weight: float = 0.40
     engine_flow_weight: float = 0.22
@@ -96,7 +96,6 @@ class Settings(BaseSettings):
     ml_tp2_max_atr: float = 8.0
     ml_rr_floor: float = 1.0
     llm_caution_sl_factor: float = 0.8
-    engine_unified_shadow: bool = True
 
     # push notifications
     vapid_private_key: str = ""

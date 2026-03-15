@@ -127,10 +127,36 @@ async def update_pipeline_settings(
             pairs_changed = update_data.get("pairs") is not None and ps.pairs != old_pairs
             tf_changed = update_data.get("timeframes") is not None and ps.timeframes != old_timeframes
 
+            # Deactivate alerts targeting removed pairs
+            deactivated_count = 0
+            if pairs_changed:
+                removed_pairs = set(old_pairs) - set(ps.pairs)
+                if removed_pairs:
+                    from app.db.models import Alert
+                    alert_result = await session.execute(
+                        select(Alert).where(
+                            Alert.pair.in_(removed_pairs),
+                            Alert.is_active == True,
+                        )
+                    )
+                    stale_alerts = alert_result.scalars().all()
+                    for a in stale_alerts:
+                        a.is_active = False
+                    deactivated_count = len(stale_alerts)
+                    if deactivated_count:
+                        await session.commit()
+                        # Invalidate price alert cache
+                        redis = getattr(app.state, "redis", None)
+                        if redis:
+                            await redis.delete("alerts:price")
+
             if pairs_changed or tf_changed:
                 await _restart_collectors(app, ps.pairs, ps.timeframes)
 
-            return _row_to_dict(ps)
+            resp = _row_to_dict(ps)
+            if deactivated_count:
+                resp["deactivated_alerts_count"] = deactivated_count
+            return resp
 
 
 async def _restart_collectors(app, new_pairs: list[str], new_timeframes: list[str]):
@@ -176,5 +202,11 @@ async def _restart_collectors(app, new_pairs: list[str], new_timeframes: list[st
     redis = app.state.redis
     db = app.state.db
     await backfill_candles(redis, db, new_pairs, new_timeframes)
+
+    # 6. Restart ticker collector with new pairs (update pairs + signal reconnect)
+    ticker_collector = getattr(app.state, "ticker_collector", None)
+    if ticker_collector:
+        ticker_collector.pairs = new_pairs
+        ticker_collector.request_reconnect()
 
     logger.info("Collectors restarted with pairs=%s timeframes=%s", new_pairs, new_timeframes)

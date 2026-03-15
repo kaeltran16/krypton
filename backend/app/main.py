@@ -217,6 +217,19 @@ async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids
     except Exception as e:
         logger.debug(f"Signal push dispatch skipped: {e}")
 
+    # Evaluate signal alerts
+    try:
+        from app.engine.alert_evaluator import evaluate_signal_alerts
+        push_ctx = {
+            "vapid_private_key": settings.vapid_private_key,
+            "vapid_claims_email": settings.vapid_claims_email,
+        }
+        await evaluate_signal_alerts(
+            signal_data, db.session_factory, manager, push_ctx,
+        )
+    except Exception as e:
+        logger.debug(f"Signal alert evaluation skipped: {e}")
+
 
 async def run_pipeline(app: FastAPI, candle: dict):
     settings = app.state.settings
@@ -230,12 +243,12 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     try:
         cache_key = f"candles:{pair}:{timeframe}"
-        raw_candles = await redis.lrange(cache_key, -50, -1)
+        raw_candles = await redis.lrange(cache_key, -200, -1)
     except Exception as e:
         logger.error(f"Redis fetch failed for {pair}:{timeframe}: {e}")
         return
 
-    if len(raw_candles) < 50:
+    if len(raw_candles) < 70:
         logger.warning(f"Not enough candles for {pair}:{timeframe} ({len(raw_candles)})")
         return
 
@@ -249,7 +262,23 @@ async def run_pipeline(app: FastAPI, candle: dict):
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
         return
 
+    # Evaluate indicator alerts on this candle's indicators
+    try:
+        from app.engine.alert_evaluator import evaluate_indicator_alerts
+        push_ctx = {
+            "vapid_private_key": settings.vapid_private_key,
+            "vapid_claims_email": settings.vapid_claims_email,
+        }
+        await evaluate_indicator_alerts(
+            pair, timeframe, tech_result["indicators"],
+            db.session_factory, app.state.manager, push_ctx,
+        )
+    except Exception as e:
+        logger.debug(f"Indicator alert evaluation skipped: {e}")
+
     flow_metrics = order_flow.get(pair, {})
+    # Inject price direction for direction-aware OI scoring
+    flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] >= candle["open"] else -1}
     flow_result = compute_order_flow_score(flow_metrics)
 
     # Persist order flow snapshot for ML training data
@@ -457,11 +486,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
     if not emitted:
         return
 
-    # Shadow mode: log but don't persist or broadcast
-    if getattr(settings, "engine_unified_shadow", False):
-        logger.info(f"Pipeline {pair}:{timeframe} — shadow mode, would emit {direction} score={final}")
-        return
-
     # ── Step 9: Calculate levels ──
     atr = tech_result["indicators"].get("atr", 200)
 
@@ -598,6 +622,20 @@ async def handle_candle_tick(app: FastAPI, candle: dict):
 async def handle_funding_rate(app: FastAPI, data: dict):
     flow = app.state.order_flow.setdefault(data["pair"], {})
     flow["funding_rate"] = data["funding_rate"]
+
+    try:
+        from app.engine.alert_evaluator import evaluate_indicator_alerts
+        push_ctx = {
+            "vapid_private_key": app.state.settings.vapid_private_key,
+            "vapid_claims_email": app.state.settings.vapid_claims_email,
+        }
+        await evaluate_indicator_alerts(
+            data["pair"], None,
+            {"funding_rate": data["funding_rate"]},
+            app.state.db.session_factory, app.state.manager, push_ctx,
+        )
+    except Exception as e:
+        logger.debug(f"Funding rate alert evaluation skipped: {e}")
 
 
 async def handle_open_interest(app: FastAPI, data: dict):
@@ -874,6 +912,50 @@ async def lifespan(app: FastAPI):
     app.state.news_collector = news_collector
     news_task = asyncio.create_task(news_collector.run())
 
+    # Ticker collector (for price alerts)
+    from app.collector.ticker import TickerCollector
+    from app.engine.alert_evaluator import evaluate_price_alerts, evaluate_portfolio_alerts, cleanup_alert_history
+
+    push_ctx = {
+        "vapid_private_key": settings.vapid_private_key,
+        "vapid_claims_email": settings.vapid_claims_email,
+    }
+
+    ticker_collector = TickerCollector(
+        pairs=settings.pairs,
+        redis=redis,
+        session_factory=db.session_factory,
+        manager=ws_manager,
+        push_ctx=push_ctx,
+        evaluate_fn=evaluate_price_alerts,
+    )
+    app.state.ticker_collector = ticker_collector
+    ticker_task = asyncio.create_task(ticker_collector.run())
+
+    # Account poller (for portfolio alerts)
+    from app.collector.account_poller import AccountPoller
+    account_poller = AccountPoller(
+        okx_client=app.state.okx_client,
+        redis=redis,
+        session_factory=db.session_factory,
+        manager=ws_manager,
+        push_ctx=push_ctx,
+        evaluate_fn=evaluate_portfolio_alerts,
+    )
+    app.state.account_poller = account_poller
+    account_task = asyncio.create_task(account_poller.run())
+
+    # Alert history cleanup (daily — run immediately then every 24h)
+    async def alert_cleanup_loop():
+        while True:
+            try:
+                await cleanup_alert_history(db.session_factory)
+            except Exception as e:
+                logger.error(f"Alert history cleanup failed: {e}")
+            await asyncio.sleep(86400)  # 24 hours
+
+    alert_cleanup_task = asyncio.create_task(alert_cleanup_loop())
+
     # Load per-pair ML predictors if enabled
     app.state.ml_predictors = {}
     if getattr(settings, "ml_enabled", False):
@@ -889,6 +971,11 @@ async def lifespan(app: FastAPI):
     outcome_task.cancel()
     news_collector.stop()
     news_task.cancel()
+    ticker_collector.stop()
+    ticker_task.cancel()
+    account_poller.stop()
+    account_task.cancel()
+    alert_cleanup_task.cancel()
     if onchain_task:
         onchain_collector.stop()
         onchain_task.cancel()
@@ -940,6 +1027,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.ml import router as ml_router
     app.include_router(ml_router)
+
+    from app.api.alerts import router as alerts_router
+    app.include_router(alerts_router)
 
     return app
 

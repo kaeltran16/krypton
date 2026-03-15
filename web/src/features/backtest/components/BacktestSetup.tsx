@@ -5,10 +5,10 @@ import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 const TIMEFRAMES = ["15m", "1h", "4h"] as const;
 
 const INDICATORS = [
-  { key: "ema", label: "EMA" },
-  { key: "macd", label: "MACD" },
+  { key: "adx", label: "ADX" },
   { key: "rsi", label: "RSI" },
   { key: "bb", label: "BB" },
+  { key: "obv", label: "OBV" },
 ] as const;
 
 export function BacktestSetup() {
@@ -93,77 +93,77 @@ export function BacktestSetup() {
         </div>
       </Section>
 
-      {/* Scoring Mode */}
-      <Section title="Scoring Mode">
-        <div className="flex gap-1.5">
-          <button
-            onClick={() => updateConfig({ ml_mode: false })}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              !config.ml_mode
-                ? "bg-accent/15 text-accent border border-accent/30"
-                : "bg-card-hover text-muted"
-            }`}
-          >
-            Rule-Based
-          </button>
-          <button
-            onClick={() => updateConfig({ ml_mode: true })}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              config.ml_mode
-                ? "bg-accent/15 text-accent border border-accent/30"
-                : "bg-card-hover text-muted"
-            }`}
-          >
-            ML Model
-          </button>
-        </div>
-        {config.ml_mode && (
-          <p className="text-[10px] text-dim mt-2">
-            Uses trained LSTM model for scoring. Train a model first via Settings.
-          </p>
-        )}
-      </Section>
-
-      {/* Scoring Weights — only shown in rule-based mode */}
-      {!config.ml_mode && (
-        <Section title="Scoring Weights">
-          <WeightSlider
-            label="Technical"
-            value={config.tech_weight}
-            onChange={(v) => handleWeightChange("tech_weight", v)}
-          />
-          <WeightSlider
-            label="Pattern"
-            value={config.pattern_weight}
-            onChange={(v) => handleWeightChange("pattern_weight", v)}
-          />
-          <div className="mt-2 space-y-2 opacity-40 pointer-events-none">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted">Order Flow</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-dim font-mono">N/A</span>
-                <span className="text-[10px] text-dim" title="Historical data unavailable">
-                  ⓘ
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted">On-Chain</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-dim font-mono">N/A</span>
-                <span className="text-[10px] text-dim" title="Historical data unavailable">
-                  ⓘ
-                </span>
-              </div>
+      {/* Scoring Weights */}
+      <Section title="Scoring Weights">
+        <WeightSlider
+          label="Technical"
+          value={config.tech_weight}
+          onChange={(v) => handleWeightChange("tech_weight", v)}
+        />
+        <WeightSlider
+          label="Pattern"
+          value={config.pattern_weight}
+          onChange={(v) => handleWeightChange("pattern_weight", v)}
+        />
+        <div className="mt-2 space-y-2 opacity-40 pointer-events-none">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Order Flow</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-dim font-mono">N/A</span>
+              <span className="text-[10px] text-dim" title="Historical data unavailable">
+                ⓘ
+              </span>
             </div>
           </div>
-        </Section>
-      )}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">On-Chain</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-dim font-mono">N/A</span>
+              <span className="text-[10px] text-dim" title="Historical data unavailable">
+                ⓘ
+              </span>
+            </div>
+          </div>
+        </div>
+      </Section>
 
       {/* Thresholds */}
       <Section title="Thresholds">
-        {config.ml_mode ? (
-          <>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm">Signal Threshold</span>
+          <span className="text-sm font-mono text-accent">{config.signal_threshold}</span>
+        </div>
+        <input
+          type="range"
+          min={10}
+          max={100}
+          value={config.signal_threshold}
+          onChange={(e) => updateConfig({ signal_threshold: Number(e.target.value) })}
+          className="w-full accent-accent"
+        />
+        <div className="flex justify-between text-[10px] text-dim mt-0.5">
+          <span>More signals</span>
+          <span>Strong only</span>
+        </div>
+      </Section>
+
+      {/* ML Blending */}
+      <Section title="ML Blending">
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Blend ML predictions</span>
+          <button
+            onClick={() => updateConfig({ ml_enabled: !config.ml_enabled })}
+            className={`w-10 h-5 rounded-full transition-colors relative ${
+              config.ml_enabled ? "bg-accent" : "bg-card-hover border border-border"
+            }`}
+          >
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform ${
+              config.ml_enabled ? "translate-x-5 bg-surface" : "translate-x-0.5 bg-muted"
+            }`} />
+          </button>
+        </div>
+        {config.ml_enabled && (
+          <div className="mt-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm">ML Confidence</span>
               <span className="text-sm font-mono text-accent">{config.ml_confidence_threshold}%</span>
@@ -180,87 +180,63 @@ export function BacktestSetup() {
               <span>More signals</span>
               <span>High confidence only</span>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm">Signal Threshold</span>
-              <span className="text-sm font-mono text-accent">{config.signal_threshold}</span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              value={config.signal_threshold}
-              onChange={(e) => updateConfig({ signal_threshold: Number(e.target.value) })}
-              className="w-full accent-accent"
-            />
-            <div className="flex justify-between text-[10px] text-dim mt-0.5">
-              <span>More signals</span>
-              <span>Strong only</span>
-            </div>
-          </>
+            <p className="text-[10px] text-dim mt-2">
+              Blends trained LSTM predictions with rule-based scores. Train a model first via Settings.
+            </p>
+          </div>
         )}
       </Section>
 
-      {/* Indicators — only shown in rule-based mode */}
-      {!config.ml_mode && (
-        <Section title="Indicators">
-          <div className="flex gap-1.5 flex-wrap">
-            {INDICATORS.map(({ key, label }) => (
-              <button
-                key={key}
-                className="px-3 py-1.5 rounded-full text-xs font-medium bg-accent/15 text-accent border border-accent/30"
-              >
-                {label}
-              </button>
-            ))}
+      {/* Indicators */}
+      <Section title="Indicators">
+        <div className="flex gap-1.5 flex-wrap">
+          {INDICATORS.map(({ key, label }) => (
             <button
-              onClick={() => updateConfig({ enable_patterns: !config.enable_patterns })}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                config.enable_patterns
-                  ? "bg-accent/15 text-accent border border-accent/30"
-                  : "bg-card-hover text-muted border border-transparent"
-              }`}
+              key={key}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-accent/15 text-accent border border-accent/30"
             >
-              Candlestick Patterns
+              {label}
             </button>
-          </div>
-        </Section>
-      )}
+          ))}
+          <button
+            onClick={() => updateConfig({ enable_patterns: !config.enable_patterns })}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              config.enable_patterns
+                ? "bg-accent/15 text-accent border border-accent/30"
+                : "bg-card-hover text-muted border border-transparent"
+            }`}
+          >
+            Candlestick Patterns
+          </button>
+        </div>
+      </Section>
 
       {/* Risk / Levels */}
       <Section title="Risk & Levels">
-        {!config.ml_mode ? (
-          <>
-            <NumberInput
-              label="SL (ATR ×)"
-              value={config.sl_atr_multiplier}
-              step={0.1}
-              min={0.5}
-              max={5}
-              onChange={(v) => updateConfig({ sl_atr_multiplier: v })}
-            />
-            <NumberInput
-              label="TP1 (ATR ×)"
-              value={config.tp1_atr_multiplier}
-              step={0.1}
-              min={0.5}
-              max={10}
-              onChange={(v) => updateConfig({ tp1_atr_multiplier: v })}
-            />
-            <NumberInput
-              label="TP2 (ATR ×)"
-              value={config.tp2_atr_multiplier}
-              step={0.1}
-              min={0.5}
-              max={10}
-              onChange={(v) => updateConfig({ tp2_atr_multiplier: v })}
-            />
-          </>
-        ) : (
-          <p className="text-xs text-dim py-1">SL/TP levels are set by the ML model</p>
-        )}
+        <NumberInput
+          label="SL (ATR ×)"
+          value={config.sl_atr_multiplier}
+          step={0.1}
+          min={0.5}
+          max={5}
+          onChange={(v) => updateConfig({ sl_atr_multiplier: v })}
+        />
+        <NumberInput
+          label="TP1 (ATR ×)"
+          value={config.tp1_atr_multiplier}
+          step={0.1}
+          min={0.5}
+          max={10}
+          onChange={(v) => updateConfig({ tp1_atr_multiplier: v })}
+        />
+        <NumberInput
+          label="TP2 (ATR ×)"
+          value={config.tp2_atr_multiplier}
+          step={0.1}
+          min={0.5}
+          max={10}
+          onChange={(v) => updateConfig({ tp2_atr_multiplier: v })}
+        />
         <NumberInput
           label="Max Positions"
           value={config.max_concurrent_positions}

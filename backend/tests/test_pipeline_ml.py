@@ -6,7 +6,7 @@ import pytest
 from app.main import run_pipeline
 
 
-def _make_candle_list(n=50, base_price=67000):
+def _make_candle_list(n=80, base_price=67000):
     """Generate a list of JSON-encoded candle strings for Redis mock."""
     candles = []
     for i in range(n):
@@ -20,7 +20,7 @@ def _make_candle_list(n=50, base_price=67000):
     return candles
 
 
-def _make_mock_app(*, ml_predictors=None, prompt_template=None, unified_shadow=False):
+def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     """Create a mock app with all required state."""
     app = MagicMock()
     settings = MagicMock()
@@ -40,7 +40,6 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None, unified_shadow=F
     settings.ml_tp2_max_atr = 8.0
     settings.ml_rr_floor = 1.0
     settings.llm_caution_sl_factor = 0.8
-    settings.engine_unified_shadow = unified_shadow
     settings.onchain_enabled = False
     settings.pairs = ["BTC-USDT-SWAP"]
     app.state.settings = settings
@@ -73,7 +72,7 @@ def _make_mock_predictor(direction="LONG", confidence=0.85, sl_atr=1.5, tp1_atr=
     return predictor
 
 
-CANDLE = {"pair": "BTC-USDT-SWAP", "timeframe": "1h", "close": 67500}
+CANDLE = {"pair": "BTC-USDT-SWAP", "timeframe": "1h", "open": 67400, "close": 67500}
 
 
 class TestUnifiedPipelineIndicatorOnly:
@@ -110,11 +109,9 @@ class TestUnifiedPipelineWithML:
         predictor = _make_mock_predictor(direction="LONG", confidence=0.85)
         app_ml = _make_mock_app(ml_predictors={"btc_usdt_swap": predictor})
         app_ml.state.settings.engine_signal_threshold = 10
-        app_ml.state.settings.engine_unified_shadow = False
 
         app_no_ml = _make_mock_app()
         app_no_ml.state.settings.engine_signal_threshold = 10
-        app_no_ml.state.settings.engine_unified_shadow = False
 
         ml_signal = None
         no_ml_signal = None
@@ -141,7 +138,6 @@ class TestUnifiedPipelineWithML:
         predictor.predict.side_effect = RuntimeError("model error")
         app = _make_mock_app(ml_predictors={"btc_usdt_swap": predictor})
         app.state.settings.engine_signal_threshold = 10
-        app.state.settings.engine_unified_shadow = False
 
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist:
             await run_pipeline(app, CANDLE)
@@ -158,7 +154,7 @@ class TestUnifiedPipelineLLMBehavior:
 
         app = _make_mock_app(prompt_template="fake template")
         app.state.settings.engine_signal_threshold = 10
-        app.state.settings.engine_unified_shadow = False
+        app.state.settings.engine_llm_threshold = 5  # low threshold so LLM gate triggers
 
         llm_resp = LLMResponse(
             opinion="contradict", confidence="HIGH",
@@ -178,7 +174,6 @@ class TestUnifiedPipelineLLMBehavior:
 
         app = _make_mock_app(prompt_template="fake template")
         app.state.settings.engine_signal_threshold = 10
-        app.state.settings.engine_unified_shadow = False
 
         llm_resp = LLMResponse(
             opinion="caution", confidence="LOW",
@@ -190,20 +185,6 @@ class TestUnifiedPipelineLLMBehavior:
              patch("app.main.render_prompt", return_value="rendered"):
             await run_pipeline(app, CANDLE)
             # May or may not emit depending on indicator score, but shouldn't crash
-
-
-class TestUnifiedPipelineShadowMode:
-    """Tests for shadow mode behavior."""
-
-    @pytest.mark.asyncio
-    async def test_shadow_mode_does_not_persist(self):
-        """Shadow mode logs but doesn't persist or broadcast."""
-        app = _make_mock_app(unified_shadow=True)
-        app.state.settings.engine_signal_threshold = 10
-
-        with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist:
-            await run_pipeline(app, CANDLE)
-            mock_persist.assert_not_called()
 
 
 class TestLLMPromptRendering:

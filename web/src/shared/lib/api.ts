@@ -3,6 +3,7 @@ import type { Signal, SignalStats, CalendarResponse, UserStatus } from "../../fe
 import type { NewsEvent } from "../../features/news/types";
 import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../features/backtest/types";
 import type { PipelineSettingsAPI } from "../../features/settings/types";
+import type { Alert, AlertCreateRequest, AlertUpdateRequest, AlertHistoryEntry, AlertSettings } from "../../features/alerts/types";
 
 // ML Training Types
 export interface MLTrainRequest {
@@ -340,5 +341,42 @@ export const api = {
     request<PipelineSettingsAPI>("/api/pipeline/settings", {
       method: "PUT",
       body: JSON.stringify(patch),
+    }),
+
+  // Alerts
+  getAlerts: () => request<Alert[]>("/api/alerts"),
+
+  createAlert: (body: AlertCreateRequest) =>
+    request<Alert>("/api/alerts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateAlert: (id: string, body: AlertUpdateRequest) =>
+    request<Alert>(`/api/alerts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteAlert: (id: string) =>
+    request<{ deleted: string }>(`/api/alerts/${id}`, {
+      method: "DELETE",
+    }),
+
+  getAlertHistory: (params?: { since?: string; until?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.since) query.set("since", params.since);
+    if (params?.until) query.set("until", params.until);
+    if (params?.limit) query.set("limit", String(params.limit));
+    const qs = query.toString();
+    return request<AlertHistoryEntry[]>(`/api/alerts/history${qs ? `?${qs}` : ""}`);
+  },
+
+  getAlertSettings: () => request<AlertSettings>("/api/alerts/settings"),
+
+  updateAlertSettings: (body: Partial<AlertSettings>) =>
+    request<AlertSettings>("/api/alerts/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
     }),
 };

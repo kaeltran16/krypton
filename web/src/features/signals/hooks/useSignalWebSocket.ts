@@ -4,7 +4,9 @@ import { WS_BASE_URL, API_KEY } from "../../../shared/lib/constants";
 import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
 import { useNewsStore } from "../../news/store";
+import { useAlertStore } from "../../alerts/store";
 import { api } from "../../../shared/lib/api";
+import { hapticPulse } from "../../../shared/lib/haptics";
 
 export function useSignalWebSocket() {
   const pairs = useSettingsStore((s) => s.pairs);
@@ -48,10 +50,13 @@ export function useSignalWebSocket() {
         Math.abs(data.signal.final_score) >= thresholdRef.current
       ) {
         useSignalStore.getState().addSignal(data.signal);
+        hapticPulse();
       } else if (data.type === "candle" && data.candle) {
         useSignalStore.getState().notifyCandleListeners(data.candle);
       } else if (data.type === "news_alert" && data.news) {
         useNewsStore.getState().addAlert(data.news);
+      } else if (data.type === "alert_triggered") {
+        useAlertStore.getState().addTriggeredAlert(data);
       }
     };
 

@@ -11,22 +11,18 @@ import pandas as pd
 
 from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
-from app.engine.combiner import compute_preliminary_score, calculate_levels
+from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels
 
 logger = logging.getLogger(__name__)
 
-MIN_CANDLES = 50  # minimum candles for reliable indicators
+MIN_CANDLES = 70  # minimum candles for reliable indicators
 
 
 @dataclass
 class BacktestConfig:
-    signal_threshold: int = 50
+    signal_threshold: int = 35
     tech_weight: float = 0.75
     pattern_weight: float = 0.25
-    enable_ema: bool = True
-    enable_macd: bool = True
-    enable_rsi: bool = True
-    enable_bb: bool = True
     enable_patterns: bool = True
     sl_atr_multiplier: float = 1.5
     tp1_atr_multiplier: float = 2.0
@@ -96,90 +92,72 @@ def run_backtest(
         # Score current candle
         df = pd.DataFrame(window)
 
+        # ── Rule-based scoring (always runs) ──
+        try:
+            tech_result = compute_technical_score(df)
+        except Exception:
+            continue
+
+        pat_score = 0
+        detected = []
+        if config.enable_patterns:
+            try:
+                detected = detect_candlestick_patterns(df)
+                indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
+                pat_score = compute_pattern_score(detected, indicator_ctx)
+            except Exception:
+                pass
+
+        indicator_preliminary = compute_preliminary_score(
+            technical_score=tech_result["score"],
+            order_flow_score=0,
+            tech_weight=config.tech_weight,
+            flow_weight=0.0,
+            onchain_score=0,
+            onchain_weight=0.0,
+            pattern_score=pat_score,
+            pattern_weight=config.pattern_weight,
+        )
+
+        # ── Optional ML blending ──
+        ml_score = None
+        ml_confidence = None
         if ml_predictor is not None:
-            # ML scoring mode
             try:
                 from app.ml.features import build_feature_matrix
                 feature_matrix = build_feature_matrix(df)
                 prediction = ml_predictor.predict(feature_matrix)
-
-                if prediction["direction"] == "NEUTRAL" or prediction["confidence"] < config.ml_confidence_threshold:
-                    continue
-
-                direction = prediction["direction"]
-                score = int(prediction["confidence"] * 100)
-                if direction == "SHORT":
-                    score = -score
-
-                # Use compute_technical_score for ATR (same as rule-based path)
-                try:
-                    tech_result = compute_technical_score(df)
-                    atr = tech_result["indicators"].get("atr", 0)
-                except Exception:
-                    continue
-                if atr <= 0:
-                    continue
-
-                price = float(current["close"])
-                if direction == "LONG":
-                    sl = price - prediction["sl_atr"] * atr
-                    tp1 = price + prediction["tp1_atr"] * atr
-                    tp2 = price + prediction["tp2_atr"] * atr
-                else:
-                    sl = price + prediction["sl_atr"] * atr
-                    tp1 = price - prediction["tp1_atr"] * atr
-                    tp2 = price - prediction["tp2_atr"] * atr
-
-                detected = []
-
+                ml_confidence = prediction["confidence"]
+                if prediction["direction"] != "NEUTRAL":
+                    ml_score = ml_confidence * 100
+                    if prediction["direction"] == "SHORT":
+                        ml_score = -ml_score
             except Exception:
-                continue
+                pass
+
+        score = blend_with_ml(
+            indicator_preliminary, ml_score, ml_confidence,
+            ml_confidence_threshold=config.ml_confidence_threshold,
+        )
+
+        direction = "LONG" if score > 0 else "SHORT"
+
+        if abs(score) < config.signal_threshold:
+            continue
+
+        atr = tech_result["indicators"].get("atr", 0)
+        if atr <= 0:
+            continue
+
+        price = float(current["close"])
+        if direction == "LONG":
+            sl = price - config.sl_atr_multiplier * atr
+            tp1 = price + config.tp1_atr_multiplier * atr
+            tp2 = price + config.tp2_atr_multiplier * atr
         else:
-            # Rule-based scoring mode (existing logic)
-            try:
-                tech_result = compute_technical_score(df)
-            except Exception:
-                continue
-
-            pat_score = 0
-            detected = []
-            if config.enable_patterns:
-                try:
-                    detected = detect_candlestick_patterns(df)
-                    indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-                    pat_score = compute_pattern_score(detected, indicator_ctx)
-                except Exception:
-                    pass
-
-            score = compute_preliminary_score(
-                technical_score=tech_result["score"],
-                order_flow_score=0,
-                tech_weight=config.tech_weight,
-                flow_weight=0.0,
-                onchain_score=0,
-                onchain_weight=0.0,
-                pattern_score=pat_score,
-                pattern_weight=config.pattern_weight,
-            )
-
-            direction = "LONG" if score > 0 else "SHORT"
-
-            if abs(score) < config.signal_threshold:
-                continue
-
-            atr = tech_result["indicators"].get("atr", 0)
-            if atr <= 0:
-                continue
-
-            price = float(current["close"])
-            if direction == "LONG":
-                sl = price - config.sl_atr_multiplier * atr
-                tp1 = price + config.tp1_atr_multiplier * atr
-                tp2 = price + config.tp2_atr_multiplier * atr
-            else:
-                sl = price + config.sl_atr_multiplier * atr
-                tp1 = price - config.tp1_atr_multiplier * atr
-                tp2 = price - config.tp2_atr_multiplier * atr
+            sl = price + config.sl_atr_multiplier * atr
+            tp1 = price - config.tp1_atr_multiplier * atr
+            tp2 = price - config.tp2_atr_multiplier * atr
 
         # Enforce max concurrent positions
         if len(open_positions) >= config.max_concurrent_positions:

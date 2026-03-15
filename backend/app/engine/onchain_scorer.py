@@ -1,119 +1,95 @@
-"""On-chain metric scorer.
-
-Reads cached on-chain data from Redis and produces a composite score (-100 to +100).
-
-Metric weights:
-  Exchange netflow:       ±35 (large inflows = bearish, outflows = bullish)
-  Whale movements:        ±25 (transfers to exchanges = bearish, to cold = bullish)
-  NUPL / MVRV:            ±20 (extreme greed = bearish, extreme fear = bullish)
-  Active addresses trend: ±20 (rising = bullish, falling = bearish)
-"""
+# backend/app/engine/onchain_scorer.py — full rewrite
 import json
 import logging
 
+from app.engine.scoring import sigmoid_score
+
 logger = logging.getLogger(__name__)
 
-MAX_SCORE = 100
-MIN_SCORE = -100
+# Per-asset profile definitions
+_PROFILES = {
+    "BTC": {
+        "netflow_norm": 3000,
+        "whale_baseline": 3,
+        "metrics": ["exchange_netflow", "whale_tx_count", "nupl", "hashrate_change_pct", "addr_trend_pct"],
+    },
+    "ETH": {
+        "netflow_norm": 50000,
+        "whale_baseline": 5,
+        "metrics": ["exchange_netflow", "whale_tx_count", "staking_flow", "gas_trend_pct", "addr_trend_pct"],
+    },
+}
 
 
-def _clamp(value: int) -> int:
-    return max(MIN_SCORE, min(MAX_SCORE, value))
+async def _get_metric(redis, pair: str, metric: str) -> float | None:
+    """Read a single on-chain metric from Redis. Returns None if missing.
 
-
-def _score_exchange_netflow(netflow: float) -> int:
-    """Negative netflow (outflow) is bullish, positive (inflow) is bearish.
-    Scale: roughly ±35 points based on magnitude."""
-    if netflow == 0:
-        return 0
-    # Normalize: typical large daily netflow is ~5000 BTC
-    normalized = max(-1.0, min(1.0, -netflow / 5000))
-    return round(normalized * 35)
-
-
-def _score_whale_movements(tx_count: int) -> int:
-    """High whale tx count suggests accumulation (bullish) or distribution.
-    Simple heuristic: moderate count is neutral, very high is bearish (selling pressure)."""
-    if tx_count <= 2:
-        return 10  # Low activity, slight bullish (accumulation quiet)
-    if tx_count <= 5:
-        return 0  # Neutral
-    if tx_count <= 10:
-        return -10  # Moderate selling pressure
-    return -25  # High whale activity, bearish
-
-
-def _score_nupl(nupl: float) -> int:
-    """Net Unrealized Profit/Loss — contrarian indicator.
-    > 0.75: extreme greed → bearish
-    0.5-0.75: greed → slightly bearish
-    0.25-0.5: optimism → neutral
-    0-0.25: hope → slightly bullish
-    < 0: capitulation → bullish"""
-    if nupl > 0.75:
-        return -20
-    if nupl > 0.5:
-        return -10
-    if nupl > 0.25:
-        return 0
-    if nupl > 0:
-        return 10
-    return 20
-
-
-def _score_active_addresses_trend(history: list[float]) -> int:
-    """Rising active addresses = bullish momentum, falling = bearish.
-    Compare recent average to older average."""
-    if len(history) < 4:
-        return 0
-    mid = len(history) // 2
-    older_avg = sum(history[:mid]) / mid
-    recent_avg = sum(history[mid:]) / (len(history) - mid)
-    if older_avg == 0:
-        return 0
-    change_pct = (recent_avg - older_avg) / older_avg
-    # ±20 points scaled by change
-    return round(max(-1.0, min(1.0, change_pct * 10)) * 20)
+    Handles both plain float strings and JSON objects with a 'value' key
+    (the current OnChainCollector stores JSON objects).
+    """
+    try:
+        raw = await redis.get(f"onchain:{pair}:{metric}")
+        if raw is None:
+            return None
+        # Try plain float first, fall back to JSON
+        try:
+            return float(raw)
+        except (ValueError, TypeError):
+            data = json.loads(raw)
+            return float(data.get("value", 0)) if isinstance(data, dict) else float(data)
+    except Exception:
+        return None
 
 
 async def compute_onchain_score(pair: str, redis) -> int:
-    """Compute composite on-chain score for a pair. Returns -100 to +100.
+    """Compute on-chain score for a given pair using asset-specific profile.
 
-    Returns 0 if no on-chain data is available (graceful degradation).
+    Returns int in [-100, +100]. Unknown pairs return 0.
+    Each metric is scored independently; missing metrics contribute 0.
     """
-    score = 0
-    has_data = False
-
-    # Exchange netflow
-    raw = await redis.get(f"onchain:{pair}:exchange_netflow")
-    if raw:
-        data = json.loads(raw)
-        score += _score_exchange_netflow(data.get("value", 0))
-        has_data = True
-
-    # Whale movements
-    raw = await redis.get(f"onchain:{pair}:whale_tx_count")
-    if raw:
-        data = json.loads(raw)
-        score += _score_whale_movements(data.get("value", 0))
-        has_data = True
-
-    # NUPL
-    raw = await redis.get(f"onchain:{pair}:nupl")
-    if raw:
-        data = json.loads(raw)
-        score += _score_nupl(data.get("value", 0))
-        has_data = True
-
-    # Active addresses trend (from history)
-    hist_key = f"onchain_hist:{pair}:active_addresses"
-    raw_hist = await redis.lrange(hist_key, -24, -1)  # Last ~2 hours
-    if raw_hist and len(raw_hist) >= 4:
-        values = [json.loads(h).get("v", 0) for h in raw_hist]
-        score += _score_active_addresses_trend(values)
-        has_data = True
-
-    if not has_data:
+    asset = pair.split("-")[0].upper()
+    profile = _PROFILES.get(asset)
+    if profile is None:
         return 0
 
-    return _clamp(score)
+    score = 0.0
+
+    # Exchange netflow (±35) — outflow = bullish
+    netflow = await _get_metric(redis, pair, "exchange_netflow")
+    if netflow is not None:
+        score += sigmoid_score(-netflow / profile["netflow_norm"], center=0, steepness=1.5) * 35
+
+    # Whale activity (±20) — contrarian
+    whale_count = await _get_metric(redis, pair, "whale_tx_count")
+    if whale_count is not None:
+        score += sigmoid_score(profile["whale_baseline"] - whale_count, center=0, steepness=0.3) * 20
+
+    # Active addresses trend (±15) — rising = bullish
+    addr_trend = await _get_metric(redis, pair, "addr_trend_pct")
+    if addr_trend is not None:
+        score += sigmoid_score(addr_trend, center=0, steepness=8) * 15
+
+    # Asset-specific metrics
+    if asset == "BTC":
+        # NUPL (±15) — contrarian
+        nupl = await _get_metric(redis, pair, "nupl")
+        if nupl is not None:
+            score += sigmoid_score(0.5 - nupl, center=0, steepness=3) * 15
+
+        # Hashrate trend (±15) — rising = miner confidence
+        hashrate = await _get_metric(redis, pair, "hashrate_change_pct")
+        if hashrate is not None:
+            score += sigmoid_score(hashrate, center=0, steepness=10) * 15
+
+    elif asset == "ETH":
+        # Staking flow (±15) — net deposits = supply lock
+        staking = await _get_metric(redis, pair, "staking_flow")
+        if staking is not None:
+            score += sigmoid_score(-staking, center=0, steepness=1) * 15
+
+        # Gas price trend (±15) — rising = demand
+        gas_trend = await _get_metric(redis, pair, "gas_trend_pct")
+        if gas_trend is not None:
+            score += sigmoid_score(gas_trend, center=0, steepness=5) * 15
+
+    return max(min(round(score), 100), -100)

@@ -192,16 +192,79 @@ class TestPatternScoring:
 
     def test_level_proximity_boost(self):
         patterns = [{"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12}]
-        # Close near lower BB = boost
-        indicators = {"close": 100, "bb_lower": 99, "bb_upper": 200, "ema_21": 150, "ema_50": 160}
-        score_boosted = compute_pattern_score(patterns, indicators)
+        # bb_pos=0.01 puts price near lower band edge, triggering level-proximity boost
+        _NEAR_LOWER_BB_CTX = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0, "bb_pos": 0.01, "close": 100}
+        score_boosted = compute_pattern_score(patterns, _NEAR_LOWER_BB_CTX)
         score_normal = compute_pattern_score(patterns)
         assert score_boosted > score_normal
-        assert score_boosted == round(12 * 1.5)  # 18
 
-    def test_ema_proximity_boost(self):
-        patterns = [{"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12}]
-        # Close very near EMA 21 = boost
-        indicators = {"close": 100, "bb_lower": 50, "bb_upper": 150, "ema_21": 100.3, "ema_50": 120}
-        score = compute_pattern_score(patterns, indicators)
-        assert score == round(12 * 1.5)
+    def test_near_upper_band_boost(self):
+        patterns = [{"name": "Bearish Engulfing", "type": "candlestick", "bias": "bearish", "strength": 15}]
+        _NEAR_UPPER_BB_CTX = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0, "bb_pos": 0.99, "close": 100}
+        score_boosted = compute_pattern_score(patterns, _NEAR_UPPER_BB_CTX)
+        score_normal = compute_pattern_score(patterns)
+        assert abs(score_boosted) > abs(score_normal)
+
+
+class TestTrendAlignmentBoost:
+    def test_reversal_pattern_gets_boost(self):
+        """Bullish pattern in bearish ADX trend (reversal) gets 1.3x."""
+        patterns = [{"name": "Bullish Engulfing", "type": "two_candle", "bias": "bullish", "strength": 15}]
+        ctx = {"adx": 25, "di_plus": 10, "di_minus": 30, "vol_ratio": 1.0,
+               "bb_pos": 0.5, "close": 100}
+        score = compute_pattern_score(patterns, ctx)
+        # 15 * 1.3 (reversal) = 19.5, rounded = 20
+        # No other boosts active (vol_ratio=1.0, bb_pos=0.5)
+        assert score > 15  # boosted above base strength
+
+    def test_weak_trend_no_boost(self):
+        """ADX < 15 — no trend-alignment boost."""
+        patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
+        ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
+               "bb_pos": 0.5, "close": 100}
+        score = compute_pattern_score(patterns, ctx)
+        assert score == 12  # no boost
+
+
+class TestVolumeConfirmationBoost:
+    def test_high_volume_gets_boost(self):
+        """Volume ratio > 1.5 gets 1.3x boost."""
+        patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
+        ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 2.0,
+               "bb_pos": 0.5, "close": 100}
+        score = compute_pattern_score(patterns, ctx)
+        assert score > 12
+
+    def test_normal_volume_no_boost(self):
+        patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
+        ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
+               "bb_pos": 0.5, "close": 100}
+        score = compute_pattern_score(patterns, ctx)
+        assert score == 12
+
+
+class TestLevelProximityBoost:
+    def test_near_band_edge_gets_boost(self):
+        """bb_pos near 0 or 1 should boost."""
+        patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
+        ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
+               "bb_pos": 0.05, "close": 100}
+        score = compute_pattern_score(patterns, ctx)
+        assert score > 12
+
+    def test_center_no_boost(self):
+        """bb_pos at 0.5 — no boost (1.0x)."""
+        patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
+        ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
+               "bb_pos": 0.5, "close": 100}
+        score = compute_pattern_score(patterns, ctx)
+        assert score == 12
+
+    def test_boost_never_below_one(self):
+        """Level proximity boost should never go below 1.0."""
+        patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
+        for bb in [0.0, 0.2, 0.3, 0.5, 0.7, 0.8, 1.0]:
+            ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
+                   "bb_pos": bb, "close": 100}
+            score = compute_pattern_score(patterns, ctx)
+            assert score >= 12  # never penalized

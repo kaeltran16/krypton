@@ -106,11 +106,10 @@ def sigmoid_scale(value: float, center: float = 0, steepness: float = 0.1) -> fl
 Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_scoring.py -v`
 Expected: All PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage files** (do not commit yet — single commit at end per CLAUDE.md)
 
 ```bash
 git add backend/app/engine/scoring.py backend/tests/engine/test_scoring.py
-git commit -m "feat(engine): add sigmoid scoring helper functions"
 ```
 
 ---
@@ -118,14 +117,27 @@ git commit -m "feat(engine): add sigmoid scoring helper functions"
 ### Task 2: Rewrite compute_technical_score
 
 **Files:**
-- Rewrite: `backend/app/engine/traditional.py` (full file — lines 1-161)
+- Modify: `backend/app/engine/traditional.py` (replace lines 1-118 only — preserve `compute_order_flow_score` at lines 120-161)
 - Rewrite: `backend/tests/engine/test_traditional.py` (full file — lines 1-91, removing old order flow tests too)
 
 **References:**
 - Spec Section 2: Technical Score — Orthogonal Indicator Redesign
 - `backend/app/engine/scoring.py` (sigmoid helpers from Task 1)
 
-- [ ] **Step 1: Write failing tests for new technical score**
+- [ ] **Step 1a: Update pipeline ML test candle count**
+
+**This must happen alongside the technical score rewrite** to avoid a window where pipeline tests become vacuous (50 candles < 70 minimum → pipeline silently returns early → tests pass but verify nothing).
+
+In `backend/tests/test_pipeline_ml.py`, update `_make_candle_list` default from `n=50` to `n=80`:
+
+```python
+# Old
+def _make_candle_list(n=50, base_price=67000):
+# New
+def _make_candle_list(n=80, base_price=67000):
+```
+
+- [ ] **Step 1b: Write failing tests for new technical score**
 
 ```python
 # backend/tests/engine/test_traditional.py — full rewrite (replaces entire file)
@@ -197,15 +209,14 @@ class TestTechnicalScoreIndicators:
 
 class TestTechnicalScoreContinuity:
     def test_rsi_no_dead_zone(self):
-        """RSI values in the old dead zone (40-60) should produce non-zero scores."""
-        df = _make_candles(80, "flat")
-        result = compute_technical_score(df)
-        rsi = result["indicators"]["rsi"]
-        # If RSI is in 40-60, the old system gave 0. New system should not.
-        if 40 < rsi < 60 and rsi != 50:
-            # Score won't be exactly the RSI contribution alone, but indicators dict
-            # confirms RSI is computed and the total score is non-zero from other dims
-            assert result["indicators"]["rsi"] is not None
+        """RSI values in the old dead zone (40-60) should produce non-zero sigmoid contribution."""
+        from app.engine.scoring import sigmoid_score
+        # RSI=45 is in the old dead zone (40-60 gave 0). New sigmoid should not.
+        rsi_contribution = sigmoid_score(50 - 45, center=0, steepness=0.15) * 25
+        assert rsi_contribution > 0
+        # RSI=55 should produce negative contribution
+        rsi_contribution_55 = sigmoid_score(50 - 55, center=0, steepness=0.15) * 25
+        assert rsi_contribution_55 < 0
 
     def test_monotonic_rsi_scoring(self):
         """Lower RSI should yield higher (more bullish) score contribution,
@@ -251,10 +262,10 @@ Expected: FAIL — old indicators present, new ones missing
 
 - [ ] **Step 3: Implement new compute_technical_score**
 
-Rewrite the entire `backend/app/engine/traditional.py` file. The new file includes both `compute_technical_score` (new orthogonal indicators) and a temporary copy of the old `compute_order_flow_score` — Task 3 will replace the order flow function.
+Replace lines 1-118 of `backend/app/engine/traditional.py` (everything above `compute_order_flow_score`). **Preserve the existing `compute_order_flow_score` function (lines 120-161) — it has no dependency on the removed helpers and will be rewritten in Task 3.**
 
 ```python
-# backend/app/engine/traditional.py — replace lines 1-118
+# backend/app/engine/traditional.py — replace lines 1-118 only, keep compute_order_flow_score below
 import numpy as np
 import pandas as pd
 
@@ -422,11 +433,10 @@ def compute_technical_score(candles: pd.DataFrame) -> dict:
 Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_traditional.py -v -k "not OrderFlow"`
 Expected: All technical score tests PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage files**
 
 ```bash
-git add backend/app/engine/traditional.py backend/tests/engine/test_traditional.py
-git commit -m "feat(engine): rewrite technical scoring with orthogonal sigmoid indicators"
+git add backend/app/engine/traditional.py backend/tests/engine/test_traditional.py backend/tests/test_pipeline_ml.py
 ```
 
 ---
@@ -539,11 +549,10 @@ def compute_order_flow_score(metrics: dict) -> dict:
 Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_traditional.py -v`
 Expected: All PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage files**
 
 ```bash
 git add backend/app/engine/traditional.py backend/tests/engine/test_traditional.py
-git commit -m "feat(engine): rewrite order flow scoring with continuous sigmoid"
 ```
 
 ---
@@ -740,6 +749,10 @@ async def compute_onchain_score(pair: str, redis) -> int:
         score += sigmoid_score(profile["whale_baseline"] - whale_count, center=0, steepness=0.3) * 20
 
     # Active addresses trend (±15) — rising = bullish
+    # NOTE: This reads a pre-computed `addr_trend_pct` via redis.get(), replacing the old
+    # redis.lrange() history approach. The current OnChainCollector may not publish this key yet;
+    # if missing, this component contributes 0 (graceful degradation). Update the collector
+    # to publish `onchain:{pair}:addr_trend_pct` as a separate follow-up if needed.
     addr_trend = await _get_metric(redis, pair, "addr_trend_pct")
     if addr_trend is not None:
         score += sigmoid_score(addr_trend, center=0, steepness=8) * 15
@@ -775,11 +788,10 @@ async def compute_onchain_score(pair: str, redis) -> int:
 Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_onchain_scorer.py -v`
 Expected: All PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage files**
 
 ```bash
 git add backend/app/engine/onchain_scorer.py backend/tests/engine/test_onchain_scorer.py
-git commit -m "feat(engine): pair-aware on-chain scoring with sigmoid"
 ```
 
 ---
@@ -873,26 +885,30 @@ Expected: FAIL — old function signature doesn't expect new context keys
 
 - [ ] **Step 3: Implement updated compute_pattern_score**
 
-Replace `compute_pattern_score` in `backend/app/engine/patterns.py` (lines 210-262). Keep all pattern detection code above unchanged.
+Replace `compute_pattern_score` in `backend/app/engine/patterns.py` (lines 210-262). Keep all pattern detection code above unchanged. Also add `from app.engine.scoring import sigmoid_score` to the imports at the top of the file (after the existing `import pandas as pd`).
 
 ```python
 # Replace compute_pattern_score function in patterns.py
+# Also add at the TOP of the file: from app.engine.scoring import sigmoid_score
 
-from app.engine.scoring import sigmoid_score
 
-
-def compute_pattern_score(patterns: list[dict], indicator_ctx: dict) -> int:
+def compute_pattern_score(patterns: list[dict], indicator_ctx: dict | None = None) -> int:
     """Score detected candlestick patterns with contextual boosts.
 
     Args:
         patterns: List of detected pattern dicts with 'bias' and 'strength'.
         indicator_ctx: Dict with keys: adx, di_plus, di_minus, vol_ratio, bb_pos, close.
+                       If None, no boosts are applied (base strength only).
 
     Returns:
         Score in [-100, +100].
     """
     if not patterns:
         return 0
+
+    # When no context is provided, use neutral defaults (no boosts applied)
+    if indicator_ctx is None:
+        indicator_ctx = {"adx": 0, "di_plus": 0, "di_minus": 0, "vol_ratio": 1.0, "bb_pos": 0.5, "close": 0}
 
     adx = indicator_ctx["adx"]
     di_plus = indicator_ctx["di_plus"]
@@ -948,37 +964,47 @@ def compute_pattern_score(patterns: list[dict], indicator_ctx: dict) -> int:
 
 - [ ] **Step 4: Update existing pattern test fixtures**
 
-Update the `TestPatternScoring` class in `test_patterns.py` to provide the new required `indicator_ctx` format. Find tests that call `compute_pattern_score` with old-style indicators and update them:
+Update the `TestPatternScoring` class in `test_patterns.py`. Two categories of calls need updating:
+
+**A. Calls with NO second argument** (lines 161, 166, 174, 179, 183, 190, 198) — these still work because `indicator_ctx` defaults to `None` (neutral, no boosts). No changes needed for these calls; they continue to test base-strength-only scoring.
+
+**B. Calls with old-style indicators dict** (lines 197, 206) — replace with new ctx format:
 
 ```python
-# Update existing test_level_proximity_boost and other scoring tests
-# Old: indicators = {"close": 100, "bb_lower": 99, "bb_upper": 200, "ema_21": 150, "ema_50": 160}
-# New: indicator_ctx with required keys
-_DEFAULT_CTX = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0, "bb_pos": 0.5, "close": 100}
+# Old:
+indicators = {"close": 100, "bb_lower": 99, "bb_upper": 200, "ema_21": 150, "ema_50": 160}
+score_boosted = compute_pattern_score(patterns, indicators)
+
+# New: bb_pos=0.01 puts price near lower band edge, triggering level-proximity boost
+_NEAR_LOWER_BB_CTX = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0, "bb_pos": 0.01, "close": 100}
+score_boosted = compute_pattern_score(patterns, _NEAR_LOWER_BB_CTX)
 ```
 
-Replace all `compute_pattern_score(patterns, old_indicators)` calls with the new ctx format.
+Also update `test_level_proximity_boost` assertion — the old test expected `round(12 * 1.5) = 18` from the binary 1.5x boost. The new continuous boost at `bb_pos=0.01` gives approximately `1.38x`, so assert `score_boosted > score_normal` instead of exact value.
+
+Update `test_ema_proximity_boost` — EMAs are no longer computed, so either delete this test or rewrite it as a level-proximity test at a different `bb_pos` value.
 
 - [ ] **Step 5: Run all pattern tests**
 
 Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_patterns.py -v`
 Expected: All PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage files**
 
 ```bash
 git add backend/app/engine/patterns.py backend/tests/engine/test_patterns.py
-git commit -m "feat(engine): add trend/volume/level boosts to pattern scoring"
 ```
 
 ---
 
 ## Chunk 3: Pipeline Integration + Config
 
-### Task 6: Update config defaults
+### Task 6: Update config defaults + remove shadow mode
 
 **Files:**
-- Modify: `backend/app/config.py` (lines 59-60)
+- Modify: `backend/app/config.py` (lines 59-60, 99)
+- Modify: `backend/app/main.py` (lines 460-463)
+- Modify: `backend/tests/test_pipeline_ml.py` (shadow mode references)
 
 - [ ] **Step 1: Update thresholds**
 
@@ -986,11 +1012,34 @@ In `backend/app/config.py`, change:
 - Line 59: `engine_signal_threshold: int = 50` → `engine_signal_threshold: int = 35`
 - Line 60: `engine_llm_threshold: int = 30` → `engine_llm_threshold: int = 25`
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Remove `engine_unified_shadow` config field**
+
+In `backend/app/config.py`, delete line 99:
+```python
+engine_unified_shadow: bool = True
+```
+
+- [ ] **Step 3: Remove shadow mode guard in main.py**
+
+In `backend/app/main.py`, delete lines 460-463:
+```python
+    # Shadow mode: log but don't persist or broadcast
+    if getattr(settings, "engine_unified_shadow", False):
+        logger.info(f"Pipeline {pair}:{timeframe} — shadow mode, would emit {direction} score={final}")
+        return
+```
+
+- [ ] **Step 4: Remove shadow mode from pipeline tests**
+
+In `backend/tests/test_pipeline_ml.py`:
+- Remove the `unified_shadow` parameter from `_make_mock_app` (line 23) and the `settings.engine_unified_shadow = unified_shadow` line (line 43)
+- Remove all `app.state.settings.engine_unified_shadow = False` lines (lines 113, 117, 144, 161, 181)
+- Delete the `TestShadowMode` class and its `test_shadow_mode_does_not_persist` test (lines 196-201+)
+
+- [ ] **Step 5: Stage files**
 
 ```bash
-git add backend/app/config.py
-git commit -m "feat(config): lower signal/LLM thresholds for continuous scoring"
+git add backend/app/config.py backend/app/main.py backend/tests/test_pipeline_ml.py
 ```
 
 ---
@@ -998,7 +1047,8 @@ git commit -m "feat(config): lower signal/LLM thresholds for continuous scoring"
 ### Task 7: Update main.py pipeline integration
 
 **Files:**
-- Modify: `backend/app/main.py` (lines 238, 276-277)
+- Modify: `backend/app/main.py` (lines 233, 238, 252-253, 276-277)
+- Note: shadow mode removal from main.py is handled in Task 6
 
 - [ ] **Step 1: Update Redis lrange fetch range**
 
@@ -1039,11 +1089,10 @@ flow_result = compute_order_flow_score(flow_metrics)
 
 The indicator_ctx line at line 276 doesn't change in code — but the contents of `tech_result["indicators"]` now include `adx`, `di_plus`, `di_minus`, `vol_ratio`, `bb_pos` which is exactly what `compute_pattern_score` requires. Verify the keys match.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage files**
 
 ```bash
 git add backend/app/main.py
-git commit -m "feat(pipeline): update candle count guard to 70 for new indicators"
 ```
 
 ---
@@ -1072,34 +1121,22 @@ The backtester's `indicator_ctx` construction at line 148-150 uses `{**tech_resu
 Run: `docker exec krypton-api-1 python -m pytest tests/ -k "backtest" -v`
 Expected: PASS (or skip if no backtester tests)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage files**
 
 ```bash
 git add backend/app/engine/backtester.py
-git commit -m "feat(backtester): update for new indicator set, remove ema/macd flags"
 ```
 
 ---
 
-### Task 9: Update pipeline ML tests
+### Task 9: Verify pipeline ML tests
 
 **Files:**
-- Modify: `backend/tests/test_pipeline_ml.py`
+- `backend/tests/test_pipeline_ml.py` (candle count already updated in Task 2 Step 1a)
 
-- [ ] **Step 1: Update candle count and mock indicator dict shape**
+- [ ] **Step 1: Verify indicator dict shape in mocks**
 
-Update `_make_candle_list` default from `n=50` to `n=80` (needs 70+ for new indicator guard):
-
-```python
-# Old
-def _make_candle_list(n=50, ...):
-# New
-def _make_candle_list(n=80, ...):
-```
-
-Also update the Redis lrange mock to return enough candles (the mock's `return_value` must match the new `-200` fetch range).
-
-Update any hardcoded indicator dicts to use the new keys:
+The candle count was already updated to `n=80` in Task 2 Step 1a. Check if any hardcoded indicator dicts in the test file reference old keys. If found, update them:
 
 ```python
 # Old indicator keys in mocks:
@@ -1111,16 +1148,17 @@ Update any hardcoded indicator dicts to use the new keys:
  "bb_width_pct": 40, "obv_slope": 0.5, "vol_ratio": 1.2, "atr": 500}
 ```
 
+Note: The current `test_pipeline_ml.py` does not mock `compute_technical_score` return values directly — it calls the real function via `run_pipeline`. So there are no hardcoded indicator dicts to update. This step is a verification check only.
+
 - [ ] **Step 2: Run pipeline tests**
 
 Run: `docker exec krypton-api-1 python -m pytest tests/test_pipeline_ml.py -v`
 Expected: All PASS
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Stage files (if any changes were needed)**
 
 ```bash
 git add backend/tests/test_pipeline_ml.py
-git commit -m "test: update pipeline ML test fixtures for new indicator shape"
 ```
 
 ---
@@ -1151,9 +1189,18 @@ docker exec krypton-api-1 python -c "
 
 Verify scores are non-zero across all dimensions and within expected ranges.
 
-- [ ] **Step 4: Final commit**
+- [ ] **Step 4: Commit all changes**
+
+Per CLAUDE.md, commit once at the end of the feature:
 
 ```bash
-git add -A
-git commit -m "feat(engine): continuous scoring redesign - complete implementation"
+git add backend/app/engine/scoring.py backend/app/engine/traditional.py backend/app/engine/onchain_scorer.py backend/app/engine/patterns.py backend/app/engine/backtester.py backend/app/config.py backend/app/main.py backend/tests/engine/test_scoring.py backend/tests/engine/test_traditional.py backend/tests/engine/test_onchain_scorer.py backend/tests/engine/test_patterns.py backend/tests/test_pipeline_ml.py
+git commit -m "feat(engine): replace step-function scoring with continuous sigmoid mapping
+
+- sigmoid helpers (sigmoid_score, sigmoid_scale) for smooth S-curve mapping
+- technical score: ADX/RSI/BB/OBV replacing EMA/MACD, min candles 50→70
+- order flow: continuous sigmoid with direction-aware OI scoring
+- on-chain: pair-aware profiles (BTC/ETH) with per-asset metrics
+- pattern scoring: trend-alignment, volume, level-proximity boosts
+- remove engine_unified_shadow (MVP, demo account)"
 ```

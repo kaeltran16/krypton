@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 CRYPTOPANIC_URL = "https://cryptopanic.com/api/v1/posts/"
 COINGECKO_NEWS_URL = "https://api.coingecko.com/api/v3/news"
 
+DEFAULT_RSS_FEEDS = [
+    {"url": "https://cointelegraph.com/rss", "category": "crypto"},
+    {"url": "https://www.coindesk.com/arc/outboundfeeds/rss/", "category": "crypto"},
+]
+
 
 def normalize_headline(headline: str) -> str:
     """Normalize headline for fingerprinting: lowercase, strip punctuation/whitespace."""
@@ -184,7 +189,7 @@ class NewsCollector:
         self.openrouter_api_key = openrouter_api_key
         self.openrouter_model = openrouter_model
         self.relevance_keywords = relevance_keywords or []
-        self.rss_feeds = rss_feeds or []
+        self.rss_feeds = rss_feeds or DEFAULT_RSS_FEEDS
         self.llm_daily_budget = llm_daily_budget
         self.high_impact_push_enabled = high_impact_push_enabled
         self.vapid_private_key = vapid_private_key
@@ -230,6 +235,7 @@ class NewsCollector:
         # Gather from all sources
         async with httpx.AsyncClient(timeout=15) as client:
             raw_headlines.extend(await self._fetch_cryptopanic(client))
+            raw_headlines.extend(await self._fetch_coingecko(client))
             raw_headlines.extend(await self._fetch_rss())
 
         # Filter for relevance
@@ -340,6 +346,31 @@ class NewsCollector:
             return results
         except Exception as e:
             logger.debug(f"CryptoPanic fetch failed: {e}")
+            return []
+
+    async def _fetch_coingecko(self, client: httpx.AsyncClient) -> list[dict]:
+        """Fetch from CoinGecko news API (free, no key required)."""
+        try:
+            resp = await client.get(COINGECKO_NEWS_URL, params={"page": 1})
+            resp.raise_for_status()
+            data = resp.json()
+            results = []
+            for item in data.get("data", []):
+                published = item.get("created_at") or item.get("crawled_at", "")
+                try:
+                    pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    pub_dt = datetime.now(timezone.utc)
+                results.append({
+                    "headline": item.get("title", ""),
+                    "source": "coingecko",
+                    "url": item.get("url", ""),
+                    "category": "crypto",
+                    "published_at": pub_dt,
+                })
+            return results
+        except Exception as e:
+            logger.debug(f"CoinGecko news fetch failed: {e}")
             return []
 
     async def _fetch_rss(self) -> list[dict]:

@@ -44,16 +44,21 @@ class ConnectionManager:
         for ws in dead:
             self.disconnect(ws)
 
-    async def broadcast_news(self, alert: dict):
-        """Broadcast a news_alert to all connected clients.
-
-        News alerts are not filtered by pair/timeframe — all clients receive them.
-        """
+    async def _broadcast_to_all(self, payload: dict):
+        """Broadcast a payload to all connected clients (no filtering)."""
         dead = []
         for ws in list(self.connections):
             try:
-                await ws.send_json(alert)
+                await ws.send_json(payload)
             except Exception:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(ws)
+
+    async def broadcast_news(self, alert: dict):
+        """Broadcast a news_alert to all connected clients."""
+        await self._broadcast_to_all(alert)
+
+    async def broadcast_alert(self, alert: dict):
+        """Broadcast an alert to all connected clients."""
+        await self._broadcast_to_all(alert)

@@ -11,7 +11,7 @@ export interface BacktestConfig {
   tp1_atr_multiplier: number;
   tp2_atr_multiplier: number;
   max_concurrent_positions: number;
-  ml_mode: boolean;
+  ml_enabled: boolean;
   ml_confidence_threshold: number;
 }
 

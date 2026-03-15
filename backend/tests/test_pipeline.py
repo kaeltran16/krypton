@@ -5,7 +5,7 @@ from app.engine.combiner import compute_preliminary_score, compute_final_score, 
 from app.engine.llm import parse_llm_response
 
 
-def _make_candles(count: int = 50, base: float = 67000, trend: float = 10) -> list[dict]:
+def _make_candles(count: int = 80, base: float = 67000, trend: float = 10) -> list[dict]:
     """Generate synthetic uptrend candle data as list of dicts."""
     candles = []
     for i in range(count):

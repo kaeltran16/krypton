@@ -60,7 +60,7 @@ const defaultConfig: BacktestConfig = {
   tp1_atr_multiplier: 2.0,
   tp2_atr_multiplier: 3.0,
   max_concurrent_positions: 3,
-  ml_mode: false,
+  ml_enabled: false,
   ml_confidence_threshold: 65,
 };
 

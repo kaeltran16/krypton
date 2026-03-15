@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from app.engine.scoring import sigmoid_score
+
 
 def _body(row) -> float:
     return abs(row["close"] - row["open"])
@@ -209,54 +211,72 @@ def detect_candlestick_patterns(candles: pd.DataFrame) -> list[dict]:
 
 def compute_pattern_score(
     patterns: list[dict],
-    indicators: dict | None = None,
+    indicator_ctx: dict | None = None,
 ) -> int:
-    """Compute aggregate pattern score from detected patterns.
+    """Score detected candlestick patterns with contextual boosts.
 
     Args:
-        patterns: Output of detect_candlestick_patterns().
-        indicators: If provided (with bb_upper, bb_lower, ema_9, ema_21, close),
-                    patterns near key levels get a 1.5x strength boost.
+        patterns: List of detected pattern dicts with 'bias' and 'strength'.
+        indicator_ctx: Dict with keys: adx, di_plus, di_minus, vol_ratio, bb_pos, close.
+                       If None, no boosts are applied (base strength only).
 
     Returns:
-        Score clamped to -100..+100.
+        Score in [-100, +100].
     """
     if not patterns:
         return 0
 
-    # Check level proximity for boost
-    near_level = False
-    if indicators:
-        close = indicators.get("close") or indicators.get("ema_9")
-        bb_upper = indicators.get("bb_upper")
-        bb_lower = indicators.get("bb_lower")
-        ema_21 = indicators.get("ema_21")
-        ema_50 = indicators.get("ema_50")
+    # When no context is provided, use neutral defaults (no boosts applied)
+    if indicator_ctx is None:
+        indicator_ctx = {"adx": 0, "di_plus": 0, "di_minus": 0, "vol_ratio": 1.0, "bb_pos": 0.5, "close": 0}
 
-        if close and bb_lower and bb_upper:
-            bb_range = bb_upper - bb_lower
-            if bb_range > 0:
-                bb_pos = (close - bb_lower) / bb_range
-                if bb_pos < 0.15 or bb_pos > 0.85:
-                    near_level = True
+    adx = indicator_ctx["adx"]
+    di_plus = indicator_ctx["di_plus"]
+    di_minus = indicator_ctx["di_minus"]
+    vol_ratio = indicator_ctx["vol_ratio"]
+    bb_pos = indicator_ctx["bb_pos"]
 
-        if close and ema_21:
-            if abs(close - ema_21) / close < 0.005:
-                near_level = True
+    # Determine ADX trend direction
+    adx_bullish = di_plus > di_minus
 
-        if close and ema_50:
-            if abs(close - ema_50) / close < 0.005:
-                near_level = True
-
-    multiplier = 1.5 if near_level else 1.0
-    score = 0.0
+    total = 0.0
 
     for p in patterns:
-        strength = p["strength"] * multiplier
-        if p["bias"] == "bullish":
-            score += strength
-        elif p["bias"] == "bearish":
-            score -= strength
-        # neutral patterns don't add to directional score
+        bias = p.get("bias", "neutral")
+        strength = p.get("strength", 0)
 
-    return max(min(round(score), 100), -100)
+        if bias == "neutral":
+            continue
+
+        # Trend-alignment boost
+        trend_boost = 1.0
+        if adx >= 15:
+            pattern_bullish = bias == "bullish"
+            if pattern_bullish != adx_bullish:
+                # Reversal signal
+                trend_boost = 1.3
+            elif adx >= 30:
+                # Continuation with strong trend
+                trend_boost = 1.2
+
+        # Volume confirmation boost
+        vol_boost = 1.0
+        if vol_ratio > 1.5:
+            vol_boost = 1.3
+        elif vol_ratio > 1.2:
+            vol_boost = 1.15
+
+        # Level-proximity boost (continuous, min 1.0)
+        raw_level_boost = 0.5 * sigmoid_score(
+            abs(bb_pos - 0.5) - 0.3, center=0, steepness=10
+        )
+        level_boost = 1.0 + max(0, raw_level_boost)
+
+        boosted_strength = strength * trend_boost * vol_boost * level_boost
+
+        if bias == "bullish":
+            total += boosted_strength
+        else:  # bearish
+            total -= boosted_strength
+
+    return max(min(round(total), 100), -100)

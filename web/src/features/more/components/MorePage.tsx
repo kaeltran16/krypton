@@ -7,6 +7,8 @@ import { api, type RiskSettings } from "../../../shared/lib/api";
 import type { Timeframe } from "../../signals/types";
 import { BacktestView } from "../../backtest/components/BacktestView";
 import { MLTrainingView } from "../../ml/components/MLTrainingView";
+import { AlertsPage } from "../../alerts/components/AlertsPage";
+import { QuietHoursSettings } from "../../alerts/components/QuietHoursSettings";
 
 const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h"];
 
@@ -28,6 +30,7 @@ export function MorePage() {
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "error">("idle");
   const [showBacktest, setShowBacktest] = useState(false);
   const [showMLTraining, setShowMLTraining] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   async function handleNotificationToggle(enabled: boolean) {
     setNotificationsEnabled(enabled);
@@ -39,6 +42,10 @@ export function MorePage() {
     } else {
       await unsubscribeFromPush();
     }
+  }
+
+  if (showAlerts) {
+    return <AlertsPage onBack={() => setShowAlerts(false)} />;
   }
 
   if (showBacktest) {
@@ -92,6 +99,19 @@ export function MorePage() {
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowAlerts(true)}
+            className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
+          >
+            <div>
+              <span className="text-sm font-medium">Alerts</span>
+              <p className="text-[10px] text-dim mt-0.5">Configure price, signal, indicator & portfolio alerts</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
           </button>
         </div>
@@ -162,7 +182,7 @@ export function MorePage() {
 
       {/* NOTIFICATIONS */}
       <SettingsGroup title="Notifications">
-        <div className="px-3 py-3 flex items-center justify-between">
+        <div className="px-3 py-3 border-b border-border flex items-center justify-between">
           <div>
             <span className="text-sm">Push Notifications</span>
             {pushStatus === "error" && (
@@ -176,6 +196,9 @@ export function MorePage() {
             onChange={(e) => handleNotificationToggle(e.target.checked)}
             className="accent-accent w-4 h-4"
           />
+        </div>
+        <div className="px-3 py-3">
+          <QuietHoursSettings />
         </div>
       </SettingsGroup>
 

@@ -9,14 +9,31 @@ self.addEventListener("push", (event) => {
   if (!event.data) return;
 
   const data = event.data.json();
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
+
+  let title: string;
+  let options: NotificationOptions;
+
+  if (data.type === "alert") {
+    const urgencyPrefix = data.urgency === "critical" ? "[CRITICAL] " : "";
+    title = `${urgencyPrefix}Alert`;
+    options = {
+      body: `${data.label} — Value: ${data.trigger_value}`,
+      icon: "/icon-192.png",
+      tag: `alert-${data.alert_id}`,
+      requireInteraction: data.urgency === "critical",
+      data: { url: "/" },
+    };
+  } else {
+    title = data.title ?? "Krypton";
+    options = {
+      body: data.body ?? "",
       icon: "/icon-192.png",
       badge: "/icon-192.png",
       data: { url: data.url || "/" },
-    }),
-  );
+    };
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener("notificationclick", (event) => {

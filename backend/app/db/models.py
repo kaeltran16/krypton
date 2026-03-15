@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -209,3 +210,64 @@ class BacktestRun(Base):
     date_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     date_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     results: Mapped[dict | None] = mapped_column(JSONB)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    type: Mapped[str] = mapped_column(String(16), nullable=False)  # price, signal, indicator, portfolio
+    label: Mapped[str] = mapped_column(String(128), nullable=False)
+    pair: Mapped[str | None] = mapped_column(String(32))
+    timeframe: Mapped[str | None] = mapped_column(String(8))
+    condition: Mapped[str | None] = mapped_column(String(32))  # crosses_above, crosses_below, pct_move, gt, lt
+    threshold: Mapped[float | None] = mapped_column(Float)
+    secondary_threshold: Mapped[float | None] = mapped_column(Float)  # pct_move window in minutes
+    filters: Mapped[dict | None] = mapped_column(JSONB)  # signal type filters
+    peak_value: Mapped[float | None] = mapped_column(Float)  # portfolio drawdown peak
+    urgency: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")  # critical, normal, silent
+    cooldown_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_one_shot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        Index("ix_alert_type_active", "type", "is_active"),
+    )
+
+
+class AlertHistory(Base):
+    __tablename__ = "alert_history"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    alert_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("alerts.id", ondelete="CASCADE"), nullable=False)
+    triggered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    trigger_value: Mapped[float] = mapped_column(Float, nullable=False)
+    delivery_status: Mapped[str] = mapped_column(String(32), nullable=False)  # delivered, failed, silenced_by_cooldown, silenced_by_quiet_hours
+
+    __table_args__ = (
+        Index("ix_alert_history_alert_triggered", "alert_id", "triggered_at"),
+    )
+
+
+class AlertSettings(Base):
+    __tablename__ = "alert_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    quiet_hours_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    quiet_hours_start: Mapped[str] = mapped_column(String(5), nullable=False, default="22:00")
+    quiet_hours_end: Mapped[str] = mapped_column(String(5), nullable=False, default="08:00")
+    quiet_hours_tz: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_alert_settings_singleton"),
+    )
