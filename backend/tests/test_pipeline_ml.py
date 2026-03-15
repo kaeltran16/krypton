@@ -50,6 +50,7 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     app.state.db.session_factory = MagicMock(return_value=AsyncMock())
     app.state.okx_client = None
     app.state.ml_predictors = ml_predictors or {}
+    app.state.tracker = None
 
     redis = AsyncMock()
     redis.lrange.return_value = _make_candle_list()

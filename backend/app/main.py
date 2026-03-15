@@ -30,7 +30,7 @@ from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
-from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels, blend_with_ml, compute_agreement
+from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
@@ -488,6 +488,21 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # ── Step 9: Calculate levels ──
     atr = tech_result["indicators"].get("atr", 200)
+    bb_width_pct = tech_result["indicators"].get("bb_width_pct", 50.0)
+
+    # Phase 1: signal strength + volatility scaling
+    # Phase 2 learned base multipliers are fetched from tracker if available,
+    # otherwise defaults (1.5/2.0/3.0) are used.
+    sl_base, tp1_base, tp2_base = 1.5, 2.0, 3.0
+    tracker = getattr(app.state, "tracker", None)
+    if tracker is not None:
+        sl_base, tp1_base, tp2_base = await tracker.get_multipliers(pair, timeframe)
+
+    scaled = scale_atr_multipliers(
+        score=final, bb_width_pct=bb_width_pct,
+        sl_base=sl_base, tp1_base=tp1_base, tp2_base=tp2_base,
+        signal_threshold=settings.engine_signal_threshold,
+    )
 
     llm_levels = None
     if llm_response and llm_response.opinion != "contradict" and llm_response.levels:
@@ -500,10 +515,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
         and ml_confidence is not None
         and ml_confidence >= settings.ml_confidence_threshold
     ):
+        # Phase 1 scaling applies to ML multiples too
         ml_atr_multiples = {
-            "sl_atr": ml_prediction["sl_atr"],
-            "tp1_atr": ml_prediction["tp1_atr"],
-            "tp2_atr": ml_prediction["tp2_atr"],
+            "sl_atr": ml_prediction["sl_atr"] * scaled["sl_strength_factor"] * scaled["vol_factor"],
+            "tp1_atr": ml_prediction["tp1_atr"] * scaled["tp_strength_factor"] * scaled["vol_factor"],
+            "tp2_atr": ml_prediction["tp2_atr"] * scaled["tp_strength_factor"] * scaled["vol_factor"],
         }
 
     levels = calculate_levels(
@@ -518,6 +534,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
         tp2_max_atr=settings.ml_tp2_max_atr,
         rr_floor=settings.ml_rr_floor,
         caution_sl_factor=settings.llm_caution_sl_factor,
+        sl_atr_default=scaled["sl_atr"],
+        tp1_atr_default=scaled["tp1_atr"],
+        tp2_atr_default=scaled["tp2_atr"],
     )
 
     signal_data = {
@@ -536,6 +555,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "ml_confidence": ml_confidence,
             "blended_score": blended,
             "indicator_preliminary": indicator_preliminary,
+            "effective_sl_atr": scaled["sl_atr"],
+            "effective_tp1_atr": scaled["tp1_atr"],
+            "effective_tp2_atr": scaled["tp2_atr"],
+            "sl_strength_factor": scaled["sl_strength_factor"],
+            "tp_strength_factor": scaled["tp_strength_factor"],
+            "vol_factor": scaled["vol_factor"],
+            "levels_source": levels["levels_source"],
         },
         "detected_patterns": detected_patterns or None,
     }
@@ -664,6 +690,7 @@ async def check_pending_signals(app: FastAPI):
             select(Signal).where(Signal.outcome == "PENDING").order_by(Signal.created_at.desc()).limit(50)
         )
         pending = result.scalars().all()
+        resolved_pairs_timeframes: set[tuple[str, str]] = set()
 
         for signal in pending:
             # Check expiry (24h)
@@ -672,6 +699,7 @@ async def check_pending_signals(app: FastAPI):
                 signal.outcome = "EXPIRED"
                 signal.outcome_at = datetime.now(timezone.utc)
                 signal.outcome_duration_minutes = round(age / 60)
+                resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
                 continue
 
             cache_key = f"candles:{signal.pair}:{signal.timeframe}"
@@ -713,8 +741,17 @@ async def check_pending_signals(app: FastAPI):
                 signal.outcome_at = outcome["outcome_at"]
                 signal.outcome_pnl_pct = outcome["outcome_pnl_pct"]
                 signal.outcome_duration_minutes = outcome["outcome_duration_minutes"]
+                resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
 
         await session.commit()
+
+        # Phase 2: check optimization triggers after batch resolution
+        tracker = getattr(app.state, "tracker", None)
+        if resolved_pairs_timeframes and tracker is not None:
+            async with db.session_factory() as trigger_session:
+                await tracker.check_optimization_triggers(
+                    trigger_session, resolved_pairs_timeframes
+                )
 
 
 OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H"}
@@ -791,6 +828,14 @@ async def lifespan(app: FastAPI):
     app.state.order_flow = {}
     app.state.pipeline_tasks = set()
     app.state.pipeline_settings_lock = asyncio.Lock()
+
+    from app.engine.performance_tracker import PerformanceTracker
+    app.state.tracker = PerformanceTracker(db.session_factory)
+
+    try:
+        await app.state.tracker.bootstrap_from_backtests()
+    except Exception as e:
+        logger.warning("Tracker bootstrap failed: %s", e)
 
     # Load PipelineSettings from DB and patch onto in-memory settings
     _db_to_settings = {

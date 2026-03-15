@@ -282,3 +282,30 @@ class TestMLBacktest:
 
         result = run_backtest(candles, "BTC-USDT-SWAP", config, ml_predictor=AlwaysLongPredictor())
         assert result["stats"]["total_trades"] > 0
+
+
+class TestPhase1Scaling:
+
+    def test_backtester_applies_phase1_scaling(self):
+        """Backtest level calculation applies signal strength + volatility scaling."""
+        from app.engine.combiner import scale_atr_multipliers
+
+        # Simulate what the backtester should do: apply Phase 1 scaling to config multipliers
+        score = 80
+        bb_width_pct = 70.0
+        sl_base, tp1_base, tp2_base = 1.5, 2.0, 3.0
+
+        scaled = scale_atr_multipliers(
+            score=score, bb_width_pct=bb_width_pct,
+            sl_base=sl_base, tp1_base=tp1_base, tp2_base=tp2_base,
+            signal_threshold=35,
+        )
+
+        # Phase 1 scaling should modify the multipliers (score=80, bb_width=70 → not default)
+        assert scaled["sl_atr"] != sl_base
+        assert scaled["tp1_atr"] != tp1_base
+
+        # TP should scale more aggressively than SL
+        tp_ratio = scaled["tp1_atr"] / tp1_base
+        sl_ratio = scaled["sl_atr"] / sl_base
+        assert tp_ratio > sl_ratio

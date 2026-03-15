@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.auth import require_settings_api_key
-from app.db.models import Signal
+from app.db.models import Signal, PerformanceTrackerRow
+from app.engine.performance_tracker import DEFAULT_SL, DEFAULT_TP1, DEFAULT_TP2
 from app.engine.combiner import (
     calculate_levels,
     compute_final_score,
@@ -525,5 +526,55 @@ def create_router() -> APIRouter:
         await persist_signal(db, signal_data)
         await manager.broadcast(signal_data)
         return signal_data
+
+    @router.get("/engine/tuning")
+    async def get_tuning(request: Request, _key: str = auth):
+        db = request.app.state.db
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(PerformanceTrackerRow).order_by(
+                    PerformanceTrackerRow.pair, PerformanceTrackerRow.timeframe
+                )
+            )
+            rows = result.scalars().all()
+            return [
+                {
+                    "pair": r.pair,
+                    "timeframe": r.timeframe,
+                    "current_sl_atr": r.current_sl_atr,
+                    "current_tp1_atr": r.current_tp1_atr,
+                    "current_tp2_atr": r.current_tp2_atr,
+                    "last_optimized_at": r.last_optimized_at.isoformat() if r.last_optimized_at else None,
+                    "last_optimized_count": r.last_optimized_count,
+                }
+                for r in rows
+            ]
+
+    class TuningResetRequest(BaseModel):
+        pair: str
+        timeframe: str
+
+    @router.post("/engine/tuning/reset")
+    async def reset_tuning(request: Request, body: TuningResetRequest, _key: str = auth):
+        db = request.app.state.db
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(PerformanceTrackerRow).where(
+                    PerformanceTrackerRow.pair == body.pair,
+                    PerformanceTrackerRow.timeframe == body.timeframe,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                raise HTTPException(404, f"No tracker row for {body.pair}/{body.timeframe}")
+
+            row.current_sl_atr = DEFAULT_SL
+            row.current_tp1_atr = DEFAULT_TP1
+            row.current_tp2_atr = DEFAULT_TP2
+            row.last_optimized_count = 0
+            row.last_optimized_at = None
+            row.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            return {"status": "reset", "pair": body.pair, "timeframe": body.timeframe}
 
     return router

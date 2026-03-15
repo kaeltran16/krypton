@@ -11,7 +11,7 @@ import pandas as pd
 
 from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
-from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels
+from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
 
 logger = logging.getLogger(__name__)
 
@@ -150,14 +150,27 @@ def run_backtest(
             continue
 
         price = float(current["close"])
+        bb_width_pct = tech_result["indicators"].get("bb_width_pct", 50.0)
+
+        # Phase 1: apply signal strength + volatility scaling to config multipliers
+        # Phase 2 learned multipliers are NOT used in backtests — backtests use
+        # whatever ATR multipliers are passed in the request config
+        scaled = scale_atr_multipliers(
+            score=score, bb_width_pct=bb_width_pct,
+            sl_base=config.sl_atr_multiplier,
+            tp1_base=config.tp1_atr_multiplier,
+            tp2_base=config.tp2_atr_multiplier,
+            signal_threshold=config.signal_threshold,
+        )
+
         if direction == "LONG":
-            sl = price - config.sl_atr_multiplier * atr
-            tp1 = price + config.tp1_atr_multiplier * atr
-            tp2 = price + config.tp2_atr_multiplier * atr
+            sl = price - scaled["sl_atr"] * atr
+            tp1 = price + scaled["tp1_atr"] * atr
+            tp2 = price + scaled["tp2_atr"] * atr
         else:
-            sl = price + config.sl_atr_multiplier * atr
-            tp1 = price - config.tp1_atr_multiplier * atr
-            tp2 = price - config.tp2_atr_multiplier * atr
+            sl = price + scaled["sl_atr"] * atr
+            tp1 = price - scaled["tp1_atr"] * atr
+            tp2 = price - scaled["tp2_atr"] * atr
 
         # Enforce max concurrent positions
         if len(open_positions) >= config.max_concurrent_positions:

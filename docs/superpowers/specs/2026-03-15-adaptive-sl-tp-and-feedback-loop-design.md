@@ -86,6 +86,8 @@ Phase 1 scaling and Phase 2 learned multipliers only apply to **Path 3**. Phase 
 
 Store which path was used in `raw_indicators` as `levels_source`: `"llm"`, `"ml"`, or `"atr_default"`. Signals with `levels_source = "llm"` are **excluded** from the Phase 2 optimization window, since their levels were not derived from ATR multipliers and replaying them is meaningless.
 
+**Backwards compatibility:** Existing signals have no `levels_source` field. Phase 2 queries must treat `levels_source IS NULL` or missing as `"atr_default"` — no backfill migration needed.
+
 ---
 
 ## Phase 2: Rolling Performance Tracker (Data-Driven)
@@ -137,7 +139,10 @@ Total: 25 evaluations on 100 data points — no overfitting risk.
 For each candidate multiplier value, replay all 100 signals in the window:
 
 1. From each signal row, read: `entry` (price), `direction`, `raw_indicators.atr`, `raw_indicators.effective_sl_atr` / `effective_tp1_atr` / `effective_tp2_atr` (Phase 1 scaling factors, stored for auditability), `created_at`, `outcome_at`
-2. Re-derive SL/TP levels using the candidate multiplier. For the dimension being swept, compute `candidate_base * sl_strength_factor * vol_factor` (or `tp_strength_factor` for TP dimensions) using the Phase 1 factors stored on the signal. For the other two dimensions, use the stored `effective_*_atr` values as-is (Phase 1 scaling is already incorporated in those values)
+2. Re-derive SL/TP levels using the candidate multiplier. For the dimension being swept, compute `candidate_base * sl_strength_factor * vol_factor` (or `tp_strength_factor` for TP dimensions) using the Phase 1 factors stored on the signal. For the other two dimensions, use the stored `effective_*_atr` values as-is (Phase 1 scaling is already incorporated in those values).
+
+   **Counterfactual note:** This intentionally evaluates "what if we changed dimension X while keeping Y and Z exactly as deployed?" — not "what if we used current base multipliers for Y and Z." The stored effective values reflect the actual deployment context (including whichever Phase 2 base was active at signal time), which is the correct counterfactual for 1D optimization. Code should comment this clearly.
+
 3. Fetch candle data from **Postgres** (not Redis) for the signal's lifetime:
    ```sql
    SELECT high, low, timestamp FROM candles
@@ -146,6 +151,9 @@ For each candidate multiplier value, replay all 100 signals in the window:
    ORDER BY timestamp
    ```
    Batch this query for all 100 signals to avoid N+1
+
+   **Data integrity:** If a signal's candle data is incomplete (e.g., candles were purged or the pair was recently added), the replay may produce a different outcome than what actually occurred. Before including a signal in the replay window, verify that replaying the *current* (non-swept) multipliers reproduces the stored actual outcome. Skip signals where the replay diverges — they have unreliable candle coverage.
+
 4. Check candle highs/lows against the re-derived SL/TP levels using the same resolution logic as `outcome_resolver.py`
 5. Compute PnL for each replayed trade
 6. Compute Sortino ratio across all 100 replayed outcomes
@@ -171,6 +179,8 @@ Pick the candidate that maximizes Sortino ratio.
 - Changes exceeding max adjustment: clamped to max, flagged in logs
 - Changes breaking R:R floor: TP1 is clamped upward to maintain `tp1_atr >= sl_atr * rr_floor` (matches existing `calculate_levels()` behavior)
 
+**Note:** These guardrails are intentionally stricter than `calculate_levels()` bounds (`sl_bounds=(0.5, 3.0)`, `tp2_max_atr=8.0`). The optimizer operates within a conservative subset; the level calculator's wider bounds accommodate Phase 1 scaling and ML overrides.
+
 **Logging payload for each auto-adjustment:**
 - Pair, timeframe, dimension adjusted (SL/TP1/TP2)
 - Old multiplier → new multiplier
@@ -183,6 +193,8 @@ Pick the candidate that maximizes Sortino ratio.
 On first deployment, `tracker.bootstrap_from_backtests()` copies the ATR multiplier config from the best completed backtest per pair/timeframe (selected by profit factor). It does not re-optimize — it reads `sl_atr_multiplier`, `tp1_atr_multiplier`, `tp2_atr_multiplier` from the `backtest_runs.config` JSONB and uses those as starting learned values.
 
 Note: backtest trade dicts do not store ATR or `raw_indicators`, so full replay optimization is not possible from backtest data alone. The bootstrap provides a reasonable starting point; actual optimization begins once enough live signals resolve.
+
+**No-backtest handling:** If no completed backtest exists for a given pair/timeframe, skip it — the tracker will return defaults (1.5/2.0/3.0) when no row exists. Log which pair/timeframes were left at defaults so the absence is visible.
 
 ---
 
@@ -206,12 +218,16 @@ run_pipeline()
 check_pending_signals()
   ├── resolve_signal_outcome() → unchanged
   │
-  └── NEW: tracker.on_signal_resolved(pair, timeframe)
-        ├── query live resolved_count from signals table (excluding levels_source="llm")
+  └── NEW: after all signals in the batch are resolved, call
+        tracker.check_optimization_triggers(resolved_pairs_timeframes)
+        for each unique (pair, timeframe) that had a resolution in this cycle:
+        ├── query live resolved_count from signals table
+        │     (excluding levels_source="llm" and treating NULL as "atr_default")
         ├── if count >= 40 and (count - last_optimized_count) >= 10:
-        │     schedule optimization as background task (asyncio.create_task)
-        │     to avoid blocking the outcome resolution loop
-        │     update last_optimized_count = count
+        │     update last_optimized_count = count (commit immediately,
+        │     before scheduling — prevents re-trigger from same batch)
+        │     schedule optimization as asyncio.create_task wrapped in
+        │     try/except that logs full traceback on failure
         └── log/flag adjustment
 ```
 

@@ -271,3 +271,23 @@ class AlertSettings(Base):
     __table_args__ = (
         CheckConstraint("id = 1", name="ck_alert_settings_singleton"),
     )
+
+
+class PerformanceTrackerRow(Base):
+    __tablename__ = "performance_tracker"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pair: Mapped[str] = mapped_column(String(32), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    current_sl_atr: Mapped[float] = mapped_column(Float, nullable=False, default=1.5)
+    current_tp1_atr: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
+    current_tp2_atr: Mapped[float] = mapped_column(Float, nullable=False, default=3.0)
+    last_optimized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_optimized_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("pair", "timeframe", name="uq_tracker_pair_timeframe"),
+    )

@@ -6,6 +6,7 @@ from app.engine.combiner import (
     calculate_levels,
     blend_with_ml,
     compute_agreement,
+    scale_atr_multipliers,
 )
 
 
@@ -223,7 +224,7 @@ def test_calculate_levels_llm_override():
         llm_levels=llm_levels,
         ml_atr_multiples={"sl_atr": 1.0, "tp1_atr": 1.5, "tp2_atr": 2.5},
     )
-    assert levels == llm_levels
+    assert levels == {**llm_levels, "levels_source": "llm"}
 
 
 def test_calculate_levels_rejects_invalid_llm_levels():
@@ -376,3 +377,199 @@ def test_calculate_levels_ml_short_direction():
     assert levels["stop_loss"] == 67000.0 + 1.5 * 200.0
     assert levels["take_profit_1"] == 67000.0 - 2.0 * 200.0
     assert levels["take_profit_2"] == 67000.0 - 3.0 * 200.0
+
+
+# ── scale_atr_multipliers ──
+
+
+def test_scale_at_threshold_minimum():
+    """Score exactly at threshold -> t=0 -> all factors = 0.8."""
+    result = scale_atr_multipliers(
+        score=35, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+        signal_threshold=35,
+    )
+    # t=0 -> sl_strength=0.8, tp_strength=0.8, vol_factor=1.0 (50th pct)
+    assert result["sl_strength_factor"] == 0.8
+    assert result["tp_strength_factor"] == 0.8
+    assert result["vol_factor"] == 1.0
+    assert round(result["sl_atr"], 4) == round(1.5 * 0.8 * 1.0, 4)
+    assert round(result["tp1_atr"], 4) == round(2.0 * 0.8 * 1.0, 4)
+    assert round(result["tp2_atr"], 4) == round(3.0 * 0.8 * 1.0, 4)
+
+
+def test_scale_at_max_score():
+    """Score=100 -> t=1.0 -> sl_strength=1.2, tp_strength=1.4."""
+    result = scale_atr_multipliers(
+        score=100, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+        signal_threshold=35,
+    )
+    assert result["sl_strength_factor"] == 1.2
+    assert result["tp_strength_factor"] == 1.4
+    assert result["vol_factor"] == 1.0
+
+
+def test_scale_negative_score_uses_abs():
+    """Negative score uses abs(score) for t calculation."""
+    pos = scale_atr_multipliers(
+        score=65, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    neg = scale_atr_multipliers(
+        score=-65, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    assert pos["sl_strength_factor"] == neg["sl_strength_factor"]
+    assert pos["tp_strength_factor"] == neg["tp_strength_factor"]
+
+
+def test_scale_volatility_squeeze():
+    """Low BB width pct -> vol_factor < 1.0 (tighter levels)."""
+    result = scale_atr_multipliers(
+        score=50, bb_width_pct=10.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    assert result["vol_factor"] == 0.8
+    assert result["vol_factor"] < 1.0
+
+
+def test_scale_volatility_expansion():
+    """High BB width pct -> vol_factor > 1.0 (wider levels)."""
+    result = scale_atr_multipliers(
+        score=50, bb_width_pct=90.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    assert result["vol_factor"] > 1.0
+
+
+def test_scale_combined_effect():
+    """Strong signal + high vol -> levels significantly wider."""
+    result = scale_atr_multipliers(
+        score=80, bb_width_pct=80.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+        signal_threshold=35,
+    )
+    # Should be noticeably larger than base
+    assert result["sl_atr"] > 1.5
+    assert result["tp1_atr"] > 2.0
+    assert result["tp2_atr"] > 3.0
+    # TP strength scales faster than SL strength
+    tp_ratio = result["tp1_atr"] / 2.0
+    sl_ratio = result["sl_atr"] / 1.5
+    assert tp_ratio > sl_ratio
+
+
+def test_scale_returns_all_keys():
+    """Return dict has all expected keys."""
+    result = scale_atr_multipliers(
+        score=50, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    expected_keys = {"sl_atr", "tp1_atr", "tp2_atr", "sl_strength_factor", "tp_strength_factor", "vol_factor"}
+    assert set(result.keys()) == expected_keys
+
+
+def test_scale_below_threshold_clamps_to_zero():
+    """Score below threshold -> t clamped to 0 -> factors = 0.8."""
+    result = scale_atr_multipliers(
+        score=20, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+        signal_threshold=35,
+    )
+    assert result["sl_strength_factor"] == 0.8
+    assert result["tp_strength_factor"] == 0.8
+
+
+def test_scale_threshold_100_no_division_by_zero():
+    """signal_threshold=100 -> t=0, no crash."""
+    result = scale_atr_multipliers(
+        score=100, bb_width_pct=50.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+        signal_threshold=100,
+    )
+    assert result["sl_strength_factor"] == 0.8
+    assert result["tp_strength_factor"] == 0.8
+
+
+def test_scale_bb_width_pct_clamped_high():
+    """bb_width_pct > 100 is clamped to 100 -> vol_factor caps at 1.25."""
+    result = scale_atr_multipliers(
+        score=50, bb_width_pct=150.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    assert result["vol_factor"] == 1.25
+
+
+def test_scale_bb_width_pct_clamped_low():
+    """bb_width_pct < 0 is clamped to 0 -> vol_factor floors at 0.75."""
+    result = scale_atr_multipliers(
+        score=50, bb_width_pct=-10.0,
+        sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
+    )
+    assert result["vol_factor"] == 0.75
+
+
+# ── calculate_levels enhancements ──
+
+
+def test_levels_source_atr_default():
+    """Path 3 returns levels_source='atr_default'."""
+    result = calculate_levels("LONG", 50000.0, 500.0)
+    assert result["levels_source"] == "atr_default"
+
+
+def test_levels_source_ml():
+    """Path 2 returns levels_source='ml'."""
+    result = calculate_levels(
+        "LONG", 50000.0, 500.0,
+        ml_atr_multiples={"sl_atr": 1.5, "tp1_atr": 2.0, "tp2_atr": 3.0},
+    )
+    assert result["levels_source"] == "ml"
+
+
+def test_levels_source_llm():
+    """Path 1 returns levels_source='llm'."""
+    llm = {"entry": 50000.0, "stop_loss": 49000.0, "take_profit_1": 51000.0, "take_profit_2": 52000.0}
+    result = calculate_levels("LONG", 50000.0, 500.0, llm_levels=llm)
+    assert result["levels_source"] == "llm"
+
+
+def test_custom_atr_defaults():
+    """Path 3 uses provided defaults instead of hardcoded 1.5/2.0/3.0."""
+    result = calculate_levels(
+        "LONG", 50000.0, 500.0,
+        sl_atr_default=2.0, tp1_atr_default=3.0, tp2_atr_default=5.0,
+    )
+    assert result["stop_loss"] == 50000.0 - 2.0 * 500.0
+    assert result["take_profit_1"] == 50000.0 + 3.0 * 500.0
+    assert result["take_profit_2"] == 50000.0 + 5.0 * 500.0
+
+
+def test_atr_defaults_clamped_to_bounds():
+    """Path 3 clamps provided defaults to sl_bounds/tp limits."""
+    result = calculate_levels(
+        "LONG", 50000.0, 500.0,
+        sl_atr_default=5.0,  # exceeds sl_bounds max (3.0)
+        tp1_atr_default=0.5,  # below tp1_min_atr (1.0)
+        tp2_atr_default=10.0,  # exceeds tp2_max_atr (8.0)
+    )
+    # SL clamped to 3.0
+    assert result["stop_loss"] == 50000.0 - 3.0 * 500.0
+    # TP1 clamped to 1.0, then rr_floor bumps it to sl(3.0)*rr_floor(1.0) = 3.0
+    assert result["take_profit_1"] == 50000.0 + 3.0 * 500.0
+    # TP2 clamped to 8.0
+    assert result["take_profit_2"] == 50000.0 + 8.0 * 500.0
+
+
+def test_atr_defaults_rr_floor_enforced():
+    """Path 3 enforces R:R floor on provided defaults."""
+    result = calculate_levels(
+        "LONG", 50000.0, 500.0,
+        sl_atr_default=2.5,
+        tp1_atr_default=1.5,  # TP1/SL = 0.6 < rr_floor(1.0)
+        tp2_atr_default=4.0,
+        rr_floor=1.0,
+    )
+    # TP1 should be bumped to sl * rr_floor = 2.5
+    assert result["take_profit_1"] == 50000.0 + 2.5 * 500.0
