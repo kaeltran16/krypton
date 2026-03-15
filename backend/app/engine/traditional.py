@@ -126,19 +126,19 @@ def compute_technical_score(candles: pd.DataFrame) -> dict:
     # === Scoring ===
     # 1. Trend (max ±30)
     di_sign = 1 if di_plus_val > di_minus_val else -1
-    trend_score = di_sign * sigmoid_scale(adx_val, center=20, steepness=0.15) * 30
+    trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=0.30) * 30
 
     # 2. Mean reversion (max ±25)
-    rsi_score = sigmoid_score(50 - rsi_val, center=0, steepness=0.15) * 25
+    rsi_score = sigmoid_score(50 - rsi_val, center=0, steepness=0.25) * 25
 
     # 3. Volatility & position (max ±25)
-    bb_pos_score = sigmoid_score(0.5 - bb_pos, center=0, steepness=6) * 15
+    bb_pos_score = sigmoid_score(0.5 - bb_pos, center=0, steepness=10) * 15
     bb_pos_sign = 1 if bb_pos_score > 0 else (-1 if bb_pos_score < 0 else 0)
-    bb_width_score = bb_pos_sign * sigmoid_score(50 - bb_width_pct, center=0, steepness=0.06) * 10
+    bb_width_score = bb_pos_sign * sigmoid_score(50 - bb_width_pct, center=0, steepness=0.10) * 10
 
     # 4. Volume confirmation (max ±20)
-    obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=2) * 12
-    vol_score = candle_direction * sigmoid_score(vol_ratio - 1, center=0, steepness=1.5) * 8
+    obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * 12
+    vol_score = candle_direction * sigmoid_score(vol_ratio - 1, center=0, steepness=3.0) * 8
 
     total = trend_score + rsi_score + bb_pos_score + bb_width_score + obv_score + vol_score
     score = max(min(round(total), 100), -100)
@@ -168,7 +168,7 @@ def compute_order_flow_score(metrics: dict) -> dict:
     """
     # Funding rate — contrarian (max ±35)
     funding = metrics.get("funding_rate", 0.0)
-    funding_score = sigmoid_score(-funding, center=0, steepness=5000) * 35
+    funding_score = sigmoid_score(-funding, center=0, steepness=8000) * 35
 
     # OI change — direction-aware (max ±20)
     oi_change = metrics.get("open_interest_change_pct", 0.0)
@@ -176,11 +176,11 @@ def compute_order_flow_score(metrics: dict) -> dict:
     if price_dir == 0:
         oi_score = 0.0
     else:
-        oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=40) * 20
+        oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=65) * 20
 
     # L/S ratio — contrarian (max ±35)
     ls = metrics.get("long_short_ratio", 1.0)
-    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=4) * 35
+    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=6) * 35
 
     total = funding_score + oi_score + ls_score
     score = max(min(round(total), 100), -100)

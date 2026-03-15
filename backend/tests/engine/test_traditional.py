@@ -81,10 +81,10 @@ class TestTechnicalScoreContinuity:
         """RSI values in the old dead zone (40-60) should produce non-zero sigmoid contribution."""
         from app.engine.scoring import sigmoid_score
         # RSI=45 is in the old dead zone (40-60 gave 0). New sigmoid should not.
-        rsi_contribution = sigmoid_score(50 - 45, center=0, steepness=0.15) * 25
+        rsi_contribution = sigmoid_score(50 - 45, center=0, steepness=0.25) * 25
         assert rsi_contribution > 0
         # RSI=55 should produce negative contribution
-        rsi_contribution_55 = sigmoid_score(50 - 55, center=0, steepness=0.15) * 25
+        rsi_contribution_55 = sigmoid_score(50 - 55, center=0, steepness=0.25) * 25
         assert rsi_contribution_55 < 0
 
     def test_monotonic_rsi_scoring(self):
@@ -173,3 +173,28 @@ class TestOrderFlowDirectionalOI:
             "price_direction": -1,
         })
         assert result["score"] < 0
+
+
+class TestRecalibratedScoreMagnitude:
+    """Verify recalibrated sigmoid steepness produces expected score ranges."""
+
+    def test_uptrend_produces_nonzero_score(self):
+        """After recalibration, even a weak synthetic uptrend should produce a non-trivial score."""
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        # Synthetic data has weak drift (0.2/candle on base=100), so scores are modest.
+        # Verify recalibrated sigmoid still produces meaningful non-zero output.
+        assert abs(result["score"]) > 5, f"Score {result['score']} too compressed"
+
+    def test_order_flow_score_magnitude(self):
+        """Strong order flow inputs should produce meaningful scores with new steepness."""
+        result = compute_order_flow_score({
+            "funding_rate": -0.0005,  # negative = bullish (contrarian)
+            "open_interest_change_pct": 0.03,
+            "price_direction": 1,
+            "long_short_ratio": 0.8,  # low = bullish (contrarian)
+        })
+        # With recalibrated steepness, this should be a strong bullish flow signal.
+        # Old steepness produces ~54; new produces ~68. Threshold of 55 ensures
+        # this test only passes after recalibration.
+        assert result["score"] > 55, f"Flow score {result['score']} too compressed"
