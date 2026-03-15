@@ -31,3 +31,6 @@ backend/models/
 
 # Claude Code
 .claude/
+
+# Git worktrees
+.worktrees/
