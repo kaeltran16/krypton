@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     collector_rest_poll_interval_seconds: int = 300
 
     # engine
-    engine_signal_threshold: int = 35
-    engine_llm_threshold: int = 25
+    engine_signal_threshold: int = 40
+    engine_llm_threshold: int = 20
     engine_llm_timeout_seconds: int = 30
     engine_traditional_weight: float = 0.40
     engine_flow_weight: float = 0.22

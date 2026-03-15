@@ -26,12 +26,12 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     settings = MagicMock()
     settings.ml_enabled = True
     settings.ml_confidence_threshold = 0.65
-    settings.engine_signal_threshold = 50
+    settings.engine_signal_threshold = 40
     settings.engine_traditional_weight = 0.40
     settings.engine_flow_weight = 0.22
     settings.engine_onchain_weight = 0.23
     settings.engine_pattern_weight = 0.15
-    settings.engine_llm_threshold = 30
+    settings.engine_llm_threshold = 20
     settings.engine_llm_timeout_seconds = 30
     settings.engine_ml_weight = 0.25
     settings.ml_sl_min_atr = 0.5

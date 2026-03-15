@@ -104,7 +104,7 @@ def scale_atr_multipliers(
     sl_base: float,
     tp1_base: float,
     tp2_base: float,
-    signal_threshold: int = 35,
+    signal_threshold: int = 40,
 ) -> dict:
     """Apply signal strength + volatility regime scaling to ATR multipliers.
 

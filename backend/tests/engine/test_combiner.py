@@ -418,9 +418,9 @@ def test_calculate_levels_ml_short_direction():
 def test_scale_at_threshold_minimum():
     """Score exactly at threshold -> t=0 -> all factors = 0.8."""
     result = scale_atr_multipliers(
-        score=35, bb_width_pct=50.0,
+        score=40, bb_width_pct=50.0,
         sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
-        signal_threshold=35,
+        signal_threshold=40,
     )
     # t=0 -> sl_strength=0.8, tp_strength=0.8, vol_factor=1.0 (50th pct)
     assert result["sl_strength_factor"] == 0.8
@@ -436,7 +436,7 @@ def test_scale_at_max_score():
     result = scale_atr_multipliers(
         score=100, bb_width_pct=50.0,
         sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
-        signal_threshold=35,
+        signal_threshold=40,
     )
     assert result["sl_strength_factor"] == 1.2
     assert result["tp_strength_factor"] == 1.4
@@ -481,7 +481,7 @@ def test_scale_combined_effect():
     result = scale_atr_multipliers(
         score=80, bb_width_pct=80.0,
         sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
-        signal_threshold=35,
+        signal_threshold=40,
     )
     # Should be noticeably larger than base
     assert result["sl_atr"] > 1.5
@@ -508,7 +508,7 @@ def test_scale_below_threshold_clamps_to_zero():
     result = scale_atr_multipliers(
         score=20, bb_width_pct=50.0,
         sl_base=1.5, tp1_base=2.0, tp2_base=3.0,
-        signal_threshold=35,
+        signal_threshold=40,
     )
     assert result["sl_strength_factor"] == 0.8
     assert result["tp_strength_factor"] == 0.8

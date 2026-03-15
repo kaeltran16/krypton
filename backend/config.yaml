@@ -14,11 +14,10 @@ collector:
   rest_poll_interval_seconds: 300
 
 engine:
-  signal_threshold: 50
-  llm_threshold: 30
+  signal_threshold: 40
+  llm_threshold: 20
   llm_timeout_seconds: 30
   traditional_weight: 0.60
-  llm_weight: 0.40
 
 api:
   ws_heartbeat_seconds: 30

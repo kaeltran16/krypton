@@ -52,7 +52,7 @@ const defaultConfig: BacktestConfig = {
   timeframe: "15m",
   date_from: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
   date_to: new Date().toISOString().slice(0, 10),
-  signal_threshold: 30,
+  signal_threshold: 40,
   tech_weight: 75,
   pattern_weight: 25,
   enable_patterns: true,

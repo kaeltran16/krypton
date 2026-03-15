@@ -35,7 +35,7 @@ class RunRequest(BaseModel):
     timeframe: str
     date_from: str
     date_to: str
-    signal_threshold: int = Field(default=50, ge=1, le=100)
+    signal_threshold: int = Field(default=40, ge=1, le=100)
     tech_weight: float = Field(default=0.75, ge=0, le=1)
     pattern_weight: float = Field(default=0.25, ge=0, le=1)
     enable_patterns: bool = True

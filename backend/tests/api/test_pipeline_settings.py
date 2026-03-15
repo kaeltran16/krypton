@@ -21,7 +21,7 @@ def _make_pipeline_settings_row(**overrides):
     row.id = 1
     row.pairs = overrides.get("pairs", ["BTC-USDT-SWAP", "ETH-USDT-SWAP"])
     row.timeframes = overrides.get("timeframes", ["15m", "1h", "4h"])
-    row.signal_threshold = overrides.get("signal_threshold", 50)
+    row.signal_threshold = overrides.get("signal_threshold", 40)
     row.onchain_enabled = overrides.get("onchain_enabled", True)
     row.news_alerts_enabled = overrides.get("news_alerts_enabled", True)
     row.news_context_window = overrides.get("news_context_window", 30)
@@ -54,7 +54,7 @@ def app_with_pipeline():
     mock_settings.krypton_api_key = "test-key"
     mock_settings.pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     mock_settings.timeframes = ["15m", "1h", "4h"]
-    mock_settings.engine_signal_threshold = 50
+    mock_settings.engine_signal_threshold = 40
     mock_settings.onchain_enabled = True
     mock_settings.news_high_impact_push_enabled = True
     mock_settings.news_llm_context_window_minutes = 30
@@ -96,7 +96,7 @@ async def test_get_settings_returns_defaults(app_with_pipeline):
     data = resp.json()
     assert data["pairs"] == ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     assert data["timeframes"] == ["15m", "1h", "4h"]
-    assert data["signal_threshold"] == 50
+    assert data["signal_threshold"] == 40
     assert data["onchain_enabled"] is True
     assert data["news_alerts_enabled"] is True
     assert data["news_context_window"] == 30

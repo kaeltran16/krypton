@@ -298,7 +298,7 @@ class TestPhase1Scaling:
         scaled = scale_atr_multipliers(
             score=score, bb_width_pct=bb_width_pct,
             sl_base=sl_base, tp1_base=tp1_base, tp2_base=tp2_base,
-            signal_threshold=35,
+            signal_threshold=40,
         )
 
         # Phase 1 scaling should modify the multipliers (score=80, bb_width=70 → not default)

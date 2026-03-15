@@ -20,7 +20,7 @@ MIN_CANDLES = 70  # minimum candles for reliable indicators
 
 @dataclass
 class BacktestConfig:
-    signal_threshold: int = 35
+    signal_threshold: int = 40  # weights (tech=0.75/pattern=0.25) intentionally differ from live (0.60/0.22/0.23/0.15) — backtester lacks flow/onchain components
     tech_weight: float = 0.75
     pattern_weight: float = 0.25
     enable_patterns: bool = True

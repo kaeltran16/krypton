@@ -157,7 +157,7 @@ class PipelineSettings(Base):
     timeframes: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=["15m", "1h", "4h"]
     )
-    signal_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    signal_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
     onchain_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     news_alerts_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
