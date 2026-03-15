@@ -46,7 +46,11 @@ const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 const recent = signals.filter((s) => new Date(s.created_at).getTime() > cutoff);
 ```
 
-Then apply the existing status filter on `recent` instead of `signals`. This handles signals that were fresh when loaded but have since aged past 24h during a long session.
+Then apply the existing status filter on `recent` instead of `signals`.
+
+Add a 60-second interval timer to force a re-render so that signals that age past 24h are dropped even if no new data arrives. Without this, stale signals would linger until the next render trigger.
+
+Also apply the same 24h cutoff in the `RecentSignals` component on the Home tab, which reads `signals.slice(0, 3)` from the same store.
 
 ### 3. Frontend: API client — pass `since` parameter
 
@@ -63,5 +67,7 @@ Add optional `since` to the params type and pass it as a query parameter. The We
 
 ## Edge cases
 
-- **Empty feed:** If no signals in the last 24h, the existing empty state handles it
+- **Empty feed:** Update the empty state message to "No signals in the last 24 hours" when the 24h filter produces an empty result (vs the current "Waiting for signals..." which implies none were generated)
 - **Timezone:** Backend uses UTC throughout; frontend compares against `Date.now()` which is UTC-based
+- **WebSocket reconnection:** Re-fetches from API, which returns only 24h signals by default — works automatically
+- **Signal outcome updates:** `updateSignal` patches in place without changing `created_at`, so the age filter still works correctly
