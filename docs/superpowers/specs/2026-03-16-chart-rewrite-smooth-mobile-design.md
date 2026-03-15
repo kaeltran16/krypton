@@ -15,7 +15,7 @@ Two issues on mobile:
 
 Keep lightweight-charts v5.1 (correct tool for the job). Rewrite the React integration layer in `CandlestickChart.tsx` with ref-stable architecture and separated effects.
 
-### Architecture: Three isolated effects
+### Architecture: Three separated effects
 
 **Effect 1 — Chart creation** (`[]` deps)
 - Creates the chart instance, candle series, and volume series
@@ -33,12 +33,17 @@ Keep lightweight-charts v5.1 (correct tool for the job). Rewrite the React integ
 - Three paths: `toAdd` (create series + set data), `toRemove` (remove series), `toUpdate` (call `setData()` on existing series)
 - Never touches candle/volume series
 - Preserves time scale visible range across indicator toggles
+- Wrap indicator calculation loop in try/catch to protect chart stability if a calculation throws
+
+**Ordering constraint:** Effects 2 and 3 both fire when `candles` changes. React fires effects in declaration order within the same commit, so Effect 2 (candle data) always runs before Effect 3 (indicators). This ordering is load-bearing — add a code comment to prevent reordering.
+
+**Known limitation:** During streaming, Effect 3 recalculates all enabled indicators on every candle tick. This matches current behavior and is acceptable for MVP. Future optimization: use `update()` on the last indicator data point during streaming instead of full recalculation.
 
 ### Touch & zoom fix
 
 CSS on chart container div:
-- `touch-action: none` — delegates all touch gesture handling to lightweight-charts, removing browser conflicts
-- `overscroll-behavior: none` — prevents pull-to-refresh and scroll chaining during horizontal pan
+- `touch-action: pan-y` — allows native vertical scrolling (so swiping up/down on the chart still scrolls the page) but delegates horizontal pan and pinch-zoom to JavaScript (lightweight-charts). This is the correct value — `touch-action: none` would break vertical page scrolling.
+- `overscroll-behavior: none` — belt-and-suspenders addition to prevent scroll chaining (the body already sets this globally, but explicit on the chart container for clarity)
 
 Chart options remain unchanged:
 - `handleScale: { pinch: true, mouseWheel: true, axisPressedMouseMove: true }`
@@ -48,6 +53,8 @@ Chart options remain unchanged:
 
 In `useChartData.ts`: keep previous candles visible during fetch. Don't clear the candles array when a new timeframe fetch starts — only replace with `setCandles(newData)` on successful response. The chart continues showing stale data (old timeframe) until new data arrives, avoiding the blank flash.
 
+**Loading indicator:** Pass the existing `loading` state (already returned by `useChartData`) into `CandlestickChart` as a prop. When `loading` is true, render a subtle pulsing dot or small spinner overlay in the top-right corner of the chart. This communicates to the user that new data is being fetched while stale data remains visible. The `ChartView.tsx` parent wires this through.
+
 ### Indicator series diffing
 
 Replace the current remove-all/recreate-all pattern with a stable `Map<string, { series: ISeriesApi[], type: 'overlay' | 'oscillator' }>` ref:
@@ -56,7 +63,19 @@ Replace the current remove-all/recreate-all pattern with a stable `Map<string, {
 - **toAdd** (in enabled set, not in map): create series with `chart.addSeries()`, set data, store in map
 - **toUpdate** (in both): call `setData()` on existing series objects — no remove/recreate
 
-Compound indicators (BB, Ichimoku, SuperTrend) use sub-keys (e.g., `bb-upper`, `bb-middle`, `bb-lower`) stored as a group under the parent key.
+For oscillator series (MACD, StochRSI, etc.) that have multiple sub-series, `toUpdate` calls `setData()` on each sub-series by index. This works because the sub-series count per oscillator ID is fixed (e.g., MACD always has 3: histogram, MACD line, signal line).
+
+Compound indicators (BB, Ichimoku, SuperTrend) use a `COMPOUND_INDICATORS` constant map to define parent-to-sub-key relationships:
+```ts
+const COMPOUND_INDICATORS: Record<string, string[]> = {
+  bb: ["bb-upper", "bb-middle", "bb-lower"],
+  supertrend: ["supertrend-up", "supertrend-down"],
+  ichimoku: ["ich-tenkan", "ich-kijun", "ich-senkouA", "ich-senkouB"],
+};
+```
+This replaces the current hardcoded cleanup blocks and makes it maintainable when adding new compound indicators.
+
+**Known limitation:** When all oscillators are disabled, the empty oscillator pane remains visible (lightweight-charts v5.1 has no `removePane()` API). It renders as a small empty area — acceptable for MVP.
 
 ## Files changed
 
@@ -64,11 +83,12 @@ Compound indicators (BB, Ichimoku, SuperTrend) use sub-keys (e.g., `bb-upper`, `
 |------|--------|
 | `web/src/features/chart/components/CandlestickChart.tsx` | Full rewrite — three separated effects, series diffing, stable refs |
 | `web/src/features/chart/hooks/useChartData.ts` | Small tweak — don't clear candles array during timeframe fetch |
+| `web/src/features/chart/components/ChartView.tsx` | Pass `loading` prop from `useChartData` to `CandlestickChart` |
 
 ## What stays the same
 
 - lightweight-charts v5.1 (no library change)
-- `ChartView.tsx` (parent component, no changes)
+- `ChartView.tsx` (parent component, minimal change — only wires `loading` prop through)
 - `IndicatorSheet.tsx` (indicator selection UI, no changes)
 - `indicators.ts` (calculation functions, no changes)
 - All chart options (colors, grid, crosshair, scale config)
