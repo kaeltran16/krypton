@@ -6,10 +6,11 @@ type ChartTimeframe = "15m" | "1h" | "4h" | "1D";
 const OKX_WS_URL = "wss://ws.okx.com:8443/ws/v5/business";
 const OKX_REST_URL = "https://www.okx.com/api/v5/market/candles";
 
-const TF_CHANNEL: Partial<Record<ChartTimeframe, string>> = {
+const TF_CHANNEL: Record<ChartTimeframe, string> = {
   "15m": "candle15m",
   "1h": "candle1H",
   "4h": "candle4H",
+  "1D": "candle1D",
 };
 
 const TF_BAR: Record<ChartTimeframe, string> = {
@@ -19,11 +20,9 @@ const TF_BAR: Record<ChartTimeframe, string> = {
   "1D": "1D",
 };
 
-const MIN_CANDLES = 60;
-
 async function fetchOkxCandles(pair: string, timeframe: ChartTimeframe): Promise<CandleData[]> {
   const bar = TF_BAR[timeframe];
-  const res = await fetch(`${OKX_REST_URL}?instId=${pair}&bar=${bar}&limit=100`);
+  const res = await fetch(`${OKX_REST_URL}?instId=${pair}&bar=${bar}&limit=200`);
   if (!res.ok) return [];
   const json = await res.json();
   if (!json.data || !Array.isArray(json.data)) return [];
@@ -43,30 +42,37 @@ function parseOkxCandle(raw: string[]): CandleData {
   };
 }
 
+export type TickCallback = (candle: CandleData) => void;
+
 export function useChartData(pair: string, timeframe: ChartTimeframe) {
   const [candles, setCandles] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
   const wsRef = useRef<WebSocket | null>(null);
+  /** Called on every WS tick — chart component registers a handler to update series directly */
+  const onTickRef = useRef<TickCallback | null>(null);
 
   const fetchCandles = useCallback(async () => {
     setLoading(true);
     try {
-      const raw = await api.getCandles(pair, timeframe);
-      // Backend returns ISO string timestamps from Redis; normalize to ms
-      const data = raw.map((c) => ({
-        ...c,
-        timestamp: typeof c.timestamp === "number" ? c.timestamp : new Date(c.timestamp as any).getTime(),
-      }));
-      if (data.length >= MIN_CANDLES) {
-        setCandles(data);
+      // Fetch from OKX REST for freshest data (up to 200 candles)
+      const okxData = await fetchOkxCandles(pair, timeframe);
+      if (okxData.length > 0) {
+        setCandles(okxData);
       } else {
-        const okxData = await fetchOkxCandles(pair, timeframe);
-        setCandles(okxData.length > data.length ? okxData : data);
+        // Fall back to backend Redis cache
+        const raw = await api.getCandles(pair, timeframe);
+        setCandles(raw.map((c) => ({
+          ...c,
+          timestamp: typeof c.timestamp === "number" ? c.timestamp : new Date(c.timestamp as any).getTime(),
+        })));
       }
     } catch {
       try {
-        const okxData = await fetchOkxCandles(pair, timeframe);
-        setCandles(okxData);
+        const raw = await api.getCandles(pair, timeframe);
+        setCandles(raw.map((c) => ({
+          ...c,
+          timestamp: typeof c.timestamp === "number" ? c.timestamp : new Date(c.timestamp as any).getTime(),
+        })));
       } catch {
         setCandles([]);
       }
@@ -81,7 +87,6 @@ export function useChartData(pair: string, timeframe: ChartTimeframe) {
 
   useEffect(() => {
     const channel = TF_CHANNEL[timeframe];
-    if (!channel) return;
 
     let ws: WebSocket;
     let reconnectTimer: ReturnType<typeof setTimeout>;
@@ -107,20 +112,26 @@ export function useChartData(pair: string, timeframe: ChartTimeframe) {
             const candle = parseOkxCandle(raw);
             const confirmed = raw[8] === "1";
 
-            setCandles((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              const lastTs = typeof last?.timestamp === "number"
-                ? last.timestamp
-                : new Date(last?.timestamp as any).getTime();
+            // Direct chart update on every tick — bypasses React render
+            onTickRef.current?.(candle);
 
-              if (last && lastTs === candle.timestamp) {
-                updated[updated.length - 1] = candle;
-              } else if (confirmed || (last && candle.timestamp > lastTs)) {
-                updated.push(candle);
-              }
-              return updated;
-            });
+            // React state only updates on confirmed candles (triggers indicator recalc)
+            if (confirmed) {
+              setCandles((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                const lastTs = typeof last?.timestamp === "number"
+                  ? last.timestamp
+                  : new Date(last?.timestamp as any).getTime();
+
+                if (last && lastTs === candle.timestamp) {
+                  updated[updated.length - 1] = candle;
+                } else if (candle.timestamp > lastTs) {
+                  updated.push(candle);
+                }
+                return updated;
+              });
+            }
           }
         } catch { /* ignore malformed */ }
       };
@@ -144,5 +155,5 @@ export function useChartData(pair: string, timeframe: ChartTimeframe) {
     };
   }, [pair, timeframe]);
 
-  return { candles, loading };
+  return { candles, loading, onTickRef };
 }

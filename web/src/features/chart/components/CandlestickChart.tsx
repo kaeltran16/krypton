@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, type MutableRefObject } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -17,6 +17,7 @@ import type {
   ChartOptions,
 } from "lightweight-charts";
 import type { CandleData } from "../../../shared/lib/api";
+import type { TickCallback } from "../hooks/useChartData";
 import { theme } from "../../../shared/theme";
 import { INDICATOR_MAP } from "./IndicatorSheet";
 import {
@@ -43,6 +44,7 @@ interface Props {
   candles: CandleData[];
   enabledIndicators: Set<string>;
   loading?: boolean;
+  onTickRef?: MutableRefObject<TickCallback | null>;
 }
 
 interface SeriesEntry {
@@ -84,7 +86,7 @@ function toTime(ts: number): UTCTimestamp {
   return (ts / 1000) as UTCTimestamp;
 }
 
-export function CandlestickChart({ candles, enabledIndicators, loading }: Props) {
+export function CandlestickChart({ candles, enabledIndicators, loading, onTickRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -151,6 +153,35 @@ export function CandlestickChart({ candles, enabledIndicators, loading }: Props)
       prevPivotHashRef.current = "";
     };
   }, []);
+
+  // ── Effect 1.5: Streaming tick handler ──
+  // Registers a callback on onTickRef that directly updates the chart series
+  // on every WS tick, bypassing React render for smooth real-time updates.
+  useEffect(() => {
+    if (!onTickRef) return;
+    const candleSeries = candleSeriesRef.current;
+    const volSeries = volSeriesRef.current;
+    if (!candleSeries || !volSeries) return;
+
+    onTickRef.current = (candle: CandleData) => {
+      candleSeries.update({
+        time: toTime(candle.timestamp),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      });
+      volSeries.update({
+        time: toTime(candle.timestamp),
+        value: candle.volume,
+        color: candle.close >= candle.open ? theme.chart.volumeUp : theme.chart.volumeDown,
+      });
+    };
+
+    return () => {
+      if (onTickRef) onTickRef.current = null;
+    };
+  }, [onTickRef]);
 
   // ── Effect 2: Candle data ([candles] only) ──
   // Runs BEFORE Effect 3 (indicators) — do not reorder

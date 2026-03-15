@@ -17,7 +17,7 @@ export function ChartView({ pair }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(getStoredIndicators);
   const { price, open24h, high24h, low24h, vol24h, change24h } = useLivePrice(pair);
-  const { candles, loading } = useChartData(pair, timeframe);
+  const { candles, loading, onTickRef } = useChartData(pair, timeframe);
 
   const fullScreen = hasOscillator(enabledIds);
 
@@ -77,7 +77,7 @@ export function ChartView({ pair }: Props) {
       {/* Chart */}
       <div className="flex-1 min-h-0 px-2">
         <div className="w-full h-full rounded-lg overflow-hidden">
-          <CandlestickChart candles={candles} enabledIndicators={enabledIds} loading={loading} />
+          <CandlestickChart candles={candles} enabledIndicators={enabledIds} loading={loading} onTickRef={onTickRef} />
         </div>
       </div>
 
