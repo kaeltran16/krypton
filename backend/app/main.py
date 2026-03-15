@@ -471,7 +471,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     if not emitted:
         return
 
-    # ── Step 9: Calculate levels ──
+    # ── Step 8: Calculate levels ──
     atr = tech_result["indicators"].get("atr", 200)
     bb_width_pct = tech_result["indicators"].get("bb_width_pct", 50.0)
 
