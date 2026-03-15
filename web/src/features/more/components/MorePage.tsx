@@ -23,14 +23,21 @@ function toggleItem<T>(list: T[], item: T, minOne = true): T[] {
 export function MorePage() {
   const {
     pairs, timeframes, threshold, notificationsEnabled, apiBaseUrl,
+    onchainEnabled, newsAlertsEnabled, newsContextWindow,
     loading, syncError,
     setPairs, setTimeframes, setThreshold, setNotificationsEnabled, setApiBaseUrl,
+    setOnchainEnabled, setNewsAlertsEnabled, setNewsContextWindow,
   } = useSettingsStore();
   const connected = useSignalStore((s) => s.connected);
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "error">("idle");
   const [showBacktest, setShowBacktest] = useState(false);
   const [showMLTraining, setShowMLTraining] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  const [mlStatus, setMlStatus] = useState<{ ml_enabled: boolean; loaded_pairs: string[] } | null>(null);
+
+  useEffect(() => {
+    api.getMLStatus().then(setMlStatus).catch(() => {});
+  }, []);
 
   async function handleNotificationToggle(enabled: boolean) {
     setNotificationsEnabled(enabled);
@@ -74,54 +81,43 @@ export function MorePage() {
         </div>
       )}
       {/* TOOLS */}
-      <div>
-        <h2 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Tools</h2>
-        <div className="space-y-2">
-          <button
-            onClick={() => setShowBacktest(true)}
-            className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
-          >
-            <div>
-              <span className="text-sm font-medium">Backtester</span>
-              <p className="text-[10px] text-dim mt-0.5">Test strategies against historical data</p>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowMLTraining(true)}
-            className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
-          >
-            <div>
-              <span className="text-sm font-medium">ML Training</span>
-              <p className="text-[10px] text-dim mt-0.5">Train models on historical data</p>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowAlerts(true)}
-            className="w-full bg-card rounded-lg border border-border px-3 py-3 flex items-center justify-between hover:bg-card-hover transition-colors"
-          >
-            <div>
-              <span className="text-sm font-medium">Alerts</span>
-              <p className="text-[10px] text-dim mt-0.5">Configure price, signal, indicator & portfolio alerts</p>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <SettingsGroup title="Tools">
+        <ToolRow
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M3 3v18h18" /><path d="M7 16l4-6 4 4 5-8" /></svg>}
+          iconBg="bg-accent/15 text-accent"
+          label="Backtester"
+          sub="Test strategies against historical data"
+          onClick={() => setShowBacktest(true)}
+        />
+        <ToolRow
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>}
+          iconBg="bg-purple/15 text-purple"
+          label="ML Training"
+          sub="Train models on historical data"
+          badge={mlStatus ? (
+            <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
+              mlStatus.loaded_pairs.length ? "bg-long/15 text-long" : "bg-border text-muted"
+            }`}>
+              {mlStatus.loaded_pairs.length ? "Ready" : "Inactive"}
+            </span>
+          ) : undefined}
+          onClick={() => setShowMLTraining(true)}
+        />
+        <ToolRow
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>}
+          iconBg="bg-long/15 text-long"
+          label="Alerts"
+          sub="Price, signal & portfolio alerts"
+          onClick={() => setShowAlerts(true)}
+          last
+        />
+      </SettingsGroup>
 
-      {/* TRADING */}
+      {/* TRADING (merged with Data Sources) */}
       <SettingsGroup title="Trading">
         {/* Pairs */}
         <div className="px-3 py-3 border-b border-border">
-          <div className="text-[10px] text-dim uppercase tracking-wider mb-2">Pairs</div>
+          <div className="text-[11px] text-dim uppercase tracking-wider mb-2">Pairs</div>
           <div className="flex gap-1.5">
             {AVAILABLE_PAIRS.map((pair) => (
               <button
@@ -141,7 +137,7 @@ export function MorePage() {
 
         {/* Timeframes */}
         <div className="px-3 py-3 border-b border-border">
-          <div className="text-[10px] text-dim uppercase tracking-wider mb-2">Timeframes</div>
+          <div className="text-[11px] text-dim uppercase tracking-wider mb-2">Timeframes</div>
           <div className="flex gap-1.5">
             {TIMEFRAMES.map((tf) => (
               <button
@@ -160,7 +156,7 @@ export function MorePage() {
         </div>
 
         {/* Threshold */}
-        <div className="px-3 py-3">
+        <div className="px-3 py-3 border-b border-border">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm">Signal Threshold</span>
             <span className="text-sm font-mono text-accent">{threshold}</span>
@@ -173,9 +169,45 @@ export function MorePage() {
             onChange={(e) => setThreshold(Number(e.target.value))}
             className="w-full accent-accent"
           />
-          <div className="flex justify-between text-[10px] text-dim mt-0.5">
+          <div className="flex justify-between text-[11px] text-dim mt-0.5">
             <span>All</span>
             <span>Strong only</span>
+          </div>
+        </div>
+
+        {/* On-Chain Scoring (was Data Sources) */}
+        <div className="px-3 py-3 border-b border-border flex items-center justify-between">
+          <div>
+            <span className="text-sm">On-Chain Scoring</span>
+            <p className="text-[11px] text-dim mt-0.5">Blend exchange flows and whale metrics</p>
+          </div>
+          <Toggle checked={onchainEnabled} onChange={setOnchainEnabled} />
+        </div>
+
+        {/* News Context (was Data Sources) */}
+        <div className="px-3 py-3 border-b border-border flex items-center justify-between">
+          <div>
+            <span className="text-sm">News Alerts</span>
+            <p className="text-[11px] text-dim mt-0.5">Push for high-impact news</p>
+          </div>
+          <Toggle checked={newsAlertsEnabled} onChange={setNewsAlertsEnabled} />
+        </div>
+        <div className="px-3 py-3 flex items-center justify-between">
+          <span className="text-sm">LLM News Window</span>
+          <div className="flex gap-1.5">
+            {[15, 30, 60].map((mins) => (
+              <button
+                key={mins}
+                onClick={() => setNewsContextWindow(mins)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                  newsContextWindow === mins
+                    ? "bg-accent/15 text-accent border border-accent/30"
+                    : "bg-card-hover text-muted"
+                }`}
+              >
+                {mins}m
+              </button>
+            ))}
           </div>
         </div>
       </SettingsGroup>
@@ -189,12 +221,10 @@ export function MorePage() {
               <p className="text-xs text-short mt-0.5">Permission denied</p>
             )}
           </div>
-          <input
-            type="checkbox"
+          <Toggle
             checked={notificationsEnabled}
             disabled={pushStatus === "subscribing"}
-            onChange={(e) => handleNotificationToggle(e.target.checked)}
-            className="accent-accent w-4 h-4"
+            onChange={(v) => handleNotificationToggle(v)}
           />
         </div>
         <div className="px-3 py-3">
@@ -202,10 +232,13 @@ export function MorePage() {
         </div>
       </SettingsGroup>
 
-      {/* CONNECTION */}
-      <SettingsGroup title="Connection">
+      {/* RISK MANAGEMENT */}
+      <RiskManagementSection />
+
+      {/* SYSTEM (merged Connection + About) */}
+      <SettingsGroup title="System">
         <div className="px-3 py-3 border-b border-border">
-          <div className="text-[10px] text-dim uppercase tracking-wider mb-2">API URL</div>
+          <div className="text-[11px] text-dim uppercase tracking-wider mb-2">API URL</div>
           <input
             type="url"
             value={apiBaseUrl}
@@ -213,117 +246,19 @@ export function MorePage() {
             className="w-full p-2.5 bg-card-hover rounded-lg border border-border text-sm font-mono focus:border-accent/50 focus:outline-none"
           />
         </div>
-        <div className="px-3 py-3 flex items-center justify-between">
-          <span className="text-sm">Status</span>
+        <div className="px-3 py-3 border-b border-border flex items-center justify-between">
+          <span className="text-sm">Connection</span>
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${connected ? "bg-long" : "bg-short animate-pulse"}`} />
             <span className="text-sm text-muted">{connected ? "Connected" : "Disconnected"}</span>
           </div>
         </div>
-      </SettingsGroup>
-
-      {/* DATA SOURCES */}
-      <DataSourcesSection />
-
-      {/* ML MODEL */}
-      <MLStatusSection />
-
-      {/* RISK MANAGEMENT */}
-      <RiskManagementSection />
-
-      {/* ABOUT */}
-      <SettingsGroup title="About">
         <div className="px-3 py-3 flex items-center justify-between">
           <span className="text-sm">Version</span>
           <span className="text-sm text-muted font-mono">1.0.0</span>
         </div>
       </SettingsGroup>
     </div>
-  );
-}
-
-function MLStatusSection() {
-  const [status, setStatus] = useState<{ ml_enabled: boolean; loaded_pairs: string[] } | null>(null);
-
-  useEffect(() => {
-    api.getMLStatus().then(setStatus).catch(() => {});
-  }, []);
-
-  return (
-    <SettingsGroup title="ML Model">
-      <div className="px-3 py-3 flex items-center justify-between">
-        <div>
-          <span className="text-sm">Status</span>
-          {status && (
-            <p className="text-[10px] text-dim mt-0.5">
-              {status.loaded_pairs.length > 0
-                ? `Loaded: ${status.loaded_pairs.map((p) => p.replace("_", "-").toUpperCase()).join(", ")}`
-                : "No models trained yet"}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className={`w-2 h-2 rounded-full ${status?.loaded_pairs.length ? "bg-long" : "bg-muted"}`} />
-          <span className="text-sm text-muted">
-            {status?.loaded_pairs.length ? "Ready" : "Inactive"}
-          </span>
-        </div>
-      </div>
-    </SettingsGroup>
-  );
-}
-
-function DataSourcesSection() {
-  const {
-    onchainEnabled, newsAlertsEnabled, newsContextWindow,
-    setOnchainEnabled, setNewsAlertsEnabled, setNewsContextWindow,
-  } = useSettingsStore();
-
-  return (
-    <SettingsGroup title="Data Sources">
-      <div className="px-3 py-3 border-b border-border flex items-center justify-between">
-        <div>
-          <span className="text-sm">On-Chain Scoring</span>
-          <p className="text-[10px] text-dim mt-0.5">Blend exchange flows and whale metrics into signals</p>
-        </div>
-        <input
-          type="checkbox"
-          checked={onchainEnabled}
-          onChange={(e) => setOnchainEnabled(e.target.checked)}
-          className="accent-accent w-4 h-4"
-        />
-      </div>
-      <div className="px-3 py-3 border-b border-border flex items-center justify-between">
-        <div>
-          <span className="text-sm">News Alerts</span>
-          <p className="text-[10px] text-dim mt-0.5">Push notifications for high-impact news</p>
-        </div>
-        <input
-          type="checkbox"
-          checked={newsAlertsEnabled}
-          onChange={(e) => setNewsAlertsEnabled(e.target.checked)}
-          className="accent-accent w-4 h-4"
-        />
-      </div>
-      <div className="px-3 py-3 flex items-center justify-between">
-        <span className="text-sm">LLM News Window</span>
-        <div className="flex gap-1.5">
-          {[15, 30, 60].map((mins) => (
-            <button
-              key={mins}
-              onClick={() => setNewsContextWindow(mins)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
-                newsContextWindow === mins
-                  ? "bg-accent/15 text-accent border border-accent/30"
-                  : "bg-card-hover text-muted"
-              }`}
-            >
-              {mins}m
-            </button>
-          ))}
-        </div>
-      </div>
-    </SettingsGroup>
   );
 }
 
@@ -355,7 +290,7 @@ function RiskManagementSection() {
   if (loading) {
     return (
       <div>
-        <h2 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Risk Management</h2>
+        <h2 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Risk Management</h2>
         <div className="h-32 bg-card rounded-lg animate-pulse border border-border" />
       </div>
     );
@@ -470,10 +405,55 @@ function RiskField({ label, value, options, onSelect, saving }: {
   );
 }
 
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${checked ? "bg-accent" : "bg-border"} ${disabled ? "opacity-50" : ""}`}
+    >
+      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-5" : ""}`} />
+    </button>
+  );
+}
+
+function ToolRow({ icon, iconBg, label, sub, badge, onClick, last }: {
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  sub: string;
+  badge?: React.ReactNode;
+  onClick: () => void;
+  last?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full px-3 py-3 flex items-center gap-3 text-left transition-colors active:bg-card-hover ${last ? "" : "border-b border-border"}`}
+    >
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{label}</span>
+          {badge}
+        </div>
+        <p className="text-[11px] text-dim mt-0.5 truncate">{sub}</p>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted flex-shrink-0">
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+    </button>
+  );
+}
+
 function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">{title}</h2>
+      <h2 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">{title}</h2>
       <div className="bg-card rounded-lg border border-border overflow-hidden">
         {children}
       </div>

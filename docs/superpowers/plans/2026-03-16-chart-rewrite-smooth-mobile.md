@@ -163,6 +163,7 @@ export function CandlestickChart({ candles, enabledIndicators, loading }: Props)
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const prevCandleCountRef = useRef(0);
   const prevFirstTimeRef = useRef<UTCTimestamp | null>(null);
+  const prevPivotHashRef = useRef("");
 
   const enabledKey = useMemo(
     () => [...enabledIndicators].sort().join(","),
@@ -248,6 +249,7 @@ Insert this effect after the `enabledKey` memo. This is identical to the current
       oscPaneCreated.current = false;
       prevCandleCountRef.current = 0;
       prevFirstTimeRef.current = null;
+      prevPivotHashRef.current = "";
     };
   }, []);
 ```
@@ -336,11 +338,14 @@ Insert after Effect 2:
     const candleSeries = candleSeriesRef.current;
     if (!chart || !candleSeries || !candles.length) return;
 
+    // TODO: dedup is also computed in Effect 2 — could lift to useMemo if profiling shows cost
     const deduped = [...new Map(candles.map((c) => [c.timestamp, c])).values()]
       .sort((a, b) => a.timestamp - b.timestamp);
     const closes = deduped.map((c) => c.close);
     const times = deduped.map((c) => toTime(c.timestamp));
 
+    // oscPaneCreated is one-way (never reset to false) because lightweight-charts v5.1
+    // has no removePane() API — the pane persists until chart unmount clears the ref.
     const ensureOscPane = (): number => {
       if (!oscPaneCreated.current) {
         const pane = chart.addPane();
@@ -540,20 +545,25 @@ Continue inside the same effect, after the helper functions:
             break;
           }
           case "pivots": {
-            for (const pl of priceLinesRef.current) candleSeries.removePriceLine(pl);
-            priceLinesRef.current = [];
             const srLevels = detectSupportResistance(deduped);
-            for (const lv of srLevels) {
-              const isSupport = lv.type === "support";
-              const pl = candleSeries.createPriceLine({
-                price: lv.price,
-                color: isSupport ? theme.chart.candleUp : theme.chart.candleDown,
-                lineWidth: lv.strength >= 4 ? 2 : 1,
-                lineStyle: LineStyle.Dashed,
-                axisLabelVisible: true,
-                title: `${isSupport ? "S" : "R"} (${lv.strength})`,
-              });
-              priceLinesRef.current.push(pl);
+            // Hash levels to skip remove/recreate when unchanged (price lines have no setData)
+            const hash = srLevels.map((l) => `${l.type}:${l.price}:${l.strength}`).join("|");
+            if (hash !== prevPivotHashRef.current) {
+              for (const pl of priceLinesRef.current) candleSeries.removePriceLine(pl);
+              priceLinesRef.current = [];
+              for (const lv of srLevels) {
+                const isSupport = lv.type === "support";
+                const pl = candleSeries.createPriceLine({
+                  price: lv.price,
+                  color: isSupport ? theme.chart.candleUp : theme.chart.candleDown,
+                  lineWidth: lv.strength >= 4 ? 2 : 1,
+                  lineStyle: LineStyle.Dashed,
+                  axisLabelVisible: true,
+                  title: `${isSupport ? "S" : "R"} (${lv.strength})`,
+                });
+                priceLinesRef.current.push(pl);
+              }
+              prevPivotHashRef.current = hash;
             }
             break;
           }
@@ -630,6 +640,19 @@ git add web/src/features/chart/components/CandlestickChart.tsx web/src/features/
 git commit -m "feat: rewrite chart component for smooth mobile zoom and indicator toggling"
 ```
 
+### Follow-up: Extract streaming detection for unit testing
+
+The streaming heuristic in Effect 2 (`isStreaming` based on `prevCount`, `firstTime`, `datasetChanged`) is pure logic that could regress silently. Consider extracting to a pure function and adding a Vitest unit test in a follow-up PR:
+
+```ts
+// In a future PR:
+export function detectStreaming(prevCount: number, prevFirstTime: UTCTimestamp | null, mapped: { time: UTCTimestamp }[]): boolean {
+  const firstTime = mapped[0]?.time ?? null;
+  const datasetChanged = prevFirstTime !== firstTime;
+  return prevCount > 0 && !datasetChanged && Math.abs(mapped.length - prevCount) <= 1;
+}
+```
+
 ### Manual Test Checklist (post-deploy)
 
 - [ ] Pinch-to-zoom on mobile feels immediate, no page zoom interference
@@ -639,4 +662,5 @@ git commit -m "feat: rewrite chart component for smooth mobile zoom and indicato
 - [ ] Streaming candle updates animate smoothly (no full chart rebuild)
 - [ ] All 18 indicator types render correctly: EMA(21/50/200), SMA(21/50/200), BB, VWAP, SuperTrend, Parabolic SAR, Ichimoku, Support/Resistance, RSI, MACD, StochRSI, CCI, ATR, ADX, Williams %R, MFI, OBV
 - [ ] Compound indicators (BB, Ichimoku, SuperTrend) clean up all sub-series when disabled
+- [ ] Support/Resistance price lines don't flicker during streaming (hash-based skip)
 - [ ] Empty oscillator pane renders as a small empty area when all oscillators disabled (known limitation)

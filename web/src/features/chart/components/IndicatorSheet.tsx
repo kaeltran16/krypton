@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { theme } from "../../../shared/theme";
 
 export interface IndicatorDef {
   id: string;
@@ -12,41 +13,43 @@ interface IndicatorGroup {
   items: IndicatorDef[];
 }
 
+const ind = theme.indicators;
+
 const INDICATOR_GROUPS: IndicatorGroup[] = [
   {
     label: "Moving Averages",
     items: [
-      { id: "ema21", label: "EMA 21", pane: "overlay", color: "#F0B90B" },
-      { id: "ema50", label: "EMA 50", pane: "overlay", color: "#3B82F6" },
-      { id: "ema200", label: "EMA 200", pane: "overlay", color: "#A855F7" },
-      { id: "sma21", label: "SMA 21", pane: "overlay", color: "#F59E0B" },
-      { id: "sma50", label: "SMA 50", pane: "overlay", color: "#6366F1" },
-      { id: "sma200", label: "SMA 200", pane: "overlay", color: "#EC4899" },
+      { id: "ema21", label: "EMA 21", pane: "overlay", color: ind.ema21 },
+      { id: "ema50", label: "EMA 50", pane: "overlay", color: ind.ema50 },
+      { id: "ema200", label: "EMA 200", pane: "overlay", color: ind.ema200 },
+      { id: "sma21", label: "SMA 21", pane: "overlay", color: ind.sma21 },
+      { id: "sma50", label: "SMA 50", pane: "overlay", color: ind.sma50 },
+      { id: "sma200", label: "SMA 200", pane: "overlay", color: ind.sma200 },
     ],
   },
   {
     label: "Overlays",
     items: [
-      { id: "bb", label: "Bollinger Bands", pane: "overlay", color: "#6B7280" },
-      { id: "vwap", label: "VWAP", pane: "overlay", color: "#F97316" },
-      { id: "ichimoku", label: "Ichimoku Cloud", pane: "overlay", color: "#EF4444" },
-      { id: "supertrend", label: "SuperTrend", pane: "overlay", color: "#10B981" },
-      { id: "psar", label: "Parabolic SAR", pane: "overlay", color: "#8B5CF6" },
-      { id: "pivots", label: "Support / Resistance", pane: "overlay", color: "#14B8A6" },
+      { id: "bb", label: "Bollinger Bands", pane: "overlay", color: ind.bb },
+      { id: "vwap", label: "VWAP", pane: "overlay", color: ind.vwap },
+      { id: "ichimoku", label: "Ichimoku Cloud", pane: "overlay", color: ind.ichKijun },
+      { id: "supertrend", label: "SuperTrend", pane: "overlay", color: ind.supertrend },
+      { id: "psar", label: "Parabolic SAR", pane: "overlay", color: ind.psar },
+      { id: "pivots", label: "Support / Resistance", pane: "overlay", color: ind.pivots },
     ],
   },
   {
     label: "Oscillators",
     items: [
-      { id: "rsi", label: "RSI", pane: "oscillator", color: "#F0B90B" },
-      { id: "macd", label: "MACD", pane: "oscillator", color: "#3B82F6" },
-      { id: "stochrsi", label: "Stochastic RSI", pane: "oscillator", color: "#10B981" },
-      { id: "cci", label: "CCI", pane: "oscillator", color: "#F97316" },
-      { id: "atr", label: "ATR", pane: "oscillator", color: "#EC4899" },
-      { id: "adx", label: "ADX", pane: "oscillator", color: "#8B5CF6" },
-      { id: "willr", label: "Williams %R", pane: "oscillator", color: "#14B8A6" },
-      { id: "mfi", label: "MFI", pane: "oscillator", color: "#EF4444" },
-      { id: "obv", label: "OBV", pane: "oscillator", color: "#6366F1" },
+      { id: "rsi", label: "RSI", pane: "oscillator", color: ind.rsi },
+      { id: "macd", label: "MACD", pane: "oscillator", color: ind.macd },
+      { id: "stochrsi", label: "Stochastic RSI", pane: "oscillator", color: ind.stochK },
+      { id: "cci", label: "CCI", pane: "oscillator", color: ind.cci },
+      { id: "atr", label: "ATR", pane: "oscillator", color: ind.atr },
+      { id: "adx", label: "ADX", pane: "oscillator", color: ind.adx },
+      { id: "willr", label: "Williams %R", pane: "oscillator", color: ind.willr },
+      { id: "mfi", label: "MFI", pane: "oscillator", color: ind.mfi },
+      { id: "obv", label: "OBV", pane: "oscillator", color: ind.obv },
     ],
   },
 ];

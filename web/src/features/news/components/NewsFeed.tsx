@@ -19,12 +19,12 @@ export function NewsFeed() {
   return (
     <div className="flex flex-col gap-2 p-3">
       {/* Category filter chips */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {(["all", "crypto", "macro"] as CategoryFilter[]).map((c) => (
           <button
             key={c}
             onClick={() => setCategory(c)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
               category === c
                 ? "bg-accent/15 text-accent border border-accent/30"
                 : "bg-card text-muted border border-border"
@@ -33,12 +33,12 @@ export function NewsFeed() {
             {c === "all" ? "All" : c.charAt(0).toUpperCase() + c.slice(1)}
           </button>
         ))}
-        <div className="w-px bg-border" />
+        <div className="w-px bg-border flex-shrink-0" />
         {(["all", "high", "medium", "low"] as ImpactFilter[]).map((i) => (
           <button
             key={i}
             onClick={() => setImpact(i)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
               impact === i
                 ? "bg-accent/15 text-accent border border-accent/30"
                 : "bg-card text-muted border border-border"

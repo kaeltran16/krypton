@@ -13,7 +13,7 @@ export function PatternBadges({ patterns }: PatternBadgesProps) {
       {patterns.map((p) => (
         <span
           key={p.name}
-          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+          className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
             p.bias === "bullish"
               ? "bg-long/10 text-long"
               : p.bias === "bearish"
@@ -43,7 +43,7 @@ export function PatternDetailRow({ patterns }: PatternDetailRowProps) {
           <div key={p.name} className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
               <span
-                className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                className={`text-[11px] px-1.5 py-0.5 rounded-full ${
                   p.bias === "bullish"
                     ? "bg-long/10 text-long"
                     : p.bias === "bearish"

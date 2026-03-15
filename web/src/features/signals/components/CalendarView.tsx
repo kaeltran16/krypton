@@ -123,7 +123,7 @@ export function CalendarView() {
             {/* Weekday headers */}
             <div className="grid grid-cols-7 gap-0.5 mb-1">
               {WEEKDAYS.map((d) => (
-                <div key={d} className="text-center text-[10px] text-muted py-1">{d}</div>
+                <div key={d} className="text-center text-[11px] text-muted py-1">{d}</div>
               ))}
             </div>
 
@@ -160,8 +160,8 @@ export function CalendarView() {
                     </span>
                     {dayData && (
                       <>
-                        <span className="text-[8px] text-muted">{dayData.signal_count}s</span>
-                        <span className={`text-[8px] font-mono ${dayData.net_pnl >= 0 ? "text-long" : "text-short"}`}>
+                        <span className="text-[10px] text-muted">{dayData.signal_count}s</span>
+                        <span className={`text-[10px] font-mono ${dayData.net_pnl >= 0 ? "text-long" : "text-short"}`}>
                           {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(1)}
                         </span>
                       </>

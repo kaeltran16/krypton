@@ -7,6 +7,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useBacktestStore } from "../store";
+import { theme } from "../../../shared/theme";
 import type { BacktestRun, BacktestTrade, BacktestStats } from "../types";
 
 export function BacktestResults() {
@@ -153,21 +154,21 @@ function EquityCurve({ data }: { data: { time: string; cumulative_pnl: number }[
       width: containerRef.current.clientWidth,
       height: 200,
       layout: {
-        background: { type: ColorType.Solid, color: "#12161C" },
-        textColor: "#848E9C",
+        background: { type: ColorType.Solid, color: theme.chart.background },
+        textColor: theme.chart.text,
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 10,
       },
       grid: {
-        vertLines: { color: "rgba(31, 41, 55, 0.5)" },
-        horzLines: { color: "rgba(31, 41, 55, 0.5)" },
+        vertLines: { color: theme.chart.grid },
+        horzLines: { color: theme.chart.grid },
       },
-      rightPriceScale: { borderColor: "#1E2530" },
-      timeScale: { borderColor: "#1E2530" },
+      rightPriceScale: { borderColor: theme.chart.scaleBorder },
+      timeScale: { borderColor: theme.chart.scaleBorder },
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: "#F0B90B",
+      color: theme.colors.accent,
       lineWidth: 2,
       priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(2)}%` },
     });

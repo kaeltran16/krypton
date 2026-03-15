@@ -39,7 +39,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
             <span className="text-lg font-bold">{signal.pair}</span>
             <span className="ml-2 text-sm text-muted">{signal.timeframe}</span>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-foreground text-xl leading-none">&times;</button>
+          <button onClick={onClose} aria-label="Close" className="text-muted hover:text-foreground text-xl leading-none">&times;</button>
         </div>
         <div className={`text-2xl font-mono font-bold mt-1 ${color}`}>
           {signal.direction} {formatScore(signal.final_score)}

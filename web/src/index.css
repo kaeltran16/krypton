@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,16 +7,48 @@
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Theme tokens — keep in sync with shared/theme.ts */
+  --color-foreground: #EAECEF;
+  --color-accent: #F0B90B;
+  --gradient-from: #0d1117;
+  --gradient-via: #0B0E11;
+  --gradient-to: #080a0e;
+  --glass-card: rgba(18, 22, 28, 0.65);
+  --glass-dialog: rgba(18, 22, 28, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-backdrop: rgba(0, 0, 0, 0.7);
+  --glass-blur-card: 12px;
+  --glass-blur-dialog: 20px;
 }
 
 body {
-  background-color: #0B0E11;
-  color: #EAECEF;
+  background: linear-gradient(180deg, var(--gradient-from) 0%, var(--gradient-via) 40%, var(--gradient-to) 100%);
+  color: var(--color-foreground);
   font-family: Inter, system-ui, -apple-system, sans-serif;
   margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+}
+
+/* Eliminate 300ms tap delay on mobile Safari */
+button, a, [role="button"], [role="switch"] {
+  touch-action: manipulation;
+}
+
+/* Global focus-visible ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove focus ring for pointer interactions */
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 input, select, textarea {
@@ -24,7 +56,9 @@ input, select, textarea {
 }
 
 dialog::backdrop {
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--glass-backdrop);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 dialog {
@@ -37,8 +71,11 @@ dialog {
   max-width: 32rem;
   border-radius: 1rem 1rem 0 0;
   overflow-y: auto;
-  background: #12161C;
-  color: #EAECEF;
+  background: var(--glass-dialog);
+  backdrop-filter: blur(var(--glass-blur-dialog));
+  -webkit-backdrop-filter: blur(var(--glass-blur-dialog));
+  color: var(--color-foreground);
+  border-top: 1px solid var(--glass-border);
 }
 
 .safe-top {
@@ -69,4 +106,45 @@ dialog {
 
 .animate-slide-down {
   animation: slide-down 0.3s ease-out;
+}
+
+/* OKX-style typography utilities */
+.text-display {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.text-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Stagger animation delays for card lists */
+.stagger-1 { animation-delay: 0ms; }
+.stagger-2 { animation-delay: 40ms; }
+.stagger-3 { animation-delay: 80ms; }
+.stagger-4 { animation-delay: 120ms; }
+.stagger-5 { animation-delay: 160ms; }
+.stagger-6 { animation-delay: 200ms; }
+.stagger-7 { animation-delay: 240ms; }
+.stagger-8 { animation-delay: 280ms; }
+.stagger-9 { animation-delay: 320ms; }
+.stagger-10 { animation-delay: 360ms; }
+
+/* Elevated glass card — use on primary dashboard cards for visual hierarchy */
+.glass-card {
+  background: var(--glass-card);
+  backdrop-filter: blur(var(--glass-blur-card));
+  -webkit-backdrop-filter: blur(var(--glass-blur-card));
+  border: 1px solid var(--glass-border);
+  border-radius: 0.5rem;
+}
+
+/* Respect reduced-motion preferences (WCAG 2.1) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-card-enter { animation: none !important; opacity: 1; transform: none; }
+  .animate-pulse-glow { animation: none !important; }
 }

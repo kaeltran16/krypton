@@ -40,12 +40,12 @@ export function AnalyticsView() {
     <div className="p-3 space-y-3 overflow-y-auto">
       {/* Period selector */}
       <div className="flex items-center justify-between">
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           {PERIODS.map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setPeriod(value)}
-              className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                 period === value ? "bg-accent/15 text-accent" : "text-muted border border-border"
               }`}
             >
@@ -55,7 +55,7 @@ export function AnalyticsView() {
         </div>
         <button
           onClick={() => setTradedOnly(!tradedOnly)}
-          className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+          className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
             tradedOnly ? "bg-long/20 text-long border border-long/40" : "text-muted border border-border"
           }`}
         >
@@ -96,7 +96,7 @@ function StatCell({ label, value, color }: { label: string; value: string; color
   return (
     <div>
       <div className={`text-base font-mono font-bold ${color}`}>{value}</div>
-      <div className="text-[10px] text-muted">{label}</div>
+      <div className="text-[11px] text-muted">{label}</div>
     </div>
   );
 }
@@ -129,7 +129,7 @@ function EquityCurve({ data }: { data: SignalStats["equity_curve"] }) {
 
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Equity Curve</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Equity Curve</h3>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         <line x1={pad.left} y1={zeroY} x2={width - pad.right} y2={zeroY} stroke={theme.colors.border} strokeWidth="0.5" strokeDasharray="4" />
         <polyline fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" points={points} />
@@ -144,7 +144,7 @@ function PairBreakdown({ data }: { data: SignalStats["by_pair"] }) {
 
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Pair Breakdown</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Pair Breakdown</h3>
       <div className="space-y-2">
         {pairs.map(([pair, stats]) => (
           <div key={pair} className="flex items-center justify-between text-sm">
@@ -168,21 +168,21 @@ function PairBreakdown({ data }: { data: SignalStats["by_pair"] }) {
 function StreakTracker({ streaks }: { streaks: SignalStats["streaks"] }) {
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Streaks</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Streaks</h3>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
           <div className={`text-lg font-mono font-bold ${streaks.current >= 0 ? "text-long" : "text-short"}`}>
             {streaks.current >= 0 ? `+${streaks.current}` : streaks.current}
           </div>
-          <div className="text-[10px] text-muted">Current</div>
+          <div className="text-[11px] text-muted">Current</div>
         </div>
         <div>
           <div className="text-lg font-mono font-bold text-long">+{streaks.best_win}</div>
-          <div className="text-[10px] text-muted">Best Win</div>
+          <div className="text-[11px] text-muted">Best Win</div>
         </div>
         <div>
           <div className="text-lg font-mono font-bold text-short">{streaks.worst_loss}</div>
-          <div className="text-[10px] text-muted">Worst Loss</div>
+          <div className="text-[11px] text-muted">Worst Loss</div>
         </div>
       </div>
     </div>

@@ -30,28 +30,28 @@ export function NewsCard({ event }: NewsCardProps) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium leading-snug">{event.headline}</p>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <span className="text-[10px] text-muted font-mono">{event.source}</span>
+            <span className="text-[11px] text-muted font-mono">{event.source}</span>
             {event.impact && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${IMPACT_STYLES[event.impact] ?? ""}`}>
+              <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${IMPACT_STYLES[event.impact] ?? ""}`}>
                 {event.impact}
               </span>
             )}
             {event.sentiment && (
-              <span className={`text-[10px] font-medium ${SENTIMENT_STYLES[event.sentiment] ?? ""}`}>
+              <span className={`text-[11px] font-medium ${SENTIMENT_STYLES[event.sentiment] ?? ""}`}>
                 {event.sentiment}
               </span>
             )}
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-card-hover text-dim">
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-card-hover text-dim">
               {event.category}
             </span>
             {event.affected_pairs.length > 0 && event.affected_pairs[0] !== "ALL" && (
-              <span className="text-[10px] text-accent font-mono">
+              <span className="text-[11px] text-accent font-mono">
                 {event.affected_pairs.join(", ")}
               </span>
             )}
           </div>
         </div>
-        <span className="text-[10px] text-dim whitespace-nowrap">
+        <span className="text-[11px] text-dim whitespace-nowrap">
           {event.published_at ? formatRelativeTime(event.published_at) : ""}
         </span>
       </div>

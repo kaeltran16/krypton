@@ -104,7 +104,13 @@ The core data flow on each confirmed candle:
 | Infra | Docker Compose (API + Postgres 16 + Redis 7) |
 | External | OKX API (market data + trading), OpenRouter (LLM analysis) |
 
+## Environment Notes
+
+- No local Python installation — use `docker exec krypton-api-1 python3` to run Python scripts
+- On Git Bash (Windows), prefix docker exec commands with `MSYS_NO_PATHCONV=1` to prevent path mangling of container paths
+
 ## Git Commits
 
 - Never add Co-Authored-By or any author attribution lines to commit messages
 - Do not make small incremental commits per task — commit once at the end of a feature/batch
+- Do not use git worktrees — work directly on the current branch

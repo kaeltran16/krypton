@@ -22,18 +22,22 @@ export function Layout({
 }: LayoutProps) {
   const [tab, setTab] = useState<Tab>("home");
 
-  const content = { home, chart, signals, news, more }[tab];
-
   return (
-    <div className="min-h-screen bg-surface text-foreground flex flex-col">
+    <div className="min-h-screen min-h-dvh text-foreground flex flex-col">
       <TickerBar
         price={price}
         change24h={change24h}
         pair={selectedPair}
         onPairChange={onPairChange}
       />
-      <main className="flex-1 overflow-y-auto pb-16 scroll-container transition-opacity duration-150 ease-in-out">{content}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-md border-t border-border flex safe-bottom z-30">
+      <main className="flex-1 overflow-y-auto pb-16 scroll-container transition-opacity duration-150 ease-in-out">
+        <div className={tab === "home" ? "" : "hidden"}>{home}</div>
+        <div className={tab === "chart" ? "" : "hidden"}>{chart}</div>
+        <div className={tab === "signals" ? "" : "hidden"}>{signals}</div>
+        <div className={tab === "news" ? "" : "hidden"}>{news}</div>
+        <div className={tab === "more" ? "" : "hidden"}>{more}</div>
+      </main>
+      <nav className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-xl border-t border-white/[0.06] flex safe-bottom z-30">
         <TabButton active={tab === "home"} onClick={() => setTab("home")} label="Home" icon={<IconHome />} />
         <TabButton active={tab === "chart"} onClick={() => setTab("chart")} label="Chart" icon={<IconChart />} />
         <TabButton active={tab === "signals"} onClick={() => setTab("signals")} label="Signals" icon={<IconSignals />} />

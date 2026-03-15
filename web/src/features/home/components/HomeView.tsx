@@ -53,11 +53,11 @@ function AccountHeader({ portfolio, loading }: { portfolio: Portfolio | null; lo
   const isPositive = pnl >= 0;
 
   return (
-    <div className="bg-card rounded-lg p-4 border border-border">
+    <div className="glass-card p-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[10px] text-muted uppercase tracking-wider">Account Balance</div>
-          <div className="text-2xl font-mono font-bold mt-1">${formatPrice(portfolio.total_equity)}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Account Balance</div>
+          <div className="text-2xl font-mono text-display mt-1">${formatPrice(portfolio.total_equity)}</div>
         </div>
         <div className="text-right">
           <div className={`text-sm font-mono font-bold ${isPositive ? "text-long" : "text-short"}`}>
@@ -86,21 +86,21 @@ function PortfolioStrip({ portfolio, loading }: { portfolio: Portfolio | null; l
           <div className={`text-sm font-mono font-bold ${portfolio.unrealized_pnl >= 0 ? "text-long" : "text-short"}`}>
             {portfolio.unrealized_pnl >= 0 ? "+" : ""}{formatPrice(portfolio.unrealized_pnl)}
           </div>
-          <div className="text-[10px] text-muted uppercase">Unrealized</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Unrealized</div>
         </div>
         <div>
           <div className="text-sm font-mono font-bold">${formatPrice(portfolio.available_balance)}</div>
-          <div className="text-[10px] text-muted uppercase">Available</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Available</div>
         </div>
         <div>
           <div className="text-sm font-mono font-bold">{portfolio.margin_utilization.toFixed(1)}%</div>
-          <div className="text-[10px] text-muted uppercase">Margin</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Margin</div>
         </div>
         <div>
           <div className={`text-sm font-mono font-bold ${exposurePct > 100 ? "text-accent" : ""}`}>
             {exposurePct.toFixed(0)}%
           </div>
-          <div className="text-[10px] text-muted uppercase">Exposure</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Exposure</div>
         </div>
       </div>
     </div>
@@ -115,7 +115,7 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
       <div className="px-3 pt-3 pb-2">
-        <span className="text-[10px] text-muted uppercase tracking-wider">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
           Open Positions ({positions.length})
         </span>
       </div>
@@ -195,7 +195,7 @@ function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
       <div className="px-3 pt-3 pb-2">
-        <span className="text-[10px] text-muted uppercase tracking-wider">Latest News</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Latest News</span>
       </div>
       <div className="divide-y divide-border">
         {news.map((n) => (
@@ -203,20 +203,20 @@ function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean
             <div className="flex-1 min-w-0">
               <p className="text-xs leading-snug truncate">{n.headline}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-dim">{n.source}</span>
+                <span className="text-[11px] text-dim">{n.source}</span>
                 {n.impact && (
-                  <span className={`text-[9px] px-1 py-0.5 rounded font-medium ${IMPACT_BADGE[n.impact] ?? "bg-card-hover text-dim"}`}>
+                  <span className={`text-[11px] px-1 py-0.5 rounded font-medium ${IMPACT_BADGE[n.impact] ?? "bg-card-hover text-dim"}`}>
                     {n.impact}
                   </span>
                 )}
                 {n.sentiment && (
-                  <span className={`text-[9px] font-medium ${SENTIMENT_COLOR[n.sentiment] ?? ""}`}>
+                  <span className={`text-[11px] font-medium ${SENTIMENT_COLOR[n.sentiment] ?? ""}`}>
                     {n.sentiment}
                   </span>
                 )}
               </div>
             </div>
-            <span className="text-[10px] text-dim whitespace-nowrap">
+            <span className="text-[11px] text-dim whitespace-nowrap">
               {n.published_at ? formatRelativeTime(n.published_at) : ""}
             </span>
           </div>
@@ -235,24 +235,24 @@ function PerformanceCard({ stats, loading }: { stats: SignalStats | null; loadin
     : 0;
 
   return (
-    <div className="bg-card rounded-lg p-3 border border-border">
-      <div className="text-[10px] text-muted uppercase tracking-wider mb-2">Performance (7D)</div>
+    <div className="glass-card p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">Performance (7D)</div>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
-          <div className={`text-lg font-mono font-bold ${stats.win_rate >= 50 ? "text-long" : "text-short"}`}>
+          <div className={`text-lg font-mono text-display ${stats.win_rate >= 50 ? "text-long" : "text-short"}`}>
             {stats.win_rate}%
           </div>
-          <div className="text-[10px] text-muted">Win Rate</div>
+          <div className="text-[11px] text-muted">Win Rate</div>
         </div>
         <div>
-          <div className="text-lg font-mono font-bold">{stats.avg_rr}</div>
-          <div className="text-[10px] text-muted">Avg R:R</div>
+          <div className="text-lg font-mono text-display">{stats.avg_rr}</div>
+          <div className="text-[11px] text-muted">Avg R:R</div>
         </div>
         <div>
-          <div className={`text-lg font-mono font-bold ${netPnl >= 0 ? "text-long" : "text-short"}`}>
+          <div className={`text-lg font-mono text-display ${netPnl >= 0 ? "text-long" : "text-short"}`}>
             {netPnl >= 0 ? "+" : ""}{netPnl.toFixed(1)}%
           </div>
-          <div className="text-[10px] text-muted">Net P&L</div>
+          <div className="text-[11px] text-muted">Net P&L</div>
         </div>
       </div>
     </div>

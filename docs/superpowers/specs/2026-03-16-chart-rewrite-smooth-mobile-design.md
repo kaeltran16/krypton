@@ -82,7 +82,7 @@ This replaces the current hardcoded cleanup blocks and makes it maintainable whe
 | File | Change |
 |------|--------|
 | `web/src/features/chart/components/CandlestickChart.tsx` | Full rewrite — three separated effects, series diffing, stable refs |
-| `web/src/features/chart/hooks/useChartData.ts` | Small tweak — don't clear candles array during timeframe fetch |
+| `web/src/features/chart/hooks/useChartData.ts` | No change — already keeps stale candles during fetch (verified) |
 | `web/src/features/chart/components/ChartView.tsx` | Pass `loading` prop from `useChartData` to `CandlestickChart` |
 
 ## What stays the same

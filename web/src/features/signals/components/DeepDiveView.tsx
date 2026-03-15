@@ -38,12 +38,12 @@ export function DeepDiveView() {
   return (
     <div className="p-3 space-y-3 overflow-y-auto">
       {/* Period selector */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-2">
         {PERIODS.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => setPeriod(value)}
-            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
               period === value ? "bg-accent/15 text-accent" : "text-muted border border-border"
             }`}
           >
@@ -63,7 +63,7 @@ export function DeepDiveView() {
 function MetricsGrid({ perf }: { perf: PerformanceMetrics }) {
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Performance Metrics</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Performance Metrics</h3>
       <div className="grid grid-cols-3 gap-3 text-center">
         <MetricCell
           label="Sharpe"
@@ -111,7 +111,7 @@ function MetricCell({ label, value, color, tooltip }: {
   return (
     <div title={tooltip}>
       <div className={`text-base font-mono font-bold ${color}`}>{value}</div>
-      <div className="text-[10px] text-muted">{label}</div>
+      <div className="text-[11px] text-muted">{label}</div>
     </div>
   );
 }
@@ -121,12 +121,12 @@ function BestWorstTrades({ perf }: { perf: PerformanceMetrics }) {
 
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Notable Trades</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Notable Trades</h3>
       <div className="space-y-1.5">
         {perf.best_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
+              <span className="text-[11px] text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
               <span className="text-muted">
                 {perf.best_trade.pair.replace("-USDT-SWAP", "")} {perf.best_trade.timeframe} {perf.best_trade.direction}
               </span>
@@ -137,7 +137,7 @@ function BestWorstTrades({ perf }: { perf: PerformanceMetrics }) {
         {perf.worst_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
+              <span className="text-[11px] text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
               <span className="text-muted">
                 {perf.worst_trade.pair.replace("-USDT-SWAP", "")} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
               </span>
@@ -178,7 +178,7 @@ function DrawdownChart({ data }: { data: SignalStats["drawdown_series"] }) {
 
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">Drawdown</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Drawdown</h3>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         <polygon fill={theme.colors.short + "15"} points={fillPoints} />
         <polyline fill="none" stroke={theme.colors.short} strokeWidth="1.5" strokeLinejoin="round" points={points} />
@@ -203,7 +203,7 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
 
   return (
     <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[10px] text-muted uppercase tracking-wider mb-2">P&L Distribution</h3>
+      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">P&L Distribution</h3>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         {data.map((d, i) => {
           const barH = (d.count / maxCount) * h;

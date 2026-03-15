@@ -86,11 +86,11 @@ export function OrderDialog({ signal, onClose }: Props) {
   }
 
   return (
-    <dialog ref={ref} onClose={onClose} onClick={(e) => { if (e.target === ref.current) onClose(); }} className="bg-card text-white rounded-xl w-full max-w-md border border-gray-800 backdrop:bg-black/60">
-      <div className="p-4 border-b border-gray-800">
+    <dialog ref={ref} onClose={onClose} onClick={(e) => { if (e.target === ref.current) onClose(); }} className="text-white w-full max-w-md">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <span className="text-lg font-bold">Confirm Order</span>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
+          <button onClick={onClose} aria-label="Close" className="text-muted hover:text-foreground text-xl">&times;</button>
         </div>
       </div>
 
@@ -122,7 +122,7 @@ export function OrderDialog({ signal, onClose }: Props) {
                   value={overrideText}
                   onChange={(e) => setOverrideText(e.target.value)}
                   placeholder="OVERRIDE"
-                  className="w-full p-2 bg-surface rounded border border-gray-800 text-sm font-mono focus:border-short/50 focus:outline-none"
+                  className="w-full p-2 bg-surface rounded border border-border text-sm font-mono focus:border-short/50 focus:outline-none"
                 />
               </div>
             )}
@@ -143,21 +143,21 @@ export function OrderDialog({ signal, onClose }: Props) {
         )}
 
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="text-gray-400">Pair</div>
+          <div className="text-muted">Pair</div>
           <div className="font-mono">{signal.pair}</div>
-          <div className="text-gray-400">Side</div>
+          <div className="text-muted">Side</div>
           <div className={`font-mono ${side === "buy" ? "text-long" : "text-short"}`}>{side.toUpperCase()}</div>
-          <div className="text-gray-400">Entry</div>
+          <div className="text-muted">Entry</div>
           <div className="font-mono">{formatPrice(signal.levels.entry)}</div>
-          <div className="text-gray-400">Stop Loss</div>
+          <div className="text-muted">Stop Loss</div>
           <div className="font-mono text-short">{formatPrice(signal.levels.stop_loss)}</div>
-          <div className="text-gray-400">Take Profit</div>
+          <div className="text-muted">Take Profit</div>
           <div className="font-mono text-long">{formatPrice(signal.levels.take_profit_1)}</div>
           {signal.risk_metrics && (
             <>
-              <div className="text-gray-400">Risk</div>
+              <div className="text-muted">Risk</div>
               <div className="font-mono text-short">${signal.risk_metrics.risk_amount_usd.toFixed(0)} ({signal.risk_metrics.risk_pct}%)</div>
-              <div className="text-gray-400">R:R</div>
+              <div className="text-muted">R:R</div>
               <div className="font-mono text-long">
                 {signal.risk_metrics.tp1_rr != null ? `1:${signal.risk_metrics.tp1_rr}` : "—"}
                 {signal.risk_metrics.tp2_rr != null ? ` / 1:${signal.risk_metrics.tp2_rr}` : ""}
@@ -167,14 +167,15 @@ export function OrderDialog({ signal, onClose }: Props) {
         </div>
 
         <div>
-          <label className="text-sm text-gray-400 block mb-1">
+          <label className="text-sm text-muted block mb-1">
             Size {signal.risk_metrics ? `(recommended: ${signal.risk_metrics.position_size_base})` : "(contracts)"}
           </label>
           <input
             type="text"
+            inputMode="decimal"
             value={size}
             onChange={(e) => setSize(e.target.value)}
-            className="w-full p-3 bg-surface rounded-lg border border-gray-800 font-mono focus:border-long/50 focus:outline-none"
+            className="w-full p-3 bg-surface rounded-lg border border-border font-mono focus:border-long/50 focus:outline-none"
           />
         </div>
 
@@ -190,7 +191,7 @@ export function OrderDialog({ signal, onClose }: Props) {
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-border">
         {result?.success ? (
           <button onClick={onClose} className="w-full py-3 rounded-lg bg-card text-white font-medium">
             Close
