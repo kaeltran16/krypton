@@ -171,13 +171,46 @@ def test_final_score_with_caution():
 def test_final_score_with_contradict():
     llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="No way", levels=None)
     final = compute_final_score(preliminary_score=80, llm_response=llm)
-    assert final <= 40
+    assert final == 50  # 80 - 1 * min(30, 80) * 1.0 = 50
 
 
 def test_final_score_with_contradict_negative():
     llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Not that bad", levels=None)
     final = compute_final_score(preliminary_score=-80, llm_response=llm)
-    assert final >= -40
+    assert final == -50  # -80 - (-1) * min(30, 80) * 1.0 = -50
+
+
+def test_final_score_with_contradict_medium():
+    llm = LLMResponse(opinion="contradict", confidence="MEDIUM", explanation="Meh", levels=None)
+    final = compute_final_score(preliminary_score=80, llm_response=llm)
+    assert final == 62  # 80 - 1 * min(18, 80) * 1.0 = 62 (multiplier 0.6: 30*0.6=18)
+
+
+def test_final_score_with_contradict_zero():
+    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Zero", levels=None)
+    final = compute_final_score(preliminary_score=0, llm_response=llm)
+    assert final == 0  # zero guard: no directional bias
+
+
+def test_final_score_with_contradict_clamps_at_zero():
+    """Penalty larger than abs(score) clamps to zero instead of flipping sign."""
+    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Disagree", levels=None)
+    final = compute_final_score(preliminary_score=20, llm_response=llm)
+    assert final == 0  # 20 - 1 * min(30, 20) * 1.0 = 0 (clamped, not -10)
+
+
+def test_final_score_with_contradict_clamps_at_zero_negative():
+    """Negative score: penalty clamps to zero instead of flipping to positive."""
+    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Disagree", levels=None)
+    final = compute_final_score(preliminary_score=-25, llm_response=llm)
+    assert final == 0  # -25 - (-1) * min(30, 25) * 1.0 = 0 (clamped, not +5)
+
+
+def test_final_score_with_contradict_borderline_emission():
+    """Score of 70 with HIGH contradict lands exactly at threshold=40."""
+    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Doubt", levels=None)
+    final = compute_final_score(preliminary_score=70, llm_response=llm)
+    assert final == 40  # 70 - 1 * min(30, 70) * 1.0 = 40 (borderline emit)
 
 
 def test_final_score_without_llm():

@@ -451,24 +451,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
     final = compute_final_score(blended, llm_response)
     direction = "LONG" if final > 0 else "SHORT"
 
-    # ── Step 7: Hard veto on LLM contradict ──
     llm_opinion = llm_response.opinion if llm_response else None
-    if llm_opinion == "contradict":
-        _log_pipeline_evaluation(
-            pair=pair, timeframe=timeframe,
-            tech_score=tech_result["score"], flow_score=flow_result["score"],
-            onchain_score=onchain_score if onchain_available else None,
-            pattern_score=pat_score,
-            ml_score=ml_score, ml_confidence=ml_confidence,
-            indicator_preliminary=indicator_preliminary,
-            blended_score=blended, final_score=final,
-            llm_opinion=llm_opinion, ml_available=ml_available,
-            agreement=agreement, emitted=False,
-        )
-        logger.info(f"Pipeline {pair}:{timeframe} — LLM contradict hard veto (final={final})")
-        return
 
-    # ── Step 8: Threshold check + emit ──
+    # ── Step 7: Threshold check + emit ──
     emitted = abs(final) >= settings.engine_signal_threshold
 
     _log_pipeline_evaluation(

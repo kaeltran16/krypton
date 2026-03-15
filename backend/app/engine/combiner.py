@@ -72,7 +72,12 @@ def compute_final_score(
     elif llm_response.opinion == "caution":
         final = preliminary_score - 15 * multiplier
     else:  # contradict
-        final = max(min(preliminary_score, 40), -40)
+        if preliminary_score == 0:
+            final = 0
+        else:
+            sign = 1 if preliminary_score > 0 else -1
+            penalty = sign * min(30 * multiplier, abs(preliminary_score))
+            final = preliminary_score - penalty
 
     return max(min(round(final), 100), -100)
 

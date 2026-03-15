@@ -149,24 +149,36 @@ class TestUnifiedPipelineLLMBehavior:
     """Tests for LLM behavioral guarantees in the unified pipeline."""
 
     @pytest.mark.asyncio
-    async def test_hard_veto_on_contradict(self):
-        """Pipeline does not emit when LLM opinion is contradict, even with high score."""
+    async def test_contradict_penalizes_but_does_not_veto(self):
+        """Pipeline still emits when LLM contradicts a strong signal — penalty reduces score but threshold check decides."""
         from app.engine.models import LLMResponse
 
         app = _make_mock_app(prompt_template="fake template")
-        app.state.settings.engine_signal_threshold = 10
-        app.state.settings.engine_llm_threshold = 5  # low threshold so LLM gate triggers
+        app.state.settings.engine_signal_threshold = 10  # low threshold so penalized score still emits
+        app.state.settings.engine_llm_threshold = 5
 
         llm_resp = LLMResponse(
             opinion="contradict", confidence="HIGH",
             explanation="Clear reversal signal", levels=None,
         )
 
+        # Patch tech score high enough that blended survives the contradict penalty
+        strong_tech = {"score": 100, "indicators": {
+            "atr": 200, "bb_width_pct": 50.0, "adx": 30, "di_plus": 25,
+            "di_minus": 15, "rsi": 35, "bb_upper": 68000, "bb_lower": 67000,
+            "bb_pos": 0.8, "obv_slope": 0.5, "vol_ratio": 1.5,
+        }}
+
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist, \
              patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_resp), \
-             patch("app.main.render_prompt", return_value="rendered"):
+             patch("app.main.render_prompt", return_value="rendered"), \
+             patch("app.main.compute_technical_score", return_value=strong_tech):
             await run_pipeline(app, CANDLE)
-            mock_persist.assert_not_called()
+            # With low threshold, penalized score should still emit
+            assert mock_persist.called, "Contradict should penalize, not veto — signal should still emit"
+            # Verify the emitted signal_data dict has a reduced score (penalty applied)
+            signal_data = mock_persist.call_args[0][1]  # persist_signal(db, signal_data)
+            assert abs(signal_data["final_score"]) >= 10, "Penalized score should still exceed threshold"
 
     @pytest.mark.asyncio
     async def test_caution_still_emits(self):
