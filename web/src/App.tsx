@@ -11,6 +11,8 @@ import { useSignalWebSocket } from "./features/signals/hooks/useSignalWebSocket"
 import { useLivePrice } from "./shared/hooks/useLivePrice";
 import { AVAILABLE_PAIRS } from "./shared/lib/constants";
 import { useSettingsStore } from "./features/settings/store";
+import { useServiceWorker } from "./shared/hooks/useServiceWorker";
+import { UpdateModal } from "./shared/components/UpdateModal";
 
 export default function App() {
   const [selectedPair, setSelectedPair] = useState<string>(AVAILABLE_PAIRS[0]);
@@ -21,11 +23,13 @@ export default function App() {
     useSettingsStore.getState().fetchFromServer();
   }, []);
   const { price, change24h } = useLivePrice(selectedPair);
+  const { showUpdateModal, applyUpdate, dismiss } = useServiceWorker();
 
   return (
     <>
       <NewsAlertToast />
       <AlertToast />
+      {showUpdateModal && <UpdateModal onUpdate={applyUpdate} onDismiss={dismiss} />}
       <Layout
         home={<HomeView />}
         chart={<ChartView pair={selectedPair} />}

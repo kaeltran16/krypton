@@ -10,21 +10,22 @@ export default defineConfig({
     strategies: "injectManifest",
     srcDir: "src",
     filename: "sw.ts",
-    registerType: "autoUpdate",
+    registerType: "prompt",
     manifest: {
       name: "Krypton",
       short_name: "Krypton",
       description: "AI-enhanced crypto signal copilot",
-      theme_color: "#121212",
-      background_color: "#121212",
+      theme_color: "#0B0E11",
+      background_color: "#0B0E11",
       display: "standalone",
       icons: [
         { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
         { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+        { src: "/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
       ],
     },
     injectManifest: {
-      globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
+      globPatterns: ["**/*.{js,css,html,ico,svg}", "icon-*.png", "apple-touch-icon-*.png"],
     },
   }), cloudflare()],
   server: {
