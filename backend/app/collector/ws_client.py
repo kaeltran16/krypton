@@ -15,6 +15,7 @@ TIMEFRAME_CHANNEL_MAP = {
     "15m": "candle15m",
     "1h": "candle1H",
     "4h": "candle4H",
+    "1D": "candle1Dutc",
 }
 
 CHANNEL_TIMEFRAME_MAP = {v: k for k, v in TIMEFRAME_CHANNEL_MAP.items()}

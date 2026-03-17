@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -12,10 +13,56 @@ import pandas as pd
 from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
+from app.engine.confluence import compute_confluence_score, di_direction
 
 logger = logging.getLogger(__name__)
 
 MIN_CANDLES = 70  # minimum candles for reliable indicators
+
+
+def precompute_parent_indicators(parent_candles: list[dict]) -> tuple[list[str], list[dict]]:
+    """Pre-compute ADX/DI indicators for each parent candle.
+
+    Returns (sorted_timestamps, indicators_list) for bisect lookup.
+    """
+    if len(parent_candles) < MIN_CANDLES:
+        return [], []
+
+    timestamps: list[str] = []
+    indicators: list[dict] = []
+
+    for i in range(MIN_CANDLES, len(parent_candles)):
+        window = parent_candles[max(0, i - 199) : i + 1]
+        df = pd.DataFrame(window)
+        try:
+            result = compute_technical_score(df)
+            ts = parent_candles[i]["timestamp"]
+            if isinstance(ts, datetime):
+                ts = ts.isoformat()
+            timestamps.append(ts)
+            indicators.append({
+                "adx": result["indicators"]["adx"],
+                "di_plus": result["indicators"]["di_plus"],
+                "di_minus": result["indicators"]["di_minus"],
+            })
+        except Exception:
+            continue
+
+    return timestamps, indicators
+
+
+def _lookup_parent_indicators(
+    child_timestamp: str,
+    parent_timestamps: list[str],
+    parent_indicators: list[dict],
+) -> dict | None:
+    """Find the most recent parent snapshot at or before child_timestamp."""
+    if not parent_timestamps:
+        return None
+    idx = bisect.bisect_right(parent_timestamps, child_timestamp) - 1
+    if idx < 0:
+        return None
+    return parent_indicators[idx]
 
 
 @dataclass
@@ -31,6 +78,7 @@ class BacktestConfig:
     risk_per_trade_pct: float = 1.0
     max_concurrent_positions: int = 3
     ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
+    confluence_max_score: int = 15
 
 
 @dataclass
@@ -57,6 +105,7 @@ def run_backtest(
     config: BacktestConfig | None = None,
     cancel_flag: dict | None = None,
     ml_predictor=None,
+    parent_candles: list[dict] | None = None,
 ) -> dict:
     """Run a backtest on historical candles for a single pair.
 
@@ -72,6 +121,12 @@ def run_backtest(
     """
     if config is None:
         config = BacktestConfig()
+
+    # Pre-compute parent TF indicators for confluence scoring
+    parent_timestamps: list[str] = []
+    parent_indicators_list: list[dict] = []
+    if parent_candles:
+        parent_timestamps, parent_indicators_list = precompute_parent_indicators(parent_candles)
 
     trades: list[SimulatedTrade] = []
     open_positions: list[SimulatedTrade] = []
@@ -98,6 +153,19 @@ def run_backtest(
             tech_result = compute_technical_score(df)
         except Exception:
             continue
+
+        # Confluence scoring
+        confluence_score = 0
+        if parent_timestamps:
+            ts = current["timestamp"]
+            if isinstance(ts, datetime):
+                ts = ts.isoformat()
+            parent_ind = _lookup_parent_indicators(ts, parent_timestamps, parent_indicators_list)
+            child_dir = di_direction(tech_result["indicators"]["di_plus"], tech_result["indicators"]["di_minus"])
+            confluence_score = compute_confluence_score(
+                child_dir, parent_ind, max_score=config.confluence_max_score,
+            )
+            tech_result["score"] = max(min(tech_result["score"] + confluence_score, 100), -100)
 
         pat_score = 0
         detected = []

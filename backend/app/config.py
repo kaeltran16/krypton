@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # pairs and timeframes
     pairs: list[str] = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
-    timeframes: list[str] = ["15m", "1h", "4h"]
+    timeframes: list[str] = ["15m", "1h", "4h", "1D"]
 
     # collector
     collector_mode: Literal["event_driven", "scheduled"] = "event_driven"
@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     engine_flow_weight: float = 0.22
     engine_onchain_weight: float = 0.23
     engine_pattern_weight: float = 0.15
+    engine_confluence_max_score: int = 15
 
     # on-chain data
     onchain_enabled: bool = True

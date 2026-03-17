@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
@@ -14,6 +14,7 @@ from sqlalchemy import select, delete
 from app.api.auth import require_settings_api_key
 from app.db.models import BacktestRun, Candle
 from app.engine.backtester import run_backtest, BacktestConfig
+from app.engine.confluence import TIMEFRAME_PARENT, TIMEFRAME_PERIOD_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +160,18 @@ async def start_backtest(body: RunRequest, request: Request):
             all_trades = []
             all_stats_parts = []
 
+            # Extend parent query range backwards to pre-warm indicator window.
+            # precompute_parent_indicators needs MIN_CANDLES (70) parent candles
+            # before producing its first snapshot.
+            parent_tf = TIMEFRAME_PARENT.get(body.timeframe)
+            parent_prewarm_from = date_from
+            if parent_tf and parent_tf in TIMEFRAME_PERIOD_HOURS:
+                parent_prewarm_from = date_from - timedelta(
+                    hours=TIMEFRAME_PERIOD_HOURS[parent_tf] * 70
+                )
+
             for pair in body.pairs:
-                # Load candles from Postgres
+                # Load child + parent candles in a single session
                 async with db.session_factory() as session:
                     result = await session.execute(
                         select(Candle)
@@ -171,6 +182,18 @@ async def start_backtest(body: RunRequest, request: Request):
                         .order_by(Candle.timestamp)
                     )
                     candle_rows = result.scalars().all()
+
+                    parent_rows = []
+                    if parent_tf:
+                        parent_result = await session.execute(
+                            select(Candle)
+                            .where(Candle.pair == pair)
+                            .where(Candle.timeframe == parent_tf)
+                            .where(Candle.timestamp >= parent_prewarm_from)
+                            .where(Candle.timestamp <= date_to)
+                            .order_by(Candle.timestamp)
+                        )
+                        parent_rows = parent_result.scalars().all()
 
                 candles = [
                     {
@@ -187,6 +210,20 @@ async def start_backtest(body: RunRequest, request: Request):
                 if not candles:
                     continue
 
+                parent_candles_list = None
+                if parent_rows:
+                    parent_candles_list = [
+                        {
+                            "timestamp": c.timestamp.isoformat(),
+                            "open": float(c.open),
+                            "high": float(c.high),
+                            "low": float(c.low),
+                            "close": float(c.close),
+                            "volume": float(c.volume),
+                        }
+                        for c in parent_rows
+                    ]
+
                 # Load per-pair ML predictor if ml_mode requested
                 ml_predictor = None
                 if body.ml_mode:
@@ -198,7 +235,7 @@ async def start_backtest(body: RunRequest, request: Request):
 
                 result = await asyncio.to_thread(
                     run_backtest, candles, pair, bt_config, cancel_flags.get(run_id),
-                    ml_predictor,
+                    ml_predictor, parent_candles_list,
                 )
                 all_trades.extend(result["trades"])
                 all_stats_parts.append(result["stats"])

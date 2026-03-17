@@ -34,6 +34,10 @@ from app.engine.combiner import compute_preliminary_score, compute_final_score, 
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
+from app.engine.confluence import (
+    TIMEFRAME_PARENT, CONFLUENCE_ONLY_TIMEFRAMES,
+    TIMEFRAME_CACHE_TTL, compute_confluence_score, di_direction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +265,47 @@ async def run_pipeline(app: FastAPI, candle: dict):
     except Exception as e:
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
         return
+
+    # ── HTF indicator caching ──
+    indicators = tech_result["indicators"]
+    candle_ts = candle.get("timestamp")
+    htf_cache = json.dumps({
+        "adx": indicators["adx"],
+        "di_plus": indicators["di_plus"],
+        "di_minus": indicators["di_minus"],
+        "timestamp": candle_ts.isoformat()
+        if hasattr(candle_ts, "isoformat")
+        else candle_ts,
+    })
+    htf_key = f"htf_indicators:{pair}:{timeframe}"
+    ttl = TIMEFRAME_CACHE_TTL.get(timeframe, 7200)
+    try:
+        await redis.set(htf_key, htf_cache, ex=ttl)
+    except Exception as e:
+        logger.warning(f"HTF indicator cache write failed for {pair}:{timeframe}: {e}")
+
+    # 1D is confluence-only — cache indicators, skip signal emission
+    if timeframe in CONFLUENCE_ONLY_TIMEFRAMES:
+        return
+
+    # ── Confluence scoring ──
+    confluence_score = 0
+    parent_tf = TIMEFRAME_PARENT.get(timeframe)
+    parent_indicators = None
+    if parent_tf:
+        try:
+            raw_parent = await redis.get(f"htf_indicators:{pair}:{parent_tf}")
+            if raw_parent:
+                parent_indicators = json.loads(raw_parent)
+        except Exception as e:
+            logger.warning(f"HTF cache read failed for {pair}:{parent_tf}: {e}")
+
+        child_direction = di_direction(indicators["di_plus"], indicators["di_minus"])
+        confluence_score = compute_confluence_score(
+            child_direction, parent_indicators,
+            max_score=settings.engine_confluence_max_score,
+        )
+        tech_result["score"] = max(min(tech_result["score"] + confluence_score, 100), -100)
 
     # Evaluate indicator alerts on this candle's indicators
     try:
@@ -547,6 +592,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "tp_strength_factor": scaled["tp_strength_factor"],
             "vol_factor": scaled["vol_factor"],
             "levels_source": levels["levels_source"],
+            "confluence_score": confluence_score,
+            "parent_tf": parent_tf,
+            "parent_adx": parent_indicators["adx"] if parent_indicators else None,
+            "parent_di_plus": parent_indicators["di_plus"] if parent_indicators else None,
+            "parent_di_minus": parent_indicators["di_minus"] if parent_indicators else None,
         },
         "detected_patterns": detected_patterns or None,
     }
@@ -739,7 +789,7 @@ async def check_pending_signals(app: FastAPI):
                 )
 
 
-OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H"}
+OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H", "1D": "1Dutc"}
 
 
 async def backfill_candles(redis, db, pairs: list[str], timeframes: list[str]):
