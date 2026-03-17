@@ -29,6 +29,8 @@ When `run_pipeline()` computes `compute_technical_score()` for any timeframe, it
 - **Value:** JSON blob `{"adx": float, "di_plus": float, "di_minus": float, "timestamp": str}`
 - **TTL:** 2× the timeframe period (e.g., 1h cache TTL = 2h) as a safety net against stale data if ingestion stops
 
+The Redis write must be wrapped in try/except — if Redis is unavailable, log a warning and continue. A failed write simply means child timeframes read a miss and fall back to confluence = 0 via the existing cold-start path.
+
 When a child timeframe's pipeline runs, it reads its parent's cached indicators from Redis. If the cache doesn't exist (cold start, no confirmed parent candle since boot), the confluence component returns 0 — neutral, no boost or penalty.
 
 ### Why Cache Instead of Compute On-Demand
@@ -80,7 +82,11 @@ After computing `compute_technical_score()`:
 5. Add confluence score to `tech_result["score"]` (the technical component), then clamp to [-100, +100]. This means confluence modifies the technical score *before* it enters the weighted blend via `compute_preliminary_score()`. At the default 40% tech weight, a ±15 confluence adjustment contributes approximately ±6 points to the preliminary score — proportional influence, not an outsized additive bump.
 6. After computing own indicators, write `htf_indicators:{pair}:{timeframe}` to Redis for child timeframes to use
 
-**1D pipeline runs:** 1D candles flow through `run_pipeline()` for signal generation like any other timeframe. Since 1D has no parent (`TIMEFRAME_PARENT` has no entry for "1D"), the confluence component is skipped and the pipeline runs unchanged. 1D signals are emitted if they meet the threshold. The primary purpose of 1D ingestion is to provide confluence data for 4h, but 1D signals are a useful byproduct.
+**1D pipeline runs:** 1D is confluence-only — it does not emit signals. The pipeline runs `compute_technical_score()` and writes the indicator cache to Redis, then returns early before the LLM gate and signal emission steps. This avoids unnecessary LLM API calls for a timeframe whose sole purpose is providing parent data for 4h confluence.
+
+**Concurrent timing:** When a parent candle confirms, a child candle often confirms simultaneously (e.g., every 1h boundary is also a 15m boundary). If both pipeline runs execute concurrently, the child may read the parent's *previous* cached indicators rather than the just-confirmed ones. This is expected and benign — the previous period's trend indicators are still representative, and the next child candle will pick up the fresh cache.
+
+**Confluence at score extremes:** Adding ±15 confluence to a tech score already near ±100 will be partially lost to clamping (e.g., tech 95 + confluence 15 = 110, clamped to 100). This is acceptable — signals near the extremes are already high-conviction and don't need the full confluence bump.
 
 ### Signal Storage
 
@@ -108,7 +114,7 @@ No schema changes needed — the existing `Candle` model and Redis cache handle 
 
 ### Config
 
-Add `"1D"` to the default `timeframes` list in `config.py`. 1D candles confirm once per day — minimal overhead on ingestion and storage.
+Add `"1D"` to the default `timeframes` list in `config.py`. 1D candles confirm once per day — minimal overhead on ingestion and storage. After deployment, the first confirmed 1D candle arrives at UTC midnight — until then (up to 24h), 4h confluence will be 0 via the cold-start path.
 
 ## Backtester Changes
 
@@ -117,19 +123,19 @@ Add `"1D"` to the default `timeframes` list in `config.py`. 1D candles confirm o
 New helper function:
 
 ```
-precompute_parent_indicators(parent_candles: list[dict]) → dict[str, dict]
+precompute_parent_indicators(parent_candles: list[dict]) → tuple[list[str], list[dict]]
 ```
 
 1. Takes chronologically sorted parent-TF candles
 2. Iterates with a rolling 200-candle window (matching the minimum 70-candle requirement for `compute_technical_score()`)
 3. Calls `compute_technical_score()` at each step
-4. Returns a dict mapping `timestamp → {adx, di_plus, di_minus}`
+4. Returns `(sorted_timestamps, indicators_list)` — two parallel lists for O(log n) bisect lookup by child timestamp
 
 ### `run_backtest()` Integration
 
 - Accept optional `parent_candles: list[dict]` parameter
 - If provided, call `precompute_parent_indicators()` at startup
-- During iteration, for each child candle, binary search for the most recent parent snapshot where `parent_timestamp <= child_timestamp`
+- During iteration, for each child candle, look up the most recent parent snapshot where `parent_timestamp <= child_timestamp` (sorted timestamps + bisect)
 - Feed snapshot into `compute_confluence_score()` — same logic as live pipeline
 - If `parent_candles` is None, confluence score = 0 (matches live cold-start behavior)
 
