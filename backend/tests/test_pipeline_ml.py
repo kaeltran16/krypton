@@ -51,6 +51,7 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     app.state.okx_client = None
     app.state.ml_predictors = ml_predictors or {}
     app.state.tracker = None
+    app.state.regime_weights = {}
 
     redis = AsyncMock()
     redis.lrange.return_value = _make_candle_list()
@@ -167,7 +168,7 @@ class TestUnifiedPipelineLLMBehavior:
             "atr": 200, "bb_width_pct": 50.0, "adx": 30, "di_plus": 25,
             "di_minus": 15, "rsi": 35, "bb_upper": 68000, "bb_lower": 67000,
             "bb_pos": 0.8, "obv_slope": 0.5, "vol_ratio": 1.5,
-        }}
+        }, "regime": {"trending": 0.5, "ranging": 0.3, "volatile": 0.2}, "caps": {"trend_cap": 30.0, "mean_rev_cap": 22.0, "bb_vol_cap": 25.0, "volume_cap": 21.5}}
 
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist, \
              patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_resp), \

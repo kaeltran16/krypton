@@ -14,6 +14,7 @@ from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
 from app.engine.confluence import compute_confluence_score, di_direction
+from app.engine.regime import blend_outer_weights
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ def run_backtest(
     cancel_flag: dict | None = None,
     ml_predictor=None,
     parent_candles: list[dict] | None = None,
+    regime_weights=None,
 ) -> dict:
     """Run a backtest on historical candles for a single pair.
 
@@ -150,7 +152,7 @@ def run_backtest(
 
         # ── Rule-based scoring (always runs) ──
         try:
-            tech_result = compute_technical_score(df)
+            tech_result = compute_technical_score(df, regime_weights=regime_weights)
         except Exception:
             continue
 
@@ -177,15 +179,31 @@ def run_backtest(
             except Exception:
                 pass
 
+        # Outer weights: use regime-blended when regime_weights provided,
+        # otherwise preserve config defaults for backward compatibility
+        if regime_weights is not None:
+            regime = tech_result.get("regime")
+            outer = blend_outer_weights(regime, regime_weights)
+            bt_tech_w = outer["tech"]
+            bt_pattern_w = outer["pattern"]
+            # flow and onchain are 0 in backtester, renormalize tech+pattern
+            bt_total = bt_tech_w + bt_pattern_w
+            if bt_total > 0:
+                bt_tech_w /= bt_total
+                bt_pattern_w /= bt_total
+        else:
+            bt_tech_w = config.tech_weight
+            bt_pattern_w = config.pattern_weight
+
         indicator_preliminary = compute_preliminary_score(
             technical_score=tech_result["score"],
             order_flow_score=0,
-            tech_weight=config.tech_weight,
+            tech_weight=bt_tech_w,
             flow_weight=0.0,
             onchain_score=0,
             onchain_weight=0.0,
             pattern_score=pat_score,
-            pattern_weight=config.pattern_weight,
+            pattern_weight=bt_pattern_w,
         )
 
         # ── Optional ML blending ──

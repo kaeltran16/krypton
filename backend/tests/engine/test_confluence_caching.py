@@ -119,6 +119,7 @@ class TestPipeline1DEarlyReturn:
         app.state.order_flow = {}
         app.state.prompt_template = ""
         app.state.manager = MagicMock()
+        app.state.regime_weights = {}
 
         # 200 candles so we pass the minimum count check
         raw_candles = [

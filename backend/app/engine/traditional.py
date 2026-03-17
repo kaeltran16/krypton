@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from app.engine.scoring import sigmoid_score, sigmoid_scale
+from app.engine.regime import compute_regime_mix, blend_caps
 
 
 def _atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> pd.Series:
@@ -53,7 +54,7 @@ def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (direction * volume).cumsum()
 
 
-def compute_technical_score(candles: pd.DataFrame) -> dict:
+def compute_technical_score(candles: pd.DataFrame, regime_weights=None) -> dict:
     """Compute technical analysis score using orthogonal indicator dimensions.
 
     Returns dict with 'score' (-100 to +100) and 'indicators' dict.
@@ -123,22 +124,28 @@ def compute_technical_score(candles: pd.DataFrame) -> dict:
     vol_ratio = float(volume.iloc[-1]) / avg_volume if avg_volume > 0 else 1.0
     candle_direction = 1 if float(close.iloc[-1]) > float(open_.iloc[-1]) else -1
 
-    # === Scoring ===
-    # 1. Trend (max ±30)
+    # === Regime detection ===
+    trend_strength = sigmoid_scale(adx_val, center=20, steepness=0.25)
+    vol_expansion = sigmoid_scale(bb_width_pct, center=50, steepness=0.08)
+    regime = compute_regime_mix(trend_strength, vol_expansion)
+    caps = blend_caps(regime, regime_weights)
+
+    # === Scoring (caps from regime-aware blending) ===
+    # 1. Trend
     di_sign = 1 if di_plus_val > di_minus_val else -1
-    trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=0.30) * 30
+    trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=0.30) * caps["trend_cap"]
 
-    # 2. Mean reversion (max ±25)
-    rsi_score = sigmoid_score(50 - rsi_val, center=0, steepness=0.25) * 25
+    # 2. Mean reversion
+    rsi_score = sigmoid_score(50 - rsi_val, center=0, steepness=0.25) * caps["mean_rev_cap"]
 
-    # 3. Volatility & position (max ±25)
-    bb_pos_score = sigmoid_score(0.5 - bb_pos, center=0, steepness=10) * 15
+    # 3. Volatility & position (60/40 split)
+    bb_pos_score = sigmoid_score(0.5 - bb_pos, center=0, steepness=10) * (caps["bb_vol_cap"] * 0.6)
     bb_pos_sign = 1 if bb_pos_score > 0 else (-1 if bb_pos_score < 0 else 0)
-    bb_width_score = bb_pos_sign * sigmoid_score(50 - bb_width_pct, center=0, steepness=0.10) * 10
+    bb_width_score = bb_pos_sign * sigmoid_score(50 - bb_width_pct, center=0, steepness=0.10) * (caps["bb_vol_cap"] * 0.4)
 
-    # 4. Volume confirmation (max ±20)
-    obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * 12
-    vol_score = candle_direction * sigmoid_score(vol_ratio - 1, center=0, steepness=3.0) * 8
+    # 4. Volume confirmation (60/40 split)
+    obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * (caps["volume_cap"] * 0.6)
+    vol_score = candle_direction * sigmoid_score(vol_ratio - 1, center=0, steepness=3.0) * (caps["volume_cap"] * 0.4)
 
     total = trend_score + rsi_score + bb_pos_score + bb_width_score + obv_score + vol_score
     score = max(min(round(total), 100), -100)
@@ -155,9 +162,12 @@ def compute_technical_score(candles: pd.DataFrame) -> dict:
         "obv_slope": round(obv_slope_norm, 4),
         "vol_ratio": round(vol_ratio, 4),
         "atr": round(atr_val, 4),
+        "regime_trending": round(regime["trending"], 4),
+        "regime_ranging": round(regime["ranging"], 4),
+        "regime_volatile": round(regime["volatile"], 4),
     }
 
-    return {"score": score, "indicators": indicators}
+    return {"score": score, "indicators": indicators, "regime": regime, "caps": caps}
 
 
 def compute_order_flow_score(metrics: dict) -> dict:

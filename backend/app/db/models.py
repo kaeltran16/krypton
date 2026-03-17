@@ -291,3 +291,51 @@ class PerformanceTrackerRow(Base):
     __table_args__ = (
         UniqueConstraint("pair", "timeframe", name="uq_tracker_pair_timeframe"),
     )
+
+
+class RegimeWeights(Base):
+    __tablename__ = "regime_weights"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pair: Mapped[str] = mapped_column(String(32), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+
+    # Inner caps (3 regimes x 4 caps = 12 floats)
+    trending_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=38.0)
+    trending_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=15.0)
+    trending_bb_vol_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
+    trending_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=25.0)
+
+    ranging_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=18.0)
+    ranging_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=32.0)
+    ranging_bb_vol_cap: Mapped[float] = mapped_column(Float, nullable=False, default=28.0)
+    ranging_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
+
+    volatile_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
+    volatile_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=20.0)
+    volatile_bb_vol_cap: Mapped[float] = mapped_column(Float, nullable=False, default=28.0)
+    volatile_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=15.0)
+
+    # Outer weights (3 regimes x 4 weights = 12 floats)
+    trending_tech_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.45)
+    trending_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+    trending_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18)
+    trending_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12)
+
+    ranging_tech_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.38)
+    ranging_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18)
+    ranging_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.26)
+    ranging_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18)
+
+    volatile_tech_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.30)
+    volatile_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.20)
+    volatile_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+    volatile_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("pair", "timeframe", name="uq_regime_weights_pair_timeframe"),
+    )

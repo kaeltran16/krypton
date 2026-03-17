@@ -12,15 +12,28 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
 
 from app.api.auth import require_settings_api_key
-from app.db.models import BacktestRun, Candle
+from app.db.models import BacktestRun, Candle, RegimeWeights
 from app.engine.backtester import run_backtest, BacktestConfig
 from app.engine.confluence import TIMEFRAME_PARENT, TIMEFRAME_PERIOD_HOURS
+from app.engine.regime import DEFAULT_OUTER_WEIGHTS, REGIMES, CAP_KEYS
+from app.engine.regime_optimizer import optimize_regime_weights
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 
 MAX_CONCURRENT_RUNS = 2
+
+
+def _candle_row_to_dict(c) -> dict:
+    return {
+        "timestamp": c.timestamp.isoformat(),
+        "open": float(c.open),
+        "high": float(c.high),
+        "low": float(c.low),
+        "close": float(c.close),
+        "volume": float(c.volume),
+    }
 
 
 # ---- Request / Response models ----
@@ -50,6 +63,16 @@ class RunRequest(BaseModel):
 
 class CompareRequest(BaseModel):
     run_ids: list[str] = Field(min_length=2, max_length=4)
+
+
+class OptimizeRegimeRequest(BaseModel):
+    pair: str
+    timeframe: str
+    date_from: str
+    date_to: str
+    signal_threshold: int = Field(default=40, ge=1, le=100)
+    enable_patterns: bool = True
+    max_iterations: int = Field(default=300, ge=10, le=1000)
 
 
 # ---- Import endpoints ----
@@ -195,34 +218,15 @@ async def start_backtest(body: RunRequest, request: Request):
                         )
                         parent_rows = parent_result.scalars().all()
 
-                candles = [
-                    {
-                        "timestamp": c.timestamp.isoformat(),
-                        "open": float(c.open),
-                        "high": float(c.high),
-                        "low": float(c.low),
-                        "close": float(c.close),
-                        "volume": float(c.volume),
-                    }
-                    for c in candle_rows
-                ]
+                candles = [_candle_row_to_dict(c) for c in candle_rows]
 
                 if not candles:
                     continue
 
-                parent_candles_list = None
-                if parent_rows:
-                    parent_candles_list = [
-                        {
-                            "timestamp": c.timestamp.isoformat(),
-                            "open": float(c.open),
-                            "high": float(c.high),
-                            "low": float(c.low),
-                            "close": float(c.close),
-                            "volume": float(c.volume),
-                        }
-                        for c in parent_rows
-                    ]
+                parent_candles_list = (
+                    [_candle_row_to_dict(c) for c in parent_rows]
+                    if parent_rows else None
+                )
 
                 # Load per-pair ML predictor if ml_mode requested
                 ml_predictor = None
@@ -359,6 +363,187 @@ async def delete_run(run_id: str, request: Request):
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Backtest run not found")
     return {"deleted": run_id}
+
+
+# ---- Regime optimizer endpoint ----
+
+@router.post("/optimize-regime", dependencies=[require_settings_api_key()])
+async def optimize_regime(body: OptimizeRegimeRequest, request: Request):
+    """Run differential evolution to find optimal regime weights for a pair/timeframe."""
+    db = request.app.state.db
+    cancel_flags = _get_cancel_flags(request.app)
+
+    try:
+        date_from = datetime.fromisoformat(body.date_from).replace(tzinfo=timezone.utc)
+        date_to = datetime.fromisoformat(body.date_to).replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use ISO 8601.")
+
+    run_id = str(uuid4())
+    cancel_flags[run_id] = {"cancelled": False}
+
+    # Create a tracking row
+    async with db.session_factory() as session:
+        run = BacktestRun(
+            id=run_id,
+            status="running",
+            config={"type": "optimize-regime", **body.model_dump()},
+            pairs=[body.pair],
+            timeframe=body.timeframe,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        session.add(run)
+        await session.commit()
+
+    async def _run():
+        try:
+            bt_config = BacktestConfig(
+                signal_threshold=body.signal_threshold,
+                enable_patterns=body.enable_patterns,
+            )
+
+            # Load candles
+            async with db.session_factory() as session:
+                result = await session.execute(
+                    select(Candle)
+                    .where(Candle.pair == body.pair)
+                    .where(Candle.timeframe == body.timeframe)
+                    .where(Candle.timestamp >= date_from)
+                    .where(Candle.timestamp <= date_to)
+                    .order_by(Candle.timestamp)
+                )
+                candle_rows = result.scalars().all()
+
+                # Load parent candles for confluence
+                parent_tf = TIMEFRAME_PARENT.get(body.timeframe)
+                parent_rows = []
+                if parent_tf and parent_tf in TIMEFRAME_PERIOD_HOURS:
+                    parent_prewarm = date_from - timedelta(
+                        hours=TIMEFRAME_PERIOD_HOURS[parent_tf] * 70
+                    )
+                    parent_result = await session.execute(
+                        select(Candle)
+                        .where(Candle.pair == body.pair)
+                        .where(Candle.timeframe == parent_tf)
+                        .where(Candle.timestamp >= parent_prewarm)
+                        .where(Candle.timestamp <= date_to)
+                        .order_by(Candle.timestamp)
+                    )
+                    parent_rows = parent_result.scalars().all()
+
+            candles = [_candle_row_to_dict(c) for c in candle_rows]
+            parent_candles = (
+                [_candle_row_to_dict(c) for c in parent_rows]
+                if parent_rows else None
+            )
+
+            if len(candles) < 70:
+                raise ValueError(f"Not enough candles ({len(candles)}). Need at least 70.")
+
+            # Progress callback — updates BacktestRun.results periodically
+            last_progress_update = [0]
+
+            def _on_progress(evals, best_fitness):
+                if evals - last_progress_update[0] >= 25:
+                    last_progress_update[0] = evals
+                    asyncio.get_event_loop().call_soon_threadsafe(
+                        asyncio.ensure_future,
+                        _update_progress(run_id, evals, best_fitness),
+                    )
+
+            async def _update_progress(rid, evals, best_fitness):
+                try:
+                    async with db.session_factory() as s:
+                        r = await s.execute(select(BacktestRun).where(BacktestRun.id == rid))
+                        row = r.scalar_one()
+                        row.results = {"status": "optimizing", "evaluations": evals, "best_fitness": round(best_fitness, 4)}
+                        await s.commit()
+                except Exception:
+                    pass  # best-effort progress update
+
+            opt_result = await asyncio.to_thread(
+                optimize_regime_weights,
+                candles, body.pair, bt_config, parent_candles,
+                body.max_iterations, cancel_flags.get(run_id),
+                _on_progress,
+            )
+
+            # Save optimized weights to DB
+            if opt_result["fitness"] > 0:
+                weights = opt_result["weights"]
+                async with db.session_factory() as session:
+                    # Upsert RegimeWeights row
+                    existing = await session.execute(
+                        select(RegimeWeights)
+                        .where(RegimeWeights.pair == body.pair)
+                        .where(RegimeWeights.timeframe == body.timeframe)
+                    )
+                    rw = existing.scalar_one_or_none()
+                    if rw is None:
+                        rw = RegimeWeights(pair=body.pair, timeframe=body.timeframe)
+                        session.add(rw)
+
+                    for regime in REGIMES:
+                        for cap_key in CAP_KEYS:
+                            setattr(rw, f"{regime}_{cap_key}", weights[regime][cap_key])
+
+                        # Scale all 4 outer weights to sum to 1.0 per regime column.
+                        defaults = DEFAULT_OUTER_WEIGHTS[regime]
+                        opt_tech = weights[regime]["tech"]
+                        opt_pattern = weights[regime]["pattern"]
+                        opt_ratio = opt_tech / opt_pattern if opt_pattern > 0 else 1.0
+                        flow_default = defaults["flow"]
+                        onchain_default = defaults["onchain"]
+                        remaining = 1.0 - flow_default - onchain_default
+                        new_pattern = remaining / (opt_ratio + 1.0)
+                        new_tech = remaining - new_pattern
+                        setattr(rw, f"{regime}_tech_weight", new_tech)
+                        setattr(rw, f"{regime}_pattern_weight", new_pattern)
+                        setattr(rw, f"{regime}_flow_weight", flow_default)
+                        setattr(rw, f"{regime}_onchain_weight", onchain_default)
+
+                    await session.commit()
+                    await session.refresh(rw)
+                    session.expunge(rw)
+
+                # Hot-reload into app state
+                request.app.state.regime_weights[(body.pair, body.timeframe)] = rw
+
+            final_status = "cancelled" if cancel_flags.get(run_id, {}).get("cancelled") else "completed"
+
+            async with db.session_factory() as session:
+                result = await session.execute(
+                    select(BacktestRun).where(BacktestRun.id == run_id)
+                )
+                run_row = result.scalar_one()
+                run_row.status = final_status
+                run_row.results = {
+                    "fitness": opt_result["fitness"],
+                    "stats": opt_result["stats"],
+                    "weights": opt_result["weights"],
+                    "evaluations": opt_result.get("evaluations", 0),
+                }
+                await session.commit()
+
+        except Exception as e:
+            logger.error(f"Regime optimization {run_id} failed: {e}")
+            try:
+                async with db.session_factory() as session:
+                    result = await session.execute(
+                        select(BacktestRun).where(BacktestRun.id == run_id)
+                    )
+                    run_row = result.scalar_one()
+                    run_row.status = "failed"
+                    run_row.results = {"error": str(e)}
+                    await session.commit()
+            except Exception:
+                pass
+        finally:
+            cancel_flags.pop(run_id, None)
+
+    asyncio.create_task(_run())
+    return {"run_id": run_id, "status": "running"}
 
 
 # ---- Helpers ----

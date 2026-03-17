@@ -38,6 +38,8 @@ from app.engine.confluence import (
     TIMEFRAME_PARENT, CONFLUENCE_ONLY_TIMEFRAMES,
     TIMEFRAME_CACHE_TTL, compute_confluence_score, di_direction,
 )
+from app.engine.regime import blend_outer_weights
+from app.db.models import RegimeWeights
 
 logger = logging.getLogger(__name__)
 
@@ -260,8 +262,10 @@ async def run_pipeline(app: FastAPI, candle: dict):
     df = pd.DataFrame(candles_data)
 
     # ── Step 1: Indicator scoring (always runs) ──
+    rw_key = (pair, timeframe)
+    regime_weights = app.state.regime_weights.get(rw_key)
     try:
-        tech_result = compute_technical_score(df)
+        tech_result = compute_technical_score(df, regime_weights=regime_weights)
     except Exception as e:
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
         return
@@ -363,12 +367,16 @@ async def run_pipeline(app: FastAPI, candle: dict):
         except Exception as e:
             logger.debug(f"On-chain scoring skipped: {e}")
 
-    # Adaptive weight redistribution: zero unavailable sources, normalize rest
+    # Regime-aware outer weight blending
+    regime = tech_result.get("regime")
+    outer = blend_outer_weights(regime, regime_weights)
+
+    # Zero unavailable sources, then renormalize
     flow_available = bool(flow_metrics)
-    tech_w = settings.engine_traditional_weight
-    flow_w = settings.engine_flow_weight if flow_available else 0.0
-    onchain_w = settings.engine_onchain_weight if onchain_available else 0.0
-    pattern_w = getattr(settings, "engine_pattern_weight", 0.15)
+    tech_w = outer["tech"]
+    flow_w = outer["flow"] if flow_available else 0.0
+    onchain_w = outer["onchain"] if onchain_available else 0.0
+    pattern_w = outer["pattern"]
     total_w = tech_w + flow_w + onchain_w + pattern_w
     if total_w > 0:
         tech_w /= total_w
@@ -597,6 +605,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "parent_adx": parent_indicators["adx"] if parent_indicators else None,
             "parent_di_plus": parent_indicators["di_plus"] if parent_indicators else None,
             "parent_di_minus": parent_indicators["di_minus"] if parent_indicators else None,
+            "regime_trending": tech_result["indicators"].get("regime_trending"),
+            "regime_ranging": tech_result["indicators"].get("regime_ranging"),
+            "regime_volatile": tech_result["indicators"].get("regime_volatile"),
+            "effective_caps": {k: round(v, 2) for k, v in tech_result["caps"].items()} if regime else None,
+            "effective_outer_weights": {k: round(v, 4) for k, v in outer.items()} if regime else None,
         },
         "detected_patterns": detected_patterns or None,
     }
@@ -871,6 +884,19 @@ async def lifespan(app: FastAPI):
         await app.state.tracker.bootstrap_from_backtests()
     except Exception as e:
         logger.warning("Tracker bootstrap failed: %s", e)
+
+    # Load learned regime weights from DB
+    app.state.regime_weights = {}
+    try:
+        async with db.session_factory() as session:
+            result = await session.execute(select(RegimeWeights))
+            for rw in result.scalars().all():
+                session.expunge(rw)  # detach from session so attributes remain accessible
+                app.state.regime_weights[(rw.pair, rw.timeframe)] = rw
+        if app.state.regime_weights:
+            logger.info("Loaded regime weights for %d pair/timeframe combos", len(app.state.regime_weights))
+    except Exception as e:
+        logger.warning("Failed to load regime weights: %s", e)
 
     # Load PipelineSettings from DB and patch onto in-memory settings
     _db_to_settings = {

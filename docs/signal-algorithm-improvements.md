@@ -12,10 +12,10 @@ Identified areas for improvement in the signal generation pipeline, with agreed 
 
 - 15m looks at 1h trend
 - 1h looks at 4h trend
-- 4h has no parent (unless 1D ingestion is added later)
+- 4h looks at 1D trend
 - Aligned with higher TF = up to +15, conflicting = down to -15
 
-**Status:** Not started
+**Status:** Implemented
 
 ---
 
@@ -25,13 +25,13 @@ Identified areas for improvement in the signal generation pipeline, with agreed 
 
 **Impact:** False signals in regime transitions. The algorithm doesn't adapt to what's actually working in current conditions.
 
-**Approach:** Regime detection using existing ADX + BB width percentile, then shift indicator component weights per regime.
+**Approach:** Smooth regime detection via sigmoid-scaled ADX + BB width percentile produces a continuous regime mix (trending/ranging/volatile). The mix adjusts both inner sub-component caps inside `compute_technical_score()` and outer blend weights in `compute_preliminary_score()`. Weight tables are per-(pair, timeframe) and learnable via backtest optimization using `differential_evolution`.
 
-- **Trending:** ADX > 25 + BB expanding → upweight trend components, downweight mean-reversion
-- **Ranging:** ADX < 20 + BB narrow/stable → upweight mean-reversion, downweight trend
-- **Volatile/Choppy:** Low ADX + BB wide → reduce overall conviction
+- **Trending:** Boost trend cap (38), suppress mean-reversion (15), higher tech+flow outer weight
+- **Ranging:** Boost mean-reversion (32), suppress trend (18), higher onchain+pattern outer weight
+- **Volatile:** Reduce all caps (sum 85 vs 100) for implicit signal suppression in choppy conditions
 
-**Status:** Not started
+**Status:** Implemented — see `docs/superpowers/specs/2026-03-18-market-regime-awareness-design.md`
 
 ---
 
@@ -46,7 +46,7 @@ Identified areas for improvement in the signal generation pipeline, with agreed 
 - **Regime-adaptive:** In trending regimes, reduce contrarian weight or flip to momentum-following. In ranging/choppy regimes, keep full contrarian logic.
 - **Rate-of-change modifier:** Rapidly increasing funding/LS ratio = potential extreme (keep contrarian). Slowly elevated = sustained trend (reduce contrarian weight).
 
-Depends on #2 (regime detection).
+Depends on #2 (regime detection) — now available.
 
 **Status:** Not started
 

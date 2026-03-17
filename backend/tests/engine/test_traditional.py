@@ -198,3 +198,78 @@ class TestRecalibratedScoreMagnitude:
         # Old steepness produces ~54; new produces ~68. Threshold of 55 ensures
         # this test only passes after recalibration.
         assert result["score"] > 55, f"Flow score {result['score']} too compressed"
+
+
+class TestRegimeIntegration:
+    def test_returns_regime_dict(self):
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        assert "regime" in result
+        regime = result["regime"]
+        assert "trending" in regime
+        assert "ranging" in regime
+        assert "volatile" in regime
+
+    def test_regime_sums_to_one(self):
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        regime = result["regime"]
+        total = regime["trending"] + regime["ranging"] + regime["volatile"]
+        assert abs(total - 1.0) < 1e-6
+
+    def test_regime_indicators_present(self):
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        indicators = result["indicators"]
+        assert "regime_trending" in indicators
+        assert "regime_ranging" in indicators
+        assert "regime_volatile" in indicators
+
+    def test_backward_compatible_without_regime_weights(self):
+        """Calling without regime_weights still works (uses defaults)."""
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        assert -100 <= result["score"] <= 100
+
+    def test_with_regime_weights_changes_score(self):
+        """Passing regime_weights should produce a different score than defaults."""
+        from unittest.mock import MagicMock
+        df = _make_candles(80, "up")
+
+        result_default = compute_technical_score(df)
+
+        # Create a mock regime_weights that heavily favors mean-reversion
+        rw = MagicMock()
+        rw.trending_trend_cap = 10.0
+        rw.trending_mean_rev_cap = 40.0
+        rw.trending_bb_vol_cap = 25.0
+        rw.trending_volume_cap = 25.0
+        rw.ranging_trend_cap = 10.0
+        rw.ranging_mean_rev_cap = 40.0
+        rw.ranging_bb_vol_cap = 25.0
+        rw.ranging_volume_cap = 25.0
+        rw.volatile_trend_cap = 10.0
+        rw.volatile_mean_rev_cap = 40.0
+        rw.volatile_bb_vol_cap = 25.0
+        rw.volatile_volume_cap = 25.0
+        rw.trending_tech_weight = 0.25
+        rw.trending_flow_weight = 0.25
+        rw.trending_onchain_weight = 0.25
+        rw.trending_pattern_weight = 0.25
+        rw.ranging_tech_weight = 0.25
+        rw.ranging_flow_weight = 0.25
+        rw.ranging_onchain_weight = 0.25
+        rw.ranging_pattern_weight = 0.25
+        rw.volatile_tech_weight = 0.25
+        rw.volatile_flow_weight = 0.25
+        rw.volatile_onchain_weight = 0.25
+        rw.volatile_pattern_weight = 0.25
+
+        result_custom = compute_technical_score(df, regime_weights=rw)
+        # Different caps should produce different scores
+        assert result_custom["score"] != result_default["score"]
+
+    def test_score_still_clamped(self):
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        assert -100 <= result["score"] <= 100

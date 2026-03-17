@@ -19,6 +19,7 @@ async def _test_lifespan(app: FastAPI):
     mock_settings.krypton_api_key = "test-key"
     mock_settings.pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     app.state.settings = mock_settings
+    app.state.regime_weights = {}
     yield
 
 
