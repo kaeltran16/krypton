@@ -506,7 +506,10 @@ def create_router() -> APIRouter:
         candles_data = [json.loads(c) for c in raw_candles]
         df = pd.DataFrame(candles_data)
         tech = compute_technical_score(df)
-        flow = compute_order_flow_score(request.app.state.order_flow.get(pair, {}))
+        flow = compute_order_flow_score(
+            request.app.state.order_flow.get(pair, {}),
+            regime=tech["regime"],
+        )
         prelim = compute_preliminary_score(tech["score"], flow["score"], 0.50, 0.25)
         final = compute_final_score(prelim, None)
         direction = "LONG" if final > 0 else "SHORT"

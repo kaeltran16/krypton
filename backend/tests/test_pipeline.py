@@ -79,3 +79,35 @@ def test_pipeline_with_empty_order_flow():
 
     preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
     assert preliminary != 0
+
+
+def test_pipeline_with_regime_and_flow_history():
+    """Pipeline passes regime mix and flow history, signal includes diagnostic fields."""
+    from types import SimpleNamespace
+
+    candles_data = _make_candles()
+    df = pd.DataFrame(candles_data)
+    tech_result = compute_technical_score(df)
+
+    flow_metrics = {
+        "funding_rate": 0.0001,
+        "open_interest_change_pct": 0.02,
+        "long_short_ratio": 1.1,
+        "price_direction": 1,
+    }
+    snapshots = [
+        SimpleNamespace(funding_rate=0.00005, long_short_ratio=1.05)
+        for _ in range(10)
+    ]
+    flow_result = compute_order_flow_score(
+        flow_metrics,
+        regime=tech_result["regime"],
+        flow_history=snapshots,
+    )
+    assert -100 <= flow_result["score"] <= 100
+    assert "contrarian_mult" in flow_result["details"]
+    assert "final_mult" in flow_result["details"]
+    assert flow_result["details"]["contrarian_mult"] <= 1.0
+
+    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
+    assert isinstance(preliminary, (int, float))

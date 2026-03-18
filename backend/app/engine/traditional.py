@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -170,17 +172,79 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None) -> dict:
     return {"score": score, "indicators": indicators, "regime": regime, "caps": caps}
 
 
-def compute_order_flow_score(metrics: dict) -> dict:
+# --- Order flow contrarian bias constants ---
+TRENDING_FLOOR = 0.3
+RECENT_WINDOW = 3
+BASELINE_WINDOW = 7
+TOTAL_SNAPSHOTS = RECENT_WINDOW + BASELINE_WINDOW
+ROC_THRESHOLD = 0.0005
+ROC_STEEPNESS = 8000
+LS_ROC_SCALE = 0.003
+
+
+def _is_finite(v) -> bool:
+    return v is not None and math.isfinite(v)
+
+
+def _field_roc(baseline, recent, accessor):
+    """Compute rate-of-change between baseline and recent windows for a given field."""
+    b = [accessor(s) for s in baseline if _is_finite(accessor(s))]
+    r = [accessor(s) for s in recent if _is_finite(accessor(s))]
+    if b and r:
+        return sum(r) / len(r) - sum(b) / len(b), True
+    return 0.0, False
+
+
+def compute_order_flow_score(
+    metrics: dict,
+    regime: dict | None = None,
+    flow_history: list | None = None,
+) -> dict:
     """Compute order flow score from funding rate, OI changes, and L/S ratio.
 
     Returns dict with 'score' (-100 to +100) and 'details' dict.
     All keys are optional with safe defaults.
-    """
-    # Funding rate — contrarian (max ±35)
-    funding = metrics.get("funding_rate", 0.0)
-    funding_score = sigmoid_score(-funding, center=0, steepness=8000) * 35
 
-    # OI change — direction-aware (max ±20)
+    Args:
+        regime: Market regime mix from compute_technical_score().
+            {"trending": float, "ranging": float, "volatile": float}
+            None defaults to full contrarian (mult=1.0).
+        flow_history: Recent OrderFlowSnapshot rows (oldest first).
+            None or < 10 rows disables RoC override.
+    """
+    # regime-based contrarian scaling
+    if regime is not None:
+        trending = regime.get("trending", 0.0)
+        contrarian_mult = 1.0 - (trending * (1.0 - TRENDING_FLOOR))
+        contrarian_mult = max(TRENDING_FLOOR, min(1.0, contrarian_mult))
+    else:
+        contrarian_mult = 1.0
+
+    # rate-of-change override from flow history
+    roc_boost = 0.0
+    funding_roc = 0.0
+    ls_roc = 0.0
+    max_roc = 0.0
+
+    if flow_history and len(flow_history) >= TOTAL_SNAPSHOTS:
+        baseline = flow_history[-TOTAL_SNAPSHOTS:-RECENT_WINDOW]
+        recent = flow_history[-RECENT_WINDOW:]
+
+        funding_roc, has_funding = _field_roc(baseline, recent, lambda s: s.funding_rate)
+        ls_roc, has_ls = _field_roc(baseline, recent, lambda s: s.long_short_ratio)
+
+        if has_funding or has_ls:
+            ls_roc_scaled = ls_roc * LS_ROC_SCALE
+            max_roc = max(abs(funding_roc), abs(ls_roc_scaled))
+            roc_boost = sigmoid_scale(max_roc, center=ROC_THRESHOLD, steepness=ROC_STEEPNESS)
+
+    final_mult = contrarian_mult + roc_boost * (1.0 - contrarian_mult)
+
+    # Funding rate — contrarian (max +/-35)
+    funding = metrics.get("funding_rate", 0.0)
+    funding_score = sigmoid_score(-funding, center=0, steepness=8000) * 35 * final_mult
+
+    # OI change — direction-aware (max +/-20), NOT affected by regime/RoC
     oi_change = metrics.get("open_interest_change_pct", 0.0)
     price_dir = metrics.get("price_direction", 0)
     if price_dir == 0:
@@ -188,11 +252,28 @@ def compute_order_flow_score(metrics: dict) -> dict:
     else:
         oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=65) * 20
 
-    # L/S ratio — contrarian (max ±35)
+    # L/S ratio — contrarian (max +/-35)
     ls = metrics.get("long_short_ratio", 1.0)
-    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=6) * 35
+    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=6) * 35 * final_mult
 
     total = funding_score + oi_score + ls_score
     score = max(min(round(total), 100), -100)
 
-    return {"score": score, "details": metrics}
+    details = {
+        "funding_rate": metrics.get("funding_rate", 0.0),
+        "open_interest": metrics.get("open_interest"),
+        "open_interest_change_pct": metrics.get("open_interest_change_pct", 0.0),
+        "long_short_ratio": metrics.get("long_short_ratio", 1.0),
+        "price_direction": metrics.get("price_direction", 0),
+        "funding_score": round(funding_score, 1),
+        "oi_score": round(oi_score, 1),
+        "ls_score": round(ls_score, 1),
+        "contrarian_mult": round(contrarian_mult, 4),
+        "roc_boost": round(roc_boost, 4),
+        "final_mult": round(final_mult, 4),
+        "funding_roc": round(funding_roc, 8),
+        "ls_roc": round(ls_roc, 8),
+        "max_roc": round(max_roc, 8),
+    }
+
+    return {"score": score, "details": details}

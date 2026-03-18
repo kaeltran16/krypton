@@ -328,7 +328,26 @@ async def run_pipeline(app: FastAPI, candle: dict):
     flow_metrics = order_flow.get(pair, {})
     # Inject price direction for direction-aware OI scoring
     flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] >= candle["open"] else -1}
-    flow_result = compute_order_flow_score(flow_metrics)
+
+    # Query flow history for contrarian bias RoC detection
+    flow_history = []
+    try:
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(OrderFlowSnapshot.funding_rate, OrderFlowSnapshot.long_short_ratio)
+                .where(OrderFlowSnapshot.pair == pair)
+                .order_by(OrderFlowSnapshot.timestamp.desc())
+                .limit(10)
+            )
+            flow_history = list(reversed(result.all()))
+    except Exception as e:
+        logger.debug(f"Flow history query skipped: {e}")
+
+    flow_result = compute_order_flow_score(
+        flow_metrics,
+        regime=tech_result["regime"],
+        flow_history=flow_history,
+    )
 
     # Persist order flow snapshot for ML training data
     if flow_metrics:
@@ -610,6 +629,12 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "regime_volatile": tech_result["indicators"].get("regime_volatile"),
             "effective_caps": {k: round(v, 2) for k, v in tech_result["caps"].items()} if regime else None,
             "effective_outer_weights": {k: round(v, 4) for k, v in outer.items()} if regime else None,
+            "flow_contrarian_mult": flow_result["details"].get("contrarian_mult"),
+            "flow_roc_boost": flow_result["details"].get("roc_boost"),
+            "flow_final_mult": flow_result["details"].get("final_mult"),
+            "flow_funding_roc": flow_result["details"].get("funding_roc"),
+            "flow_ls_roc": flow_result["details"].get("ls_roc"),
+            "flow_max_roc": flow_result["details"].get("max_roc"),
         },
         "detected_patterns": detected_patterns or None,
     }

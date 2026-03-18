@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -272,4 +274,156 @@ class TestRegimeIntegration:
     def test_score_still_clamped(self):
         df = _make_candles(80, "up")
         result = compute_technical_score(df)
+        assert -100 <= result["score"] <= 100
+
+
+class TestOrderFlowRegimeScaling:
+    def test_ranging_regime_full_contrarian(self):
+        """Pure ranging regime (trending=0) gives full contrarian scores."""
+        regime = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0}
+        result_with = compute_order_flow_score(
+            {"funding_rate": -0.0005}, regime=regime
+        )
+        result_without = compute_order_flow_score({"funding_rate": -0.0005})
+        assert result_with["score"] == result_without["score"]
+
+    def test_trending_regime_reduces_contrarian(self):
+        """Pure trending regime (trending=1) reduces contrarian to ~30%."""
+        regime_trending = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        regime_ranging = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0}
+        metrics = {"funding_rate": -0.0005, "long_short_ratio": 0.8}
+        score_trending = abs(compute_order_flow_score(metrics, regime=regime_trending)["score"])
+        score_ranging = abs(compute_order_flow_score(metrics, regime=regime_ranging)["score"])
+        ratio = score_trending / score_ranging
+        assert 0.25 <= ratio <= 0.40, f"Expected ~30% ratio, got {ratio:.2f}"
+
+    def test_mixed_regime_interpolates(self):
+        """Mixed regime gives intermediate contrarian strength."""
+        regime_trending = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        regime_mixed = {"trending": 0.5, "ranging": 0.3, "volatile": 0.2}
+        regime_ranging = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0}
+        metrics = {"funding_rate": -0.0005}
+        score_trending = abs(compute_order_flow_score(metrics, regime=regime_trending)["score"])
+        score_mixed = abs(compute_order_flow_score(metrics, regime=regime_mixed)["score"])
+        score_ranging = abs(compute_order_flow_score(metrics, regime=regime_ranging)["score"])
+        assert score_trending < score_mixed < score_ranging
+
+    def test_oi_unaffected_by_regime(self):
+        """OI score is not affected by regime scaling."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        metrics = {"open_interest_change_pct": 0.05, "price_direction": 1}
+        result_with = compute_order_flow_score(metrics, regime=regime)
+        result_without = compute_order_flow_score(metrics)
+        assert result_with["score"] == result_without["score"]
+
+
+def _make_snapshots(funding_rates, ls_ratios=None):
+    """Create mock OrderFlowSnapshot-like objects for testing."""
+    if ls_ratios is None:
+        ls_ratios = [1.0] * len(funding_rates)
+    return [
+        SimpleNamespace(funding_rate=fr, long_short_ratio=ls)
+        for fr, ls in zip(funding_rates, ls_ratios)
+    ]
+
+
+class TestOrderFlowRoCOverride:
+    def test_stable_history_no_boost(self):
+        """Stable flow history keeps regime scaling unchanged."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        snapshots = _make_snapshots([0.0001] * 10, [1.2] * 10)
+        metrics = {"funding_rate": -0.0005}
+        result_with = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        result_without = compute_order_flow_score(metrics, regime=regime)
+        assert abs(result_with["score"] - result_without["score"]) <= 1
+
+    def test_spiking_history_restores_contrarian(self):
+        """Rapid funding spike restores contrarian strength despite trending regime."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        funding_rates = [0.0001] * 7 + [0.001] * 3
+        snapshots = _make_snapshots(funding_rates, [1.0] * 10)
+        metrics = {"funding_rate": -0.0005}
+        result_spike = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        result_no_hist = compute_order_flow_score(metrics, regime=regime)
+        assert abs(result_spike["score"]) > abs(result_no_hist["score"])
+
+    def test_insufficient_history_skips_roc(self):
+        """Fewer than 10 snapshots disables RoC — only regime scaling applies."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        snapshots = _make_snapshots([0.001] * 5, [1.0] * 5)
+        metrics = {"funding_rate": -0.0005}
+        result_partial = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        result_no_hist = compute_order_flow_score(metrics, regime=regime)
+        assert result_partial["score"] == result_no_hist["score"]
+
+    def test_null_fields_handled_gracefully(self):
+        """Snapshots with None funding/LS are excluded from RoC computation."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        snapshots = [
+            SimpleNamespace(funding_rate=None, long_short_ratio=None)
+            for _ in range(10)
+        ]
+        metrics = {"funding_rate": -0.0005}
+        result = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        result_no_hist = compute_order_flow_score(metrics, regime=regime)
+        assert result["score"] == result_no_hist["score"]
+        assert result["details"]["roc_boost"] == 0.0
+
+    def test_nine_snapshots_skips_roc(self):
+        """Exactly 9 snapshots (below threshold of 10) disables RoC."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        snapshots = _make_snapshots([0.0001] * 6 + [0.001] * 3, [1.0] * 9)
+        metrics = {"funding_rate": -0.0005}
+        result = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        result_no_hist = compute_order_flow_score(metrics, regime=regime)
+        assert result["score"] == result_no_hist["score"]
+
+    def test_nan_fields_excluded_from_roc(self):
+        """Snapshots with NaN funding/LS are excluded from RoC computation."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        snapshots = [
+            SimpleNamespace(funding_rate=float('nan'), long_short_ratio=float('nan'))
+            for _ in range(10)
+        ]
+        metrics = {"funding_rate": -0.0005}
+        result = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        result_no_hist = compute_order_flow_score(metrics, regime=regime)
+        assert result["score"] == result_no_hist["score"]
+        assert result["details"]["roc_boost"] == 0.0
+
+
+class TestOrderFlowBackwardCompat:
+    def test_no_regime_no_history_mult_is_one(self):
+        """Default params produce mult=1.0 (identical behavior to pre-change)."""
+        metrics = {"funding_rate": -0.0005, "long_short_ratio": 0.8}
+        result = compute_order_flow_score(metrics)
+        assert result["details"]["contrarian_mult"] == 1.0
+        assert result["details"]["final_mult"] == 1.0
+
+    def test_details_has_diagnostic_fields(self):
+        """Details dict includes all raw metrics and diagnostic fields."""
+        metrics = {"funding_rate": -0.0005}
+        regime = {"trending": 0.5, "ranging": 0.3, "volatile": 0.2}
+        result = compute_order_flow_score(metrics, regime=regime)
+        details = result["details"]
+        for key in [
+            "funding_rate", "open_interest", "open_interest_change_pct",
+            "long_short_ratio", "price_direction",
+            "funding_score", "oi_score", "ls_score",
+            "contrarian_mult", "roc_boost", "final_mult",
+            "funding_roc", "ls_roc", "max_roc",
+        ]:
+            assert key in details, f"Missing field: {key}"
+
+    def test_score_clamped_extreme_inputs(self):
+        """Score stays in [-100, +100] under extreme inputs with full contrarian."""
+        metrics = {
+            "funding_rate": -0.01,
+            "long_short_ratio": 0.1,
+            "open_interest_change_pct": 0.5,
+            "price_direction": 1,
+        }
+        regime = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0}
+        spiking = _make_snapshots([0.0001] * 7 + [0.01] * 3, [1.0] * 10)
+        result = compute_order_flow_score(metrics, regime=regime, flow_history=spiking)
         assert -100 <= result["score"] <= 100
