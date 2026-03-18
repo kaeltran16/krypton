@@ -20,18 +20,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.create_table('push_subscriptions',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('endpoint', sa.Text(), nullable=False),
-    sa.Column('p256dh_key', sa.String(length=128), nullable=False),
-    sa.Column('auth_key', sa.String(length=64), nullable=False),
-    sa.Column('pairs', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('timeframes', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('threshold', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('endpoint')
-    )
+    # push_subscriptions was created outside Alembic; only create if missing
+    bind = op.get_bind()
+    result = bind.execute(sa.text(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'push_subscriptions'"
+    ))
+    if not result.fetchone():
+        op.create_table('push_subscriptions',
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('endpoint', sa.Text(), nullable=False),
+        sa.Column('p256dh_key', sa.String(length=128), nullable=False),
+        sa.Column('auth_key', sa.String(length=64), nullable=False),
+        sa.Column('pairs', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('timeframes', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('threshold', sa.Integer(), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('endpoint')
+        )
     op.alter_column('news_events', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False)
