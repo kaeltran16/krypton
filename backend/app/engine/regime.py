@@ -2,13 +2,13 @@
 
 
 REGIMES = ["trending", "ranging", "volatile"]
-CAP_KEYS = ["trend_cap", "mean_rev_cap", "bb_vol_cap", "volume_cap"]
+CAP_KEYS = ["trend_cap", "mean_rev_cap", "squeeze_cap", "volume_cap"]
 OUTER_KEYS = ["tech", "flow", "onchain", "pattern"]
 
 DEFAULT_CAPS = {
-    "trending": {"trend_cap": 38, "mean_rev_cap": 15, "bb_vol_cap": 22, "volume_cap": 25},
-    "ranging": {"trend_cap": 18, "mean_rev_cap": 32, "bb_vol_cap": 28, "volume_cap": 22},
-    "volatile": {"trend_cap": 22, "mean_rev_cap": 20, "bb_vol_cap": 28, "volume_cap": 15},
+    "trending": {"trend_cap": 38, "mean_rev_cap": 22, "squeeze_cap": 12, "volume_cap": 28},
+    "ranging": {"trend_cap": 18, "mean_rev_cap": 40, "squeeze_cap": 16, "volume_cap": 26},
+    "volatile": {"trend_cap": 25, "mean_rev_cap": 28, "squeeze_cap": 22, "volume_cap": 25},
 }
 
 DEFAULT_OUTER_WEIGHTS = {
@@ -79,7 +79,7 @@ def blend_caps(regime: dict, regime_weights=None) -> dict:
         regime_weights: RegimeWeights DB row, or None for defaults.
 
     Returns:
-        Dict with trend_cap, mean_rev_cap, bb_vol_cap, volume_cap.
+        Dict with trend_cap, mean_rev_cap, squeeze_cap, volume_cap.
     """
     caps = _extract_regime_dict(regime_weights, CAP_KEYS, "") if regime_weights else DEFAULT_CAPS
     return _blend(regime, caps, CAP_KEYS)

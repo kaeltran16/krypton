@@ -21,9 +21,9 @@ _WEIGHT_BOUNDS = (0.10, 0.50)
 PARAM_BOUNDS = [_CAP_BOUNDS] * 12 + [_WEIGHT_BOUNDS] * 6
 
 # Parameter layout:
-# [0-3]   trending: trend_cap, mean_rev_cap, bb_vol_cap, volume_cap
-# [4-7]   ranging:  trend_cap, mean_rev_cap, bb_vol_cap, volume_cap
-# [8-11]  volatile: trend_cap, mean_rev_cap, bb_vol_cap, volume_cap
+# [0-3]   trending: trend_cap, mean_rev_cap, squeeze_cap, volume_cap
+# [4-7]   ranging:  trend_cap, mean_rev_cap, squeeze_cap, volume_cap
+# [8-11]  volatile: trend_cap, mean_rev_cap, squeeze_cap, volume_cap
 # [12-13] trending: tech_weight, pattern_weight
 # [14-15] ranging:  tech_weight, pattern_weight
 # [16-17] volatile: tech_weight, pattern_weight
@@ -54,7 +54,7 @@ def vector_to_regime_dict(vec: list[float]) -> dict:
     """Convert a flat parameter vector to a nested regime dict.
 
     Returns dict with keys: trending, ranging, volatile.
-    Each has: trend_cap, mean_rev_cap, bb_vol_cap, volume_cap, tech, pattern.
+    Each has: trend_cap, mean_rev_cap, squeeze_cap, volume_cap, tech, pattern.
     Outer weights (tech + pattern) are normalized to sum to 1.0 per regime.
     """
     result = {}

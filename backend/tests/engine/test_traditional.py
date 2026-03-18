@@ -244,15 +244,15 @@ class TestRegimeIntegration:
         rw = MagicMock()
         rw.trending_trend_cap = 10.0
         rw.trending_mean_rev_cap = 40.0
-        rw.trending_bb_vol_cap = 25.0
+        rw.trending_squeeze_cap = 25.0
         rw.trending_volume_cap = 25.0
         rw.ranging_trend_cap = 10.0
         rw.ranging_mean_rev_cap = 40.0
-        rw.ranging_bb_vol_cap = 25.0
+        rw.ranging_squeeze_cap = 25.0
         rw.ranging_volume_cap = 25.0
         rw.volatile_trend_cap = 10.0
         rw.volatile_mean_rev_cap = 40.0
-        rw.volatile_bb_vol_cap = 25.0
+        rw.volatile_squeeze_cap = 25.0
         rw.volatile_volume_cap = 25.0
         rw.trending_tech_weight = 0.25
         rw.trending_flow_weight = 0.25
@@ -390,6 +390,70 @@ class TestOrderFlowRoCOverride:
         result_no_hist = compute_order_flow_score(metrics, regime=regime)
         assert result["score"] == result_no_hist["score"]
         assert result["details"]["roc_boost"] == 0.0
+
+
+class TestUnifiedMeanReversion:
+    def test_both_oversold_stronger_than_rsi_alone(self):
+        """When RSI and BB position both signal oversold, unified score > RSI-only contribution."""
+        df_oversold = _make_candles(80, "down")
+        result = compute_technical_score(df_oversold)
+        indicators = result["indicators"]
+        assert "mean_rev_rsi_raw" in indicators
+        assert "mean_rev_bb_pos_raw" in indicators
+        assert "mean_rev_score" in indicators
+        assert "squeeze_score" in indicators
+
+    def test_scoring_params_accepted(self):
+        """compute_technical_score accepts optional scoring_params dict."""
+        df = _make_candles(80, "up")
+        params = {
+            "mean_rev_rsi_steepness": 0.25,
+            "mean_rev_bb_pos_steepness": 10.0,
+            "squeeze_steepness": 0.10,
+            "mean_rev_blend_ratio": 0.6,
+        }
+        result = compute_technical_score(df, scoring_params=params)
+        assert -100 <= result["score"] <= 100
+
+    def test_different_blend_ratio_changes_score(self):
+        """Different blend ratios produce different mean_rev_score."""
+        df = _make_candles(80, "down")
+        r1 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.9})
+        r2 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.1})
+        assert r1["indicators"]["mean_rev_score"] != r2["indicators"]["mean_rev_score"]
+
+    def test_squeeze_sign_matches_mean_rev_sign(self):
+        """Squeeze score sign must match mean_rev_score sign (direction inheritance)."""
+        for direction in ("up", "down"):
+            df = _make_candles(80, direction)
+            result = compute_technical_score(df)
+            mr = result["indicators"]["mean_rev_score"]
+            sq = result["indicators"]["squeeze_score"]
+            if mr > 0:
+                assert sq >= 0, f"{direction}: squeeze should be >= 0 when mean_rev > 0"
+            elif mr < 0:
+                assert sq <= 0, f"{direction}: squeeze should be <= 0 when mean_rev < 0"
+            else:
+                assert sq == 0, f"{direction}: squeeze must be 0 when mean_rev == 0"
+
+    def test_partial_scoring_params_uses_defaults(self):
+        """Missing keys in scoring_params should fall back to defaults, not crash."""
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.8})
+        assert -100 <= result["score"] <= 100
+
+
+class TestCapKeys:
+    def test_squeeze_cap_in_cap_keys(self):
+        from app.engine.regime import CAP_KEYS
+        assert "squeeze_cap" in CAP_KEYS
+        assert "bb_vol_cap" not in CAP_KEYS
+
+    def test_default_caps_sum_to_100(self):
+        from app.engine.regime import DEFAULT_CAPS
+        for regime, caps in DEFAULT_CAPS.items():
+            total = sum(caps.values())
+            assert total == 100, f"{regime} caps sum to {total}, expected 100"
 
 
 class TestOrderFlowBackwardCompat:

@@ -33,7 +33,7 @@ class TestBacktestWithRegimeWeights:
         for regime in ["trending", "ranging", "volatile"]:
             setattr(rw, f"{regime}_trend_cap", 30.0)
             setattr(rw, f"{regime}_mean_rev_cap", 25.0)
-            setattr(rw, f"{regime}_bb_vol_cap", 25.0)
+            setattr(rw, f"{regime}_squeeze_cap", 25.0)
             setattr(rw, f"{regime}_volume_cap", 20.0)
             setattr(rw, f"{regime}_tech_weight", 0.40)
             setattr(rw, f"{regime}_flow_weight", 0.20)
@@ -54,7 +54,7 @@ class TestBacktestWithRegimeWeights:
         for regime in ["trending", "ranging", "volatile"]:
             setattr(rw, f"{regime}_trend_cap", 45.0)
             setattr(rw, f"{regime}_mean_rev_cap", 10.0)
-            setattr(rw, f"{regime}_bb_vol_cap", 25.0)
+            setattr(rw, f"{regime}_squeeze_cap", 25.0)
             setattr(rw, f"{regime}_volume_cap", 20.0)
             setattr(rw, f"{regime}_tech_weight", 0.80)
             setattr(rw, f"{regime}_flow_weight", 0.0)

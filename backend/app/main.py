@@ -265,7 +265,10 @@ async def run_pipeline(app: FastAPI, candle: dict):
     rw_key = (pair, timeframe)
     regime_weights = app.state.regime_weights.get(rw_key)
     try:
-        tech_result = compute_technical_score(df, regime_weights=regime_weights)
+        tech_result = compute_technical_score(
+            df, regime_weights=regime_weights,
+            scoring_params=getattr(app.state, "scoring_params", None),
+        )
     except Exception as e:
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
         return
@@ -940,10 +943,18 @@ async def lifespan(app: FastAPI):
                     settings_field = _db_to_settings.get(db_field, db_field)
                     object.__setattr__(settings, settings_field, getattr(ps, db_field))
                 logger.info("Pipeline settings loaded from DB")
+                app.state.scoring_params = {
+                    "mean_rev_rsi_steepness": ps.mean_rev_rsi_steepness,
+                    "mean_rev_bb_pos_steepness": ps.mean_rev_bb_pos_steepness,
+                    "squeeze_steepness": ps.squeeze_steepness,
+                    "mean_rev_blend_ratio": ps.mean_rev_blend_ratio,
+                }
             else:
                 logger.warning("No PipelineSettings row found; using config defaults")
+                app.state.scoring_params = None
     except Exception as e:
         logger.warning("Failed to load PipelineSettings from DB: %s", e)
+        app.state.scoring_params = None
 
     # Clean up stale backtest/ML runs orphaned by previous container restarts
     try:

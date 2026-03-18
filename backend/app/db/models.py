@@ -165,6 +165,18 @@ class PipelineSettings(Base):
     news_context_window: Mapped[int] = mapped_column(
         Integer, nullable=False, default=30
     )
+    mean_rev_rsi_steepness: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.25
+    )
+    mean_rev_bb_pos_steepness: Mapped[float] = mapped_column(
+        Float, nullable=False, default=10.0
+    )
+    squeeze_steepness: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.10
+    )
+    mean_rev_blend_ratio: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.6
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -302,19 +314,19 @@ class RegimeWeights(Base):
 
     # Inner caps (3 regimes x 4 caps = 12 floats)
     trending_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=38.0)
-    trending_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=15.0)
-    trending_bb_vol_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
-    trending_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=25.0)
+    trending_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
+    trending_squeeze_cap: Mapped[float] = mapped_column(Float, nullable=False, default=12.0)
+    trending_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=28.0)
 
     ranging_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=18.0)
-    ranging_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=32.0)
-    ranging_bb_vol_cap: Mapped[float] = mapped_column(Float, nullable=False, default=28.0)
-    ranging_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
+    ranging_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=40.0)
+    ranging_squeeze_cap: Mapped[float] = mapped_column(Float, nullable=False, default=16.0)
+    ranging_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=26.0)
 
-    volatile_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
-    volatile_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=20.0)
-    volatile_bb_vol_cap: Mapped[float] = mapped_column(Float, nullable=False, default=28.0)
-    volatile_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=15.0)
+    volatile_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=25.0)
+    volatile_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=28.0)
+    volatile_squeeze_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
+    volatile_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=25.0)
 
     # Outer weights (3 regimes x 4 weights = 12 floats)
     trending_tech_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.45)

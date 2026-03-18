@@ -56,7 +56,7 @@ def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (direction * volume).cumsum()
 
 
-def compute_technical_score(candles: pd.DataFrame, regime_weights=None) -> dict:
+def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_params: dict | None = None) -> dict:
     """Compute technical analysis score using orthogonal indicator dimensions.
 
     Returns dict with 'score' (-100 to +100) and 'indicators' dict.
@@ -132,24 +132,32 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None) -> dict:
     regime = compute_regime_mix(trend_strength, vol_expansion)
     caps = blend_caps(regime, regime_weights)
 
+    # === Scoring parameters (shape + blend) ===
+    sp = scoring_params or {}
+    mr_rsi_steep = sp.get("mean_rev_rsi_steepness", 0.25)
+    mr_bb_steep = sp.get("mean_rev_bb_pos_steepness", 10.0)
+    sq_steep = sp.get("squeeze_steepness", 0.10)
+    blend_ratio = sp.get("mean_rev_blend_ratio", 0.6)
+
     # === Scoring (caps from regime-aware blending) ===
     # 1. Trend
     di_sign = 1 if di_plus_val > di_minus_val else -1
     trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=0.30) * caps["trend_cap"]
 
-    # 2. Mean reversion
-    rsi_score = sigmoid_score(50 - rsi_val, center=0, steepness=0.25) * caps["mean_rev_cap"]
+    # 2. Unified mean reversion (RSI + BB position)
+    rsi_raw = sigmoid_score(50 - rsi_val, center=0, steepness=mr_rsi_steep)
+    bb_pos_raw = sigmoid_score(0.5 - bb_pos, center=0, steepness=mr_bb_steep)
+    mean_rev_score = (blend_ratio * rsi_raw + (1 - blend_ratio) * bb_pos_raw) * caps["mean_rev_cap"]
 
-    # 3. Volatility & position (60/40 split)
-    bb_pos_score = sigmoid_score(0.5 - bb_pos, center=0, steepness=10) * (caps["bb_vol_cap"] * 0.6)
-    bb_pos_sign = 1 if bb_pos_score > 0 else (-1 if bb_pos_score < 0 else 0)
-    bb_width_score = bb_pos_sign * sigmoid_score(50 - bb_width_pct, center=0, steepness=0.10) * (caps["bb_vol_cap"] * 0.4)
+    # 3. Squeeze / expansion
+    mean_rev_sign = 1 if mean_rev_score > 0 else (-1 if mean_rev_score < 0 else 0)
+    squeeze_score = mean_rev_sign * sigmoid_scale(50 - bb_width_pct, center=0, steepness=sq_steep) * caps["squeeze_cap"]
 
     # 4. Volume confirmation (60/40 split)
     obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * (caps["volume_cap"] * 0.6)
     vol_score = candle_direction * sigmoid_score(vol_ratio - 1, center=0, steepness=3.0) * (caps["volume_cap"] * 0.4)
 
-    total = trend_score + rsi_score + bb_pos_score + bb_width_score + obv_score + vol_score
+    total = trend_score + mean_rev_score + squeeze_score + obv_score + vol_score
     score = max(min(round(total), 100), -100)
 
     indicators = {
@@ -164,6 +172,10 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None) -> dict:
         "obv_slope": round(obv_slope_norm, 4),
         "vol_ratio": round(vol_ratio, 4),
         "atr": round(atr_val, 4),
+        "mean_rev_score": round(mean_rev_score, 2),
+        "squeeze_score": round(squeeze_score, 2),
+        "mean_rev_rsi_raw": round(rsi_raw, 4),
+        "mean_rev_bb_pos_raw": round(bb_pos_raw, 4),
         "regime_trending": round(regime["trending"], 4),
         "regime_ranging": round(regime["ranging"], 4),
         "regime_volatile": round(regime["volatile"], 4),

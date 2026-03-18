@@ -55,7 +55,7 @@ class TestBlendCaps:
         caps = blend_caps(regime, None)
         assert "trend_cap" in caps
         assert "mean_rev_cap" in caps
-        assert "bb_vol_cap" in caps
+        assert "squeeze_cap" in caps
         assert "volume_cap" in caps
 
     def test_pure_trending_returns_trending_column(self):

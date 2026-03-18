@@ -65,7 +65,7 @@ Depends on #2 (regime detection) — now available.
 - All component caps (trend, mean-reversion, volatility, OBV, volume) become configurable parameters
 - Run backtest sweeps to find optimal distribution
 
-**Status:** Not started
+**Status:** Implemented — see `docs/superpowers/specs/2026-03-18-indicator-redundancy-design.md`
 
 ---
 
