@@ -87,6 +87,11 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
 
     obv = _obv(close, volume)
 
+    # EMAs for structure-aware level placement
+    ema_9 = close.ewm(span=9, adjust=False).mean()
+    ema_21 = close.ewm(span=21, adjust=False).mean()
+    ema_50 = close.ewm(span=50, adjust=False).mean()
+
     last = df.index[-1]
 
     # Extract last values
@@ -179,6 +184,9 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         "regime_trending": round(regime["trending"], 4),
         "regime_ranging": round(regime["ranging"], 4),
         "regime_volatile": round(regime["volatile"], 4),
+        "ema_9": round(float(ema_9.iloc[-1]), 2),
+        "ema_21": round(float(ema_21.iloc[-1]), 2),
+        "ema_50": round(float(ema_50.iloc[-1]), 2),
     }
 
     return {"score": score, "indicators": indicators, "regime": regime, "caps": caps}

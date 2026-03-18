@@ -74,8 +74,15 @@ class TestTechnicalScoreIndicators:
         df = _make_candles(80, "up")
         result = compute_technical_score(df)
         indicators = result["indicators"]
-        for key in ["ema_9", "ema_21", "ema_50", "macd", "macd_signal", "macd_hist"]:
+        for key in ["macd", "macd_signal", "macd_hist"]:
             assert key not in indicators, f"Old indicator still present: {key}"
+
+    def test_ema_indicators_present(self):
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        indicators = result["indicators"]
+        for key in ["ema_9", "ema_21", "ema_50"]:
+            assert key in indicators, f"Missing EMA indicator: {key}"
 
 
 class TestTechnicalScoreContinuity:

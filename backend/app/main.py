@@ -39,6 +39,7 @@ from app.engine.confluence import (
     TIMEFRAME_CACHE_TTL, compute_confluence_score, di_direction,
 )
 from app.engine.regime import blend_outer_weights
+from app.engine.structure import collect_structure_levels, snap_levels_to_structure
 from app.db.models import RegimeWeights
 
 logger = logging.getLogger(__name__)
@@ -603,6 +604,14 @@ async def run_pipeline(app: FastAPI, candle: dict):
         tp2_atr_default=scaled["tp2_atr"],
     )
 
+    # Post-process: snap levels to nearby technical structure
+    structure = collect_structure_levels(df, tech_result["indicators"], atr)
+    levels, snap_info = snap_levels_to_structure(
+        levels, structure, direction, atr,
+        sl_min_atr=settings.ml_sl_min_atr,
+        sl_max_atr=settings.ml_sl_max_atr,
+    )
+
     signal_data = {
         "pair": pair,
         "timeframe": timeframe,
@@ -645,6 +654,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "llm_prompt_tokens": llm_result.prompt_tokens if llm_result else None,
             "llm_completion_tokens": llm_result.completion_tokens if llm_result else None,
             "llm_model": llm_result.model if llm_result else None,
+            **({f"snap_{k}": v for k, v in snap_info.items()} if snap_info else {}),
         },
         "detected_patterns": detected_patterns or None,
     }

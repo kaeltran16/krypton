@@ -92,8 +92,8 @@ class Settings(BaseSettings):
 
     # unified ML blending
     engine_ml_weight: float = 0.25
-    ml_sl_min_atr: float = 0.5
-    ml_sl_max_atr: float = 3.0
+    ml_sl_min_atr: float = 1.0
+    ml_sl_max_atr: float = 3.5
     ml_tp1_min_atr: float = 1.0
     ml_tp2_max_atr: float = 8.0
     ml_rr_floor: float = 1.0
