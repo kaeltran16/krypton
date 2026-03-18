@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 
-from app.engine.models import LLMResponse
+from app.engine.models import LLMResponse, LLMResult
 
 logger = logging.getLogger(__name__)
 
@@ -12,12 +12,13 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 SYSTEM_PROMPT = (
     "You are a decisive crypto futures trader with 10 years of experience. "
-    "You trust quantitative signals and only override them when you see clear, "
-    "specific evidence in the data — not vague concerns about volatility or risk. "
-    "When indicators align, you confirm. You use caution only for concrete conflicts "
-    "like bearish divergence on a long setup, or exhaustion candles at resistance. "
-    "You contradict only when the data clearly says the trade will fail."
+    "You analyze quantitative data and identify specific factors that support "
+    "or undermine a trade setup. You focus on concrete evidence — divergences, "
+    "key levels, exhaustion signals, positioning extremes — not vague concerns "
+    "about volatility or risk."
 )
+
+MAX_FACTORS = 5
 
 
 def load_prompt_template(path: Path) -> str:
@@ -33,8 +34,8 @@ async def call_openrouter(
     api_key: str,
     model: str,
     timeout: int = 30,
-) -> LLMResponse | None:
-    """Call OpenRouter API and parse response into LLMResponse."""
+) -> LLMResult | None:
+    """Call OpenRouter API and parse response into LLMResult with token usage."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -56,7 +57,17 @@ async def call_openrouter(
             data = resp.json()
 
         content = data["choices"][0]["message"]["content"]
-        return parse_llm_response(content)
+        parsed = parse_llm_response(content)
+        if parsed is None:
+            return None
+
+        usage = data.get("usage", {})
+        return LLMResult(
+            response=parsed,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            model=data.get("model", model),
+        )
     except httpx.TimeoutException:
         logger.warning("OpenRouter request timed out")
         return None
@@ -66,13 +77,25 @@ async def call_openrouter(
 
 
 def parse_llm_response(content: str) -> LLMResponse | None:
-    """Parse LLM text response into structured LLMResponse."""
+    """Parse LLM text response into structured LLMResponse with factors."""
     try:
         text = content.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
-        return LLMResponse.model_validate(json.loads(text))
+        data = json.loads(text)
+
+        # Truncate to max factors before validation
+        if "factors" in data and isinstance(data["factors"], list):
+            data["factors"] = data["factors"][:MAX_FACTORS]
+
+        parsed = LLMResponse.model_validate(data)
+
+        if not parsed.factors:
+            logger.error("LLM returned empty factors list")
+            return None
+
+        return parsed
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
         logger.error(f"Failed to parse LLM response: {e}")
         return None

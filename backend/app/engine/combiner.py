@@ -1,6 +1,4 @@
-from app.engine.models import LLMResponse
-
-CONFIDENCE_MULTIPLIER = {"HIGH": 1.0, "MEDIUM": 0.6, "LOW": 0.3}
+from app.engine.models import LLMFactor, DEFAULT_FACTOR_WEIGHTS
 
 
 def compute_preliminary_score(
@@ -58,25 +56,26 @@ def compute_agreement(indicator_preliminary: int, ml_score: float | None) -> str
     return "disagree"
 
 
-def compute_final_score(
-    preliminary_score: int,
-    llm_response: LLMResponse | None,
+def compute_llm_contribution(
+    factors: list[LLMFactor],
+    direction: str,
+    factor_weights: dict[str, float],
+    total_cap: float,
 ) -> int:
-    if llm_response is None:
-        return preliminary_score
+    total = 0.0
+    for f in factors:
+        weight = factor_weights.get(f.type.value, 0.0)
+        aligned = (
+            (f.direction == "bullish" and direction == "LONG")
+            or (f.direction == "bearish" and direction == "SHORT")
+        )
+        sign = 1 if aligned else -1
+        total += sign * weight * f.strength
+    return round(max(-total_cap, min(total_cap, total)))
 
-    multiplier = CONFIDENCE_MULTIPLIER.get(llm_response.confidence, 0.5)
 
-    if llm_response.opinion == "confirm":
-        final = preliminary_score + 20 * multiplier
-    elif llm_response.opinion == "caution":
-        final = preliminary_score - 15 * multiplier
-    else:  # contradict
-        sign = 1 if preliminary_score > 0 else -1
-        penalty = sign * min(30 * multiplier, abs(preliminary_score))
-        final = preliminary_score - penalty
-
-    return max(min(round(final), 100), -100)
+def compute_final_score(blended_score: int, llm_contribution: int) -> int:
+    return max(-100, min(100, blended_score + llm_contribution))
 
 
 def _validate_llm_levels(direction: str, levels: dict) -> bool:
@@ -136,42 +135,38 @@ def calculate_levels(
     atr: float,
     llm_levels: dict | None = None,
     ml_atr_multiples: dict | None = None,
-    llm_opinion: str | None = None,
+    llm_contribution: int = 0,
     sl_bounds: tuple[float, float] = (0.5, 3.0),
     tp1_min_atr: float = 1.0,
     tp2_max_atr: float = 8.0,
     rr_floor: float = 1.0,
-    caution_sl_factor: float = 0.8,
     sl_atr_default: float = 1.5,
     tp1_atr_default: float = 2.0,
     tp2_atr_default: float = 3.0,
 ) -> dict:
-    # Priority 1: LLM explicit levels (if validated)
-    if llm_levels and _validate_llm_levels(direction, llm_levels):
-        return {**llm_levels, "levels_source": "llm"}
-
-    # Priority 2: ML regression multiples (clamped to safety bounds)
+    # Priority 1: ML regression multiples
     if ml_atr_multiples is not None:
         sl_atr = ml_atr_multiples["sl_atr"]
         tp1_atr = ml_atr_multiples["tp1_atr"]
         tp2_atr = ml_atr_multiples["tp2_atr"]
         levels_source = "ml"
+    elif llm_levels and llm_contribution >= 0 and _validate_llm_levels(direction, llm_levels):
+        # Priority 2: LLM explicit levels (only if contribution non-negative)
+        return {**llm_levels, "levels_source": "llm"}
     else:
-        # Priority 3: ATR defaults (may be Phase 2 learned values)
+        # Priority 3: ATR defaults
         sl_atr = sl_atr_default
         tp1_atr = tp1_atr_default
         tp2_atr = tp2_atr_default
         levels_source = "atr_default"
 
-    # Shared guardrails for both ML and ATR-default paths
+    # Shared guardrails
     sl_atr = max(sl_bounds[0], min(sl_atr, sl_bounds[1]))
     tp1_atr = max(tp1_min_atr, tp1_atr)
     tp2_atr = max(tp1_atr * 1.2, tp2_atr)
     tp2_atr = min(tp2_max_atr, tp2_atr)
     if sl_atr > 0 and tp1_atr / sl_atr < rr_floor:
         tp1_atr = sl_atr * rr_floor
-    if llm_opinion == "caution":
-        sl_atr = sl_atr * caution_sl_factor
 
     sign = 1 if direction == "LONG" else -1
     return {

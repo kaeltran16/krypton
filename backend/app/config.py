@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -96,7 +97,17 @@ class Settings(BaseSettings):
     ml_tp1_min_atr: float = 1.0
     ml_tp2_max_atr: float = 8.0
     ml_rr_floor: float = 1.0
-    llm_caution_sl_factor: float = 0.8
+
+    # LLM factor scoring
+    llm_factor_weights: dict[str, float] = Field(default_factory=lambda: {
+        "support_proximity": 6.0, "resistance_proximity": 6.0,
+        "level_breakout": 8.0, "htf_alignment": 7.0,
+        "rsi_divergence": 7.0, "volume_divergence": 6.0,
+        "macd_divergence": 6.0, "volume_exhaustion": 5.0,
+        "funding_extreme": 5.0, "crowded_positioning": 5.0,
+        "pattern_confirmation": 5.0, "news_catalyst": 7.0,
+    })
+    llm_factor_total_cap: float = 35.0
 
     # push notifications
     vapid_private_key: str = ""

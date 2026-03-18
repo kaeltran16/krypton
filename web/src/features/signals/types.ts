@@ -1,6 +1,4 @@
 export type Direction = "LONG" | "SHORT";
-export type Confidence = "HIGH" | "MEDIUM" | "LOW";
-export type LlmOpinion = "confirm" | "caution" | "contradict";
 export type Timeframe = "15m" | "1h" | "4h";
 export type SignalOutcome = "PENDING" | "TP1_HIT" | "TP2_HIT" | "SL_HIT" | "EXPIRED";
 export type UserStatus = "OBSERVED" | "TRADED" | "SKIPPED";
@@ -28,15 +26,24 @@ export interface DetectedPattern {
   strength: number;
 }
 
+export type FactorDirection = "bullish" | "bearish";
+
+export interface LLMFactor {
+  type: string;
+  direction: FactorDirection;
+  strength: 1 | 2 | 3;
+  reason: string;
+}
+
 export interface Signal {
   id: number;
   pair: string;
   timeframe: Timeframe;
   direction: Direction;
   final_score: number;
-  confidence: Confidence;
   traditional_score: number;
-  llm_opinion: LlmOpinion | null;
+  llm_factors: LLMFactor[] | null;
+  llm_contribution: number | null;
   explanation: string | null;
   levels: SignalLevels;
   outcome: SignalOutcome;

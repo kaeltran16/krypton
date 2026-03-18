@@ -48,7 +48,7 @@ Identified areas for improvement in the signal generation pipeline, with agreed 
 
 Depends on #2 (regime detection) — now available.
 
-**Status:** Not started
+**Status:** Implemented
 
 ---
 
@@ -83,4 +83,4 @@ Depends on #2 (regime detection) — now available.
 - Factors can interact with other pipeline components (e.g., LLM flags exhaustion → dampen volume score)
 - Maintains debuggability — can trace exactly what the LLM flagged per signal
 
-**Status:** Not started
+**Status:** Implemented — see `docs/superpowers/specs/2026-03-18-structured-llm-factors-design.md`

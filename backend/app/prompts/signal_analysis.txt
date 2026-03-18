@@ -21,23 +21,49 @@ You are a crypto futures trading analyst. Analyze the following data for {pair} 
 ## Current Assessment
 Preliminary Indicator Score: {preliminary_score} (Direction: {direction})
 Blended Score (with ML): {blended_score}
-Indicator–ML Agreement: {agreement}
+Indicator-ML Agreement: {agreement}
 
 ## Recent Price Action (last 20 candles)
 {candles}
 
 ## Instructions
-The quantitative signals already flagged a {direction} setup. Your job is to validate OR reject it — not to hedge.
+The quantitative signals already flagged a {direction} setup. Your job is to identify specific factors that support or undermine this trade.
 
-Provide your analysis as JSON with exactly these fields:
-- "opinion": one of "confirm", "caution", or "contradict"
-  - "confirm" = indicators align, momentum supports the direction, take the trade
-  - "caution" = one or two conflicting signals but the setup is still tradeable
-  - "contradict" = clear evidence against the trade — divergences, exhaustion, or reversal patterns
-- "confidence": one of "HIGH", "MEDIUM", "LOW"
-- "explanation": 2-3 sentence analysis. Be specific about which indicators support or oppose the trade.
+Analyze the data and return 1-5 factors from the following types:
+
+**Structure factors:**
+- "support_proximity" — Price near a key support level (from recent candle lows/rejections)
+- "resistance_proximity" — Price near a key resistance level (from recent candle highs/rejections)
+- "level_breakout" — Price breaking through a key support/resistance level
+- "htf_alignment" — Higher-timeframe trend confirms or conflicts with this setup
+
+**Momentum factors:**
+- "rsi_divergence" — RSI diverging from price (higher lows in RSI vs lower lows in price, or vice versa)
+- "volume_divergence" — Volume diverging from price (declining volume on price advance, etc.)
+- "macd_divergence" — MACD diverging from price direction
+
+**Exhaustion factors:**
+- "volume_exhaustion" — Volume drying up, move losing steam
+- "funding_extreme" — Funding rate at extreme levels
+- "crowded_positioning" — Long/short ratio heavily skewed
+
+**Event factors:**
+- "pattern_confirmation" — Candlestick pattern supports or invalidates the direction
+- "news_catalyst" — News event supports or undermines the thesis
+
+For each factor, provide:
+- "type": one of the types listed above
+- "direction": "bullish" or "bearish"
+- "strength": 1 (weak/suggestive evidence), 2 (clear evidence in the data), 3 (strong/multiple confirming signals)
+- "reason": one sentence explaining what you see in the data
+
+Also provide:
+- "explanation": 2-3 sentence overall analysis
 - "levels": object with "entry", "stop_loss", "take_profit_1", "take_profit_2" as numbers. Base these on the price action, support/resistance from the candles, and ATR. Do NOT just copy the current price +/- a fixed offset.
 
-Default to "confirm" unless you see concrete evidence against the trade. Vague risk ("crypto is volatile") is not a reason for "caution".
+Only report factors you actually see evidence for in the data. Do not invent factors. If you see no clear factors against the trade, report supporting factors only.
 
 Respond ONLY with the JSON object, no other text.
+
+Example response format:
+{{"factors": [{{"type": "rsi_divergence", "direction": "bullish", "strength": 2, "reason": "RSI making higher lows while price makes lower lows on last 5 candles"}}, {{"type": "funding_extreme", "direction": "bearish", "strength": 1, "reason": "Funding slightly elevated but not extreme"}}], "explanation": "Bullish divergence forming but funding headwind limits conviction.", "levels": {{"entry": 67000, "stop_loss": 66200, "take_profit_1": 67800, "take_profit_2": 68600}}}}

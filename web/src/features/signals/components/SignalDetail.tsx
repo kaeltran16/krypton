@@ -53,9 +53,22 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
             Traditional: <span className="font-mono">{formatScore(signal.traditional_score)}</span>
           </div>
           <div>
-            LLM: <span className="font-mono">{signal.llm_opinion ?? "N/A"}</span>
+            LLM: <span className="font-mono">{signal.llm_contribution != null ? (signal.llm_contribution >= 0 ? "+" : "") + signal.llm_contribution : "N/A"}</span>
           </div>
         </div>
+        {signal.llm_factors && signal.llm_factors.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {signal.llm_factors.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs" title={f.reason}>
+                <span className={f.direction === "bullish" ? "text-long" : "text-short"}>
+                  {f.direction === "bullish" ? "+" : "-"}
+                </span>
+                <span className="text-muted">{f.type.replace(/_/g, " ")}</span>
+                <span className="font-mono">{"*".repeat(f.strength)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {signal.detected_patterns && signal.detected_patterns.length > 0 && (

@@ -1,7 +1,8 @@
 import pytest
-from app.engine.models import LLMResponse
+from app.engine.models import LLMFactor, DEFAULT_FACTOR_WEIGHTS
 from app.engine.combiner import (
     compute_preliminary_score,
+    compute_llm_contribution,
     compute_final_score,
     calculate_levels,
     blend_with_ml,
@@ -153,75 +154,100 @@ def test_agreement_ml_none():
     assert compute_agreement(40, None) == "neutral"
 
 
-# ── compute_final_score ──
+# ── compute_llm_contribution ──
 
 
-def test_final_score_with_confirm():
-    llm = LLMResponse(opinion="confirm", confidence="HIGH", explanation="Looks good", levels=None)
-    final = compute_final_score(preliminary_score=60, llm_response=llm)
-    assert final > 60
+def test_llm_contribution_single_aligned_factor():
+    """Single bullish factor on LONG signal = positive contribution."""
+    factors = [LLMFactor(type="rsi_divergence", direction="bullish", strength=2, reason="test")]
+    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == round(7.0 * 2)  # weight=7, strength=2, aligned=+1
 
 
-def test_final_score_with_caution():
-    llm = LLMResponse(opinion="caution", confidence="HIGH", explanation="Be careful", levels=None)
-    final = compute_final_score(preliminary_score=60, llm_response=llm)
-    assert final < 60
+def test_llm_contribution_single_opposing_factor():
+    """Bearish factor on LONG signal = negative contribution."""
+    factors = [LLMFactor(type="rsi_divergence", direction="bearish", strength=2, reason="test")]
+    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == round(-7.0 * 2)
 
 
-def test_final_score_with_contradict():
-    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="No way", levels=None)
-    final = compute_final_score(preliminary_score=80, llm_response=llm)
-    assert final == 50  # 80 - 1 * min(30, 80) * 1.0 = 50
+def test_llm_contribution_short_direction():
+    """Bearish factor on SHORT signal = positive (aligned)."""
+    factors = [LLMFactor(type="funding_extreme", direction="bearish", strength=3, reason="test")]
+    result = compute_llm_contribution(factors, "SHORT", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == round(5.0 * 3)  # aligned with SHORT
 
 
-def test_final_score_with_contradict_negative():
-    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Not that bad", levels=None)
-    final = compute_final_score(preliminary_score=-80, llm_response=llm)
-    assert final == -50  # -80 - (-1) * min(30, 80) * 1.0 = -50
+def test_llm_contribution_multiple_factors():
+    """Multiple factors sum their contributions."""
+    factors = [
+        LLMFactor(type="level_breakout", direction="bullish", strength=3, reason="broke key"),
+        LLMFactor(type="rsi_divergence", direction="bullish", strength=1, reason="mild div"),
+        LLMFactor(type="funding_extreme", direction="bearish", strength=2, reason="elevated"),
+    ]
+    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    expected = round((8.0 * 3) + (7.0 * 1) + (-5.0 * 2))  # 24 + 7 - 10 = 21
+    assert result == expected
 
 
-def test_final_score_with_contradict_medium():
-    llm = LLMResponse(opinion="contradict", confidence="MEDIUM", explanation="Meh", levels=None)
-    final = compute_final_score(preliminary_score=80, llm_response=llm)
-    assert final == 62  # 80 - 1 * min(18, 80) * 1.0 = 62 (multiplier 0.6: 30*0.6=18)
+def test_llm_contribution_capped_positive():
+    """Total capped at +total_cap."""
+    factors = [
+        LLMFactor(type="level_breakout", direction="bullish", strength=3, reason="a"),
+        LLMFactor(type="htf_alignment", direction="bullish", strength=3, reason="b"),
+        LLMFactor(type="rsi_divergence", direction="bullish", strength=3, reason="c"),
+    ]
+    # Raw: 24 + 21 + 21 = 66, should be capped at 35
+    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == 35
 
 
-def test_final_score_with_contradict_zero():
-    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Zero", levels=None)
-    final = compute_final_score(preliminary_score=0, llm_response=llm)
-    assert final == 0  # zero guard: no directional bias
+def test_llm_contribution_capped_negative():
+    """Total capped at -total_cap."""
+    factors = [
+        LLMFactor(type="level_breakout", direction="bearish", strength=3, reason="a"),
+        LLMFactor(type="htf_alignment", direction="bearish", strength=3, reason="b"),
+        LLMFactor(type="rsi_divergence", direction="bearish", strength=3, reason="c"),
+    ]
+    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == -35
 
 
-def test_final_score_with_contradict_clamps_at_zero():
-    """Penalty larger than abs(score) clamps to zero instead of flipping sign."""
-    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Disagree", levels=None)
-    final = compute_final_score(preliminary_score=20, llm_response=llm)
-    assert final == 0  # 20 - 1 * min(30, 20) * 1.0 = 0 (clamped, not -10)
+def test_llm_contribution_empty_factors():
+    """Empty factor list returns 0."""
+    result = compute_llm_contribution([], "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == 0
 
 
-def test_final_score_with_contradict_clamps_at_zero_negative():
-    """Negative score: penalty clamps to zero instead of flipping to positive."""
-    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Disagree", levels=None)
-    final = compute_final_score(preliminary_score=-25, llm_response=llm)
-    assert final == 0  # -25 - (-1) * min(30, 25) * 1.0 = 0 (clamped, not +5)
+def test_llm_contribution_custom_weights():
+    """Custom weight dict overrides defaults."""
+    custom = {"rsi_divergence": 10.0}
+    factors = [LLMFactor(type="rsi_divergence", direction="bullish", strength=2, reason="test")]
+    result = compute_llm_contribution(factors, "LONG", custom, 35.0)
+    assert result == 20  # 10.0 * 2
 
 
-def test_final_score_with_contradict_borderline_emission():
-    """Score of 70 with HIGH contradict lands exactly at threshold=40."""
-    llm = LLMResponse(opinion="contradict", confidence="HIGH", explanation="Doubt", levels=None)
-    final = compute_final_score(preliminary_score=70, llm_response=llm)
-    assert final == 40  # 70 - 1 * min(30, 70) * 1.0 = 40 (borderline emit)
+# ── compute_final_score (new signature) ──
 
 
-def test_final_score_without_llm():
-    final = compute_final_score(preliminary_score=65, llm_response=None)
-    assert final == 65
+def test_final_score_adds_contribution():
+    assert compute_final_score(60, 14) == 74
 
 
-def test_final_score_bounded():
-    llm = LLMResponse(opinion="confirm", confidence="HIGH", explanation="Max boost", levels=None)
-    final = compute_final_score(preliminary_score=95, llm_response=llm)
-    assert -100 <= final <= 100
+def test_final_score_subtracts_contribution():
+    assert compute_final_score(60, -14) == 46
+
+
+def test_final_score_no_llm():
+    assert compute_final_score(60, 0) == 60
+
+
+def test_final_score_clamped_high():
+    assert compute_final_score(90, 35) == 100
+
+
+def test_final_score_clamped_low():
+    assert compute_final_score(-90, -35) == -100
 
 
 # ── calculate_levels ──
@@ -244,20 +270,45 @@ def test_calculate_levels_atr_defaults_short():
     assert levels["take_profit_2"] == 67000.0 - 3.0 * 200.0
 
 
-def test_calculate_levels_llm_override():
-    """Valid LLM levels take priority over everything."""
+def test_calculate_levels_ml_first_over_llm():
+    """ML takes priority over LLM when both available."""
     llm_levels = {
-        "entry": 67000.0,
-        "stop_loss": 66500.0,
-        "take_profit_1": 67500.0,
-        "take_profit_2": 68000.0,
+        "entry": 67000.0, "stop_loss": 66500.0,
+        "take_profit_1": 67500.0, "take_profit_2": 68000.0,
+    }
+    ml_multiples = {"sl_atr": 1.2, "tp1_atr": 2.5, "tp2_atr": 4.0}
+    levels = calculate_levels(
+        direction="LONG", current_price=67000.0, atr=200.0,
+        llm_levels=llm_levels, ml_atr_multiples=ml_multiples,
+        llm_contribution=10,
+    )
+    assert levels["levels_source"] == "ml"
+
+
+def test_calculate_levels_llm_fallback_no_ml():
+    """LLM levels used when ML not available and contribution >= 0."""
+    llm_levels = {
+        "entry": 67000.0, "stop_loss": 66500.0,
+        "take_profit_1": 67500.0, "take_profit_2": 68000.0,
     }
     levels = calculate_levels(
         direction="LONG", current_price=67000.0, atr=200.0,
-        llm_levels=llm_levels,
-        ml_atr_multiples={"sl_atr": 1.0, "tp1_atr": 1.5, "tp2_atr": 2.5},
+        llm_levels=llm_levels, llm_contribution=5,
     )
     assert levels == {**llm_levels, "levels_source": "llm"}
+
+
+def test_calculate_levels_llm_skipped_negative_contribution():
+    """LLM levels skipped when contribution < 0."""
+    llm_levels = {
+        "entry": 67000.0, "stop_loss": 66500.0,
+        "take_profit_1": 67500.0, "take_profit_2": 68000.0,
+    }
+    levels = calculate_levels(
+        direction="LONG", current_price=67000.0, atr=200.0,
+        llm_levels=llm_levels, llm_contribution=-5,
+    )
+    assert levels["levels_source"] == "atr_default"
 
 
 def test_calculate_levels_rejects_invalid_llm_levels():
@@ -356,48 +407,6 @@ def test_calculate_levels_ml_rr_floor():
     # TP1 should be bumped to SL * rr_floor = 2.0
     expected_tp1 = 67000.0 + 2.0 * 200.0
     assert levels["take_profit_1"] == expected_tp1
-
-
-def test_calculate_levels_caution_tightens_sl_ml():
-    """LLM caution tightens SL when using ML multiples."""
-    ml_multiples = {"sl_atr": 2.0, "tp1_atr": 3.0, "tp2_atr": 5.0}
-    levels = calculate_levels(
-        direction="LONG", current_price=67000.0, atr=200.0,
-        ml_atr_multiples=ml_multiples,
-        llm_opinion="caution",
-        caution_sl_factor=0.8,
-    )
-    expected_sl = 67000.0 - (2.0 * 0.8) * 200.0
-    assert levels["stop_loss"] == expected_sl
-
-
-def test_calculate_levels_caution_tightens_sl_atr_defaults():
-    """LLM caution tightens SL when using ATR defaults."""
-    levels = calculate_levels(
-        direction="LONG", current_price=67000.0, atr=200.0,
-        llm_opinion="caution",
-        caution_sl_factor=0.8,
-    )
-    expected_sl = 67000.0 - (1.5 * 0.8) * 200.0
-    assert levels["stop_loss"] == expected_sl
-
-
-def test_calculate_levels_caution_no_effect_with_llm_levels():
-    """Caution does not apply when LLM provides explicit levels."""
-    llm_levels = {
-        "entry": 67000.0,
-        "stop_loss": 66500.0,
-        "take_profit_1": 67500.0,
-        "take_profit_2": 68000.0,
-    }
-    levels = calculate_levels(
-        direction="LONG", current_price=67000.0, atr=200.0,
-        llm_levels=llm_levels,
-        llm_opinion="caution",
-        caution_sl_factor=0.8,
-    )
-    # LLM levels used as-is, no tightening
-    assert levels["stop_loss"] == 66500.0
 
 
 def test_calculate_levels_ml_short_direction():
@@ -553,7 +562,7 @@ def test_levels_source_atr_default():
 
 
 def test_levels_source_ml():
-    """Path 2 returns levels_source='ml'."""
+    """Path 1 returns levels_source='ml'."""
     result = calculate_levels(
         "LONG", 50000.0, 500.0,
         ml_atr_multiples={"sl_atr": 1.5, "tp1_atr": 2.0, "tp2_atr": 3.0},
@@ -562,7 +571,7 @@ def test_levels_source_ml():
 
 
 def test_levels_source_llm():
-    """Path 1 returns levels_source='llm'."""
+    """Path 2 returns levels_source='llm'."""
     llm = {"entry": 50000.0, "stop_loss": 49000.0, "take_profit_1": 51000.0, "take_profit_2": 52000.0}
     result = calculate_levels("LONG", 50000.0, 500.0, llm_levels=llm)
     assert result["levels_source"] == "llm"

@@ -30,7 +30,7 @@ from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
-from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
+from app.engine.combiner import compute_preliminary_score, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
@@ -120,9 +120,8 @@ async def persist_signal(db: Database, signal_data: dict):
                 direction=signal_data["direction"],
                 final_score=signal_data["final_score"],
                 traditional_score=signal_data["traditional_score"],
-                llm_opinion=signal_data.get("llm_opinion"),
-                llm_confidence=signal_data.get("llm_confidence"),
                 explanation=signal_data.get("explanation"),
+                llm_factors=signal_data.get("llm_factors"),
                 entry=signal_data["entry"],
                 stop_loss=signal_data["stop_loss"],
                 take_profit_1=signal_data["take_profit_1"],
@@ -480,11 +479,10 @@ async def run_pipeline(app: FastAPI, candle: dict):
         logger.debug(f"News context fetch skipped: {e}")
 
     # ── Step 5: LLM gate (on blended score) ──
-    llm_response = None
+    llm_result = None
     if abs(blended) >= settings.engine_llm_threshold and prompt_template:
         direction_label = "LONG" if blended > 0 else "SHORT"
 
-        # Build ML context string for LLM prompt
         if ml_available and ml_prediction:
             ml_context = (
                 f"Direction: {ml_prediction['direction']}, "
@@ -513,7 +511,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 agreement=agreement,
                 candles=json.dumps(candles_data[-20:], indent=2),
             )
-            llm_response = await call_openrouter(
+            llm_result = await call_openrouter(
                 prompt=rendered,
                 api_key=settings.openrouter_api_key,
                 model=settings.openrouter_model,
@@ -523,10 +521,17 @@ async def run_pipeline(app: FastAPI, candle: dict):
             logger.error(f"LLM call failed for {pair}:{timeframe}: {e}")
 
     # ── Step 6: Compute final score ──
-    final = compute_final_score(blended, llm_response)
+    llm_contribution = 0
+    if llm_result:
+        direction_label = "LONG" if blended > 0 else "SHORT"
+        llm_contribution = compute_llm_contribution(
+            llm_result.response.factors,
+            direction_label,
+            settings.llm_factor_weights,
+            settings.llm_factor_total_cap,
+        )
+    final = compute_final_score(blended, llm_contribution)
     direction = "LONG" if final > 0 else "SHORT"
-
-    llm_opinion = llm_response.opinion if llm_response else None
 
     # ── Step 7: Threshold check + emit ──
     emitted = abs(final) >= settings.engine_signal_threshold
@@ -539,7 +544,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         ml_score=ml_score, ml_confidence=ml_confidence,
         indicator_preliminary=indicator_preliminary,
         blended_score=blended, final_score=final,
-        llm_opinion=llm_opinion, ml_available=ml_available,
+        llm_contribution=llm_contribution, ml_available=ml_available,
         agreement=agreement, emitted=emitted,
     )
 
@@ -565,8 +570,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
     )
 
     llm_levels = None
-    if llm_response and llm_response.opinion != "contradict" and llm_response.levels:
-        llm_levels = llm_response.levels.model_dump()
+    if llm_result and llm_result.response.levels:
+        llm_levels = llm_result.response.levels.model_dump()
 
     ml_atr_multiples = None
     if (
@@ -588,12 +593,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
         atr=atr,
         llm_levels=llm_levels,
         ml_atr_multiples=ml_atr_multiples,
-        llm_opinion=llm_opinion,
+        llm_contribution=llm_contribution,
         sl_bounds=(settings.ml_sl_min_atr, settings.ml_sl_max_atr),
         tp1_min_atr=settings.ml_tp1_min_atr,
         tp2_max_atr=settings.ml_tp2_max_atr,
         rr_floor=settings.ml_rr_floor,
-        caution_sl_factor=settings.llm_caution_sl_factor,
         sl_atr_default=scaled["sl_atr"],
         tp1_atr_default=scaled["tp1_atr"],
         tp2_atr_default=scaled["tp2_atr"],
@@ -605,9 +609,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "direction": direction,
         "final_score": final,
         "traditional_score": tech_result["score"],
-        "llm_opinion": llm_response.opinion if llm_response else "skipped",
-        "llm_confidence": llm_response.confidence if llm_response else None,
-        "explanation": llm_response.explanation if llm_response else None,
+        "explanation": llm_result.response.explanation if llm_result else None,
+        "llm_factors": [f.model_dump() for f in llm_result.response.factors] if llm_result else None,
         **levels,
         "raw_indicators": {
             **tech_result["indicators"],
@@ -638,6 +641,10 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "flow_funding_roc": flow_result["details"].get("funding_roc"),
             "flow_ls_roc": flow_result["details"].get("ls_roc"),
             "flow_max_roc": flow_result["details"].get("max_roc"),
+            "llm_contribution": llm_contribution,
+            "llm_prompt_tokens": llm_result.prompt_tokens if llm_result else None,
+            "llm_completion_tokens": llm_result.completion_tokens if llm_result else None,
+            "llm_model": llm_result.model if llm_result else None,
         },
         "detected_patterns": detected_patterns or None,
     }
@@ -648,7 +655,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
 def _log_pipeline_evaluation(
     *, pair, timeframe, tech_score, flow_score, onchain_score,
     pattern_score, ml_score, ml_confidence, indicator_preliminary,
-    blended_score, final_score, llm_opinion, ml_available, agreement, emitted,
+    blended_score, final_score, llm_contribution, ml_available, agreement, emitted,
 ):
     """Structured observability log for each pipeline evaluation."""
     log_data = {
@@ -663,7 +670,7 @@ def _log_pipeline_evaluation(
         "indicator_preliminary": indicator_preliminary,
         "blended_score": blended_score,
         "final_score": final_score,
-        "llm_opinion": llm_opinion,
+        "llm_contribution": llm_contribution,
         "ml_available": ml_available,
         "agreement": agreement,
         "emitted": emitted,

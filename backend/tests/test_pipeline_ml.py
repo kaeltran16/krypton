@@ -39,7 +39,15 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     settings.ml_tp1_min_atr = 1.0
     settings.ml_tp2_max_atr = 8.0
     settings.ml_rr_floor = 1.0
-    settings.llm_caution_sl_factor = 0.8
+    settings.llm_factor_weights = {
+        "support_proximity": 6.0, "resistance_proximity": 6.0,
+        "level_breakout": 8.0, "htf_alignment": 7.0,
+        "rsi_divergence": 7.0, "volume_divergence": 6.0,
+        "macd_divergence": 6.0, "volume_exhaustion": 5.0,
+        "funding_extreme": 5.0, "crowded_positioning": 5.0,
+        "pattern_confirmation": 5.0, "news_catalyst": 7.0,
+    }
+    settings.llm_factor_total_cap = 35.0
     settings.onchain_enabled = False
     settings.pairs = ["BTC-USDT-SWAP"]
     app.state.settings = settings
@@ -150,20 +158,28 @@ class TestUnifiedPipelineLLMBehavior:
     """Tests for LLM behavioral guarantees in the unified pipeline."""
 
     @pytest.mark.asyncio
-    async def test_contradict_penalizes_but_does_not_veto(self):
-        """Pipeline still emits when LLM contradicts a strong signal — penalty reduces score but threshold check decides."""
-        from app.engine.models import LLMResponse
+    async def test_opposing_factors_penalize_but_do_not_veto(self):
+        """Pipeline still emits when LLM factors oppose a strong signal — penalty reduces score but threshold check decides."""
+        from app.engine.models import LLMResponse, LLMResult
 
         app = _make_mock_app(prompt_template="fake template")
-        app.state.settings.engine_signal_threshold = 10  # low threshold so penalized score still emits
+        app.state.settings.engine_signal_threshold = 10
         app.state.settings.engine_llm_threshold = 5
 
-        llm_resp = LLMResponse(
-            opinion="contradict", confidence="HIGH",
-            explanation="Clear reversal signal", levels=None,
+        llm_result = LLMResult(
+            response=LLMResponse(
+                factors=[
+                    {"type": "resistance_proximity", "direction": "bearish", "strength": 3, "reason": "Price at major resistance"},
+                    {"type": "volume_exhaustion", "direction": "bearish", "strength": 2, "reason": "Volume declining"},
+                ],
+                explanation="Clear reversal signal",
+                levels=None,
+            ),
+            prompt_tokens=800,
+            completion_tokens=150,
+            model="test-model",
         )
 
-        # Patch tech score high enough that blended survives the contradict penalty
         strong_tech = {"score": 100, "indicators": {
             "atr": 200, "bb_width_pct": 50.0, "adx": 30, "di_plus": 25,
             "di_minus": 15, "rsi": 35, "bb_upper": 68000, "bb_lower": 67000,
@@ -171,31 +187,37 @@ class TestUnifiedPipelineLLMBehavior:
         }, "regime": {"trending": 0.5, "ranging": 0.3, "volatile": 0.2}, "caps": {"trend_cap": 30.0, "mean_rev_cap": 22.0, "squeeze_cap": 25.0, "volume_cap": 21.5}}
 
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist, \
-             patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_resp), \
+             patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_result), \
              patch("app.main.render_prompt", return_value="rendered"), \
              patch("app.main.compute_technical_score", return_value=strong_tech):
             await run_pipeline(app, CANDLE)
-            # With low threshold, penalized score should still emit
-            assert mock_persist.called, "Contradict should penalize, not veto — signal should still emit"
-            # Verify the emitted signal_data dict has a reduced score (penalty applied)
-            signal_data = mock_persist.call_args[0][1]  # persist_signal(db, signal_data)
+            assert mock_persist.called, "Opposing factors should penalize, not veto — signal should still emit"
+            signal_data = mock_persist.call_args[0][1]
             assert abs(signal_data["final_score"]) >= 10, "Penalized score should still exceed threshold"
 
     @pytest.mark.asyncio
-    async def test_caution_still_emits(self):
-        """Pipeline can still emit with caution — it just dampens score."""
-        from app.engine.models import LLMResponse
+    async def test_weak_opposing_factors_still_emits(self):
+        """Pipeline can still emit with weak opposing factors — they just dampen score."""
+        from app.engine.models import LLMResponse, LLMResult
 
         app = _make_mock_app(prompt_template="fake template")
         app.state.settings.engine_signal_threshold = 10
 
-        llm_resp = LLMResponse(
-            opinion="caution", confidence="LOW",
-            explanation="Some minor concern", levels=None,
+        llm_result = LLMResult(
+            response=LLMResponse(
+                factors=[
+                    {"type": "funding_extreme", "direction": "bearish", "strength": 1, "reason": "Funding slightly elevated"},
+                ],
+                explanation="Some minor concern",
+                levels=None,
+            ),
+            prompt_tokens=600,
+            completion_tokens=100,
+            model="test-model",
         )
 
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist, \
-             patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_resp), \
+             patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_result), \
              patch("app.main.render_prompt", return_value="rendered"):
             await run_pipeline(app, CANDLE)
             # May or may not emit depending on indicator score, but shouldn't crash

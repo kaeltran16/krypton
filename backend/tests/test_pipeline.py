@@ -2,7 +2,6 @@ import pandas as pd
 
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels
-from app.engine.llm import parse_llm_response
 
 
 def _make_candles(count: int = 80, base: float = 67000, trend: float = 10) -> list[dict]:
@@ -38,11 +37,8 @@ def test_full_pipeline_produces_signal():
 
     preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
 
-    llm_json = '{"opinion": "confirm", "confidence": "HIGH", "explanation": "Strong setup.", "levels": null}'
-    llm_response = parse_llm_response(llm_json)
-    assert llm_response is not None
-
-    final = compute_final_score(preliminary, llm_response)
+    # Simulate a positive LLM contribution (e.g., from factor scoring)
+    final = compute_final_score(preliminary, 14)
     assert -100 <= final <= 100
     assert final > preliminary
 
@@ -64,7 +60,7 @@ def test_pipeline_without_llm():
     flow_result = compute_order_flow_score({})
 
     preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
-    final = compute_final_score(preliminary, llm_response=None)
+    final = compute_final_score(preliminary, 0)
     assert final == preliminary
 
 

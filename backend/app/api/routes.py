@@ -29,8 +29,8 @@ def _signal_to_dict(signal: Signal) -> dict:
         "direction": signal.direction,
         "final_score": signal.final_score,
         "traditional_score": signal.traditional_score,
-        "confidence": signal.llm_confidence or "LOW",
-        "llm_opinion": signal.llm_opinion,
+        "llm_factors": signal.llm_factors,
+        "llm_contribution": (signal.raw_indicators or {}).get("llm_contribution"),
         "explanation": signal.explanation,
         "levels": {
             "entry": float(signal.entry),
@@ -511,7 +511,7 @@ def create_router() -> APIRouter:
             regime=tech["regime"],
         )
         prelim = compute_preliminary_score(tech["score"], flow["score"], 0.50, 0.25)
-        final = compute_final_score(prelim, None)
+        final = compute_final_score(prelim, 0)
         direction = "LONG" if final > 0 else "SHORT"
         atr = tech["indicators"].get("atr", 200)
         levels = calculate_levels(direction, float(candles_data[-1]["close"]), atr, None)
@@ -522,9 +522,8 @@ def create_router() -> APIRouter:
             "direction": direction,
             "final_score": final,
             "traditional_score": tech["score"],
-            "llm_opinion": "skipped",
-            "llm_confidence": None,
             "explanation": None,
+            "llm_factors": None,
             **levels,
             "raw_indicators": tech["indicators"],
         }
