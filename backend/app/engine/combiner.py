@@ -85,13 +85,14 @@ def _validate_llm_levels(direction: str, levels: dict) -> bool:
     return levels["stop_loss"] > levels["entry"] > levels["take_profit_1"] > levels["take_profit_2"]
 
 
-# Phase 1 scaling: signal strength maps to tighter (weak) or wider (strong) levels
-STRENGTH_MIN = 0.8       # multiplier at signal threshold (weakest qualifying signal)
-SL_STRENGTH_MAX = 1.2    # multiplier at score=100 (strongest signal)
-TP_STRENGTH_MAX = 1.4    # TP scales more aggressively than SL for stronger signals
-# Volatility regime: BB width percentile maps to tighter (squeeze) or wider (expansion)
-VOL_FACTOR_MIN = 0.75    # at 0th percentile (squeeze)
-VOL_FACTOR_MAX = 1.25    # at 100th percentile (expansion)
+from app.engine.constants import LEVEL_DEFAULTS
+
+_p1 = LEVEL_DEFAULTS["phase1_scaling"]
+STRENGTH_MIN = _p1["strength_min"]
+SL_STRENGTH_MAX = _p1["sl_strength_max"]
+TP_STRENGTH_MAX = _p1["tp_strength_max"]
+VOL_FACTOR_MIN = _p1["vol_factor_min"]
+VOL_FACTOR_MAX = _p1["vol_factor_max"]
 
 
 def scale_atr_multipliers(

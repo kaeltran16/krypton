@@ -193,13 +193,15 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
 
 
 # --- Order flow contrarian bias constants ---
-TRENDING_FLOOR = 0.3
-RECENT_WINDOW = 3
-BASELINE_WINDOW = 7
+from app.engine.constants import ORDER_FLOW
+
+TRENDING_FLOOR = ORDER_FLOW["trending_floor"]
+RECENT_WINDOW = ORDER_FLOW["recent_window"]
+BASELINE_WINDOW = ORDER_FLOW["baseline_window"]
 TOTAL_SNAPSHOTS = RECENT_WINDOW + BASELINE_WINDOW
-ROC_THRESHOLD = 0.0005
-ROC_STEEPNESS = 8000
-LS_ROC_SCALE = 0.003
+ROC_THRESHOLD = ORDER_FLOW["roc_threshold"]
+ROC_STEEPNESS = ORDER_FLOW["roc_steepness"]
+LS_ROC_SCALE = ORDER_FLOW["ls_roc_scale"]
 
 
 def _is_finite(v) -> bool:

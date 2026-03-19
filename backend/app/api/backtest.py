@@ -59,10 +59,37 @@ class RunRequest(BaseModel):
     max_concurrent_positions: int = Field(default=3, ge=1, le=20)
     ml_mode: bool = False  # use ML model instead of rule-based scoring
     ml_confidence_threshold: float = Field(default=0.65, ge=0.1, le=1.0)
+    parameter_overrides: dict[str, float | int] | None = None
 
 
 class CompareRequest(BaseModel):
     run_ids: list[str] = Field(min_length=2, max_length=4)
+
+
+class OptimizeAtrRequest(BaseModel):
+    pair: str
+    timeframe: str
+
+
+_OVERRIDE_TO_CONFIG = {
+    "blending.source_weights.traditional": "tech_weight",
+    "blending.source_weights.pattern": "pattern_weight",
+    "blending.thresholds.signal": "signal_threshold",
+    "blending.thresholds.ml_confidence": "ml_confidence_threshold",
+    "levels.atr_defaults.sl": "sl_atr_multiplier",
+    "levels.atr_defaults.tp1": "tp1_atr_multiplier",
+    "levels.atr_defaults.tp2": "tp2_atr_multiplier",
+    "confluence_max_score": "confluence_max_score",
+}
+
+
+def _apply_overrides(config: BacktestConfig, overrides: dict) -> BacktestConfig:
+    """Apply dot-path overrides onto a BacktestConfig."""
+    for dot_path, value in overrides.items():
+        config_field = _OVERRIDE_TO_CONFIG.get(dot_path)
+        if config_field and hasattr(config, config_field):
+            setattr(config, config_field, value)
+    return config
 
 
 class OptimizeRegimeRequest(BaseModel):
@@ -160,6 +187,7 @@ async def start_backtest(body: RunRequest, request: Request):
             timeframe=body.timeframe,
             date_from=date_from,
             date_to=date_to,
+            parameter_overrides=body.parameter_overrides,
         )
         session.add(run)
         await session.commit()
@@ -179,6 +207,9 @@ async def start_backtest(body: RunRequest, request: Request):
                 max_concurrent_positions=body.max_concurrent_positions,
                 ml_confidence_threshold=body.ml_confidence_threshold,
             )
+
+            if body.parameter_overrides:
+                bt_config = _apply_overrides(bt_config, body.parameter_overrides)
 
             all_trades = []
             all_stats_parts = []
@@ -469,47 +500,6 @@ async def optimize_regime(body: OptimizeRegimeRequest, request: Request):
                 _on_progress,
             )
 
-            # Save optimized weights to DB
-            if opt_result["fitness"] > 0:
-                weights = opt_result["weights"]
-                async with db.session_factory() as session:
-                    # Upsert RegimeWeights row
-                    existing = await session.execute(
-                        select(RegimeWeights)
-                        .where(RegimeWeights.pair == body.pair)
-                        .where(RegimeWeights.timeframe == body.timeframe)
-                    )
-                    rw = existing.scalar_one_or_none()
-                    if rw is None:
-                        rw = RegimeWeights(pair=body.pair, timeframe=body.timeframe)
-                        session.add(rw)
-
-                    for regime in REGIMES:
-                        for cap_key in CAP_KEYS:
-                            setattr(rw, f"{regime}_{cap_key}", weights[regime][cap_key])
-
-                        # Scale all 4 outer weights to sum to 1.0 per regime column.
-                        defaults = DEFAULT_OUTER_WEIGHTS[regime]
-                        opt_tech = weights[regime]["tech"]
-                        opt_pattern = weights[regime]["pattern"]
-                        opt_ratio = opt_tech / opt_pattern if opt_pattern > 0 else 1.0
-                        flow_default = defaults["flow"]
-                        onchain_default = defaults["onchain"]
-                        remaining = 1.0 - flow_default - onchain_default
-                        new_pattern = remaining / (opt_ratio + 1.0)
-                        new_tech = remaining - new_pattern
-                        setattr(rw, f"{regime}_tech_weight", new_tech)
-                        setattr(rw, f"{regime}_pattern_weight", new_pattern)
-                        setattr(rw, f"{regime}_flow_weight", flow_default)
-                        setattr(rw, f"{regime}_onchain_weight", onchain_default)
-
-                    await session.commit()
-                    await session.refresh(rw)
-                    session.expunge(rw)
-
-                # Hot-reload into app state
-                request.app.state.regime_weights[(body.pair, body.timeframe)] = rw
-
             final_status = "cancelled" if cancel_flags.get(run_id, {}).get("cancelled") else "completed"
 
             async with db.session_factory() as session:
@@ -546,6 +536,34 @@ async def optimize_regime(body: OptimizeRegimeRequest, request: Request):
     return {"run_id": run_id, "status": "running"}
 
 
+@router.post("/optimize-atr", dependencies=[require_settings_api_key()])
+async def optimize_atr(body: OptimizeAtrRequest, request: Request):
+    """Run ATR multiplier optimization on demand."""
+    tracker = getattr(request.app.state, "tracker", None)
+    if tracker is None:
+        raise HTTPException(500, "Performance tracker not initialized")
+
+    current = await tracker.get_multipliers(body.pair, body.timeframe)
+
+    result = await tracker.optimize(body.pair, body.timeframe, dry_run=True)
+    if result is None:
+        raise HTTPException(400, "Not enough resolved signals for optimization")
+
+    return {
+        "current": {"sl_atr": current[0], "tp1_atr": current[1], "tp2_atr": current[2]},
+        "proposed": {
+            "sl_atr": result["sl_atr"],
+            "tp1_atr": result["tp1_atr"],
+            "tp2_atr": result["tp2_atr"],
+        },
+        "metrics": {
+            "signals_analyzed": result["signals_analyzed"],
+            "current_sortino": result.get("current_sortino"),
+            "proposed_sortino": result.get("proposed_sortino"),
+        },
+    }
+
+
 # ---- Helpers ----
 
 def _get_import_jobs(app) -> dict:
@@ -571,6 +589,7 @@ def _run_to_dict(run: BacktestRun) -> dict:
         "date_from": run.date_from.isoformat() if run.date_from else None,
         "date_to": run.date_to.isoformat() if run.date_to else None,
         "results": run.results,
+        "parameter_overrides": run.parameter_overrides,
     }
 
 

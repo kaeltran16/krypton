@@ -12,22 +12,24 @@ from app.engine.outcome_resolver import resolve_signal_outcome
 
 logger = logging.getLogger(__name__)
 
-# Defaults
-DEFAULT_SL = 1.5
-DEFAULT_TP1 = 2.0
-DEFAULT_TP2 = 3.0
+from app.engine.constants import LEVEL_DEFAULTS, PERFORMANCE_TRACKER
 
-# Optimization parameters
-MIN_SIGNALS = 40
-WINDOW_SIZE = 100
-TRIGGER_INTERVAL = 10
+_atr = LEVEL_DEFAULTS["atr_defaults"]
+DEFAULT_SL = _atr["sl"]
+DEFAULT_TP1 = _atr["tp1"]
+DEFAULT_TP2 = _atr["tp2"]
 
-# Guardrails
-SL_RANGE = (0.8, 2.5)
-TP1_RANGE = (1.0, 4.0)
-TP2_RANGE = (2.0, 6.0)
-MAX_SL_ADJ = 0.3
-MAX_TP_ADJ = 0.5
+_opt = PERFORMANCE_TRACKER["optimization_params"]
+MIN_SIGNALS = _opt["min_signals"]
+WINDOW_SIZE = _opt["window_size"]
+TRIGGER_INTERVAL = _opt["trigger_interval"]
+
+_guard = PERFORMANCE_TRACKER["guardrails"]
+SL_RANGE = tuple(_guard["sl_range"])
+TP1_RANGE = tuple(_guard["tp1_range"])
+TP2_RANGE = tuple(_guard["tp2_range"])
+MAX_SL_ADJ = _guard["max_sl_adj"]
+MAX_TP_ADJ = _guard["max_tp_adj"]
 
 
 class PerformanceTracker:
@@ -177,11 +179,12 @@ class PerformanceTracker:
 
         return results
 
-    async def optimize(self, pair: str, timeframe: str):
+    async def optimize(self, pair: str, timeframe: str, dry_run: bool = False):
         """Run 1D optimization for each multiplier dimension.
 
         Fetches the rolling window of resolved signals, batch-loads candles,
         validates data integrity, sweeps candidates, and applies guardrailed updates.
+        When dry_run=True, returns proposed values without persisting.
         """
         async with self.session_factory() as session:
             # Fetch tracker row
@@ -361,7 +364,55 @@ class PerformanceTracker:
 
             if not adjustments:
                 logger.info("Optimization for %s/%s: no changes", pair, timeframe)
+                if dry_run:
+                    return {
+                        "sl_atr": row.current_sl_atr,
+                        "tp1_atr": row.current_tp1_atr,
+                        "tp2_atr": row.current_tp2_atr,
+                        "signals_analyzed": len(signals_data),
+                        "current_sortino": None,
+                        "proposed_sortino": None,
+                    }
                 return
+
+            # Compute proposed values
+            best_sl = row.current_sl_atr
+            best_tp1 = row.current_tp1_atr
+            best_tp2 = row.current_tp2_atr
+            best_sortino = None
+            for adj in adjustments:
+                if adj["dimension"] == "sl":
+                    best_sl = adj["new"]
+                elif adj["dimension"] == "tp1":
+                    best_tp1 = adj["new"]
+                elif adj["dimension"] == "tp2":
+                    best_tp2 = adj["new"]
+                best_sortino = adj["sortino"]
+
+            if dry_run:
+                # Compute current sortino for comparison
+                current_pnls = []
+                for idx, sig in enumerate(signals_data):
+                    sig_candles = candles_map.get(idx, [])
+                    if not sig_candles:
+                        continue
+                    result = self.replay_signal(
+                        direction=sig["direction"], entry=sig["entry"], atr=sig["atr"],
+                        sl_atr=sig["effective_sl_atr"], tp1_atr=sig["effective_tp1_atr"],
+                        tp2_atr=sig["effective_tp2_atr"], candles=sig_candles,
+                        created_at=sig["created_at"],
+                    )
+                    if result:
+                        current_pnls.append(result["outcome_pnl_pct"])
+                current_sortino = self.compute_sortino(current_pnls)
+                return {
+                    "sl_atr": best_sl,
+                    "tp1_atr": best_tp1,
+                    "tp2_atr": best_tp2,
+                    "signals_analyzed": len(signals_data),
+                    "current_sortino": current_sortino,
+                    "proposed_sortino": best_sortino,
+                }
 
         # Apply adjustments in a fresh session
         async with self.session_factory() as session:

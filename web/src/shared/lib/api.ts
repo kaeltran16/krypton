@@ -4,6 +4,7 @@ import type { NewsEvent } from "../../features/news/types";
 import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../features/backtest/types";
 import type { PipelineSettingsAPI } from "../../features/settings/types";
 import type { Alert, AlertCreateRequest, AlertUpdateRequest, AlertHistoryEntry, AlertSettings } from "../../features/alerts/types";
+import type { EngineParameters, ParameterDiff, AtrOptimizationResult } from "../../features/engine/types";
 
 // ML Training Types
 export interface MLTrainRequest {
@@ -380,5 +381,30 @@ export const api = {
     request<AlertSettings>("/api/alerts/settings", {
       method: "PATCH",
       body: JSON.stringify(body),
+    }),
+
+  // Engine parameters
+  getEngineParameters: () =>
+    request<EngineParameters>("/api/engine/parameters"),
+
+  previewEngineApply: (changes: Record<string, number | Record<string, number>>) =>
+    request<{ preview: true; diff: ParameterDiff[] }>("/api/engine/apply", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ changes, confirm: false }),
+    }),
+
+  confirmEngineApply: (changes: Record<string, number | Record<string, number>>) =>
+    request<{ applied: true; diff: ParameterDiff[] }>("/api/engine/apply", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ changes, confirm: true }),
+    }),
+
+  optimizeAtr: (pair: string, timeframe: string) =>
+    request<AtrOptimizationResult>("/api/backtest/optimize-atr", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ pair, timeframe }),
     }),
 };

@@ -79,6 +79,8 @@ class Signal(Base):
     detected_patterns: Mapped[list | None] = mapped_column(JSONB)
     # news correlation
     correlated_news_ids: Mapped[list | None] = mapped_column(JSONB)
+    # engine parameter snapshot at signal emission time
+    engine_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     __table_args__ = (
         Index("ix_signal_pair_tf_created", "pair", "timeframe", "created_at"),
@@ -176,6 +178,17 @@ class PipelineSettings(Base):
     mean_rev_blend_ratio: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.6
     )
+    # nullable overrides — None means "use env default"
+    traditional_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    flow_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    onchain_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pattern_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_blend_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_confidence_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    llm_factor_weights: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    llm_factor_total_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confluence_max_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -221,6 +234,7 @@ class BacktestRun(Base):
     date_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     date_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     results: Mapped[dict | None] = mapped_column(JSONB)
+    parameter_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class Alert(Base):

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useBacktestStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
+import ParameterOverridePanel from "./ParameterOverridePanel";
 
 const TIMEFRAMES = ["15m", "1h", "4h"] as const;
 
@@ -290,6 +291,12 @@ export function BacktestSetup() {
           </div>
         )}
       </Section>
+
+      {/* Parameter overrides */}
+      <ParameterOverridePanel
+        overrides={config.parameter_overrides || {}}
+        onChange={(overrides) => updateConfig({ parameter_overrides: Object.keys(overrides).length > 0 ? overrides : undefined })}
+      />
 
       {/* Run Button */}
       <div className="pt-2">

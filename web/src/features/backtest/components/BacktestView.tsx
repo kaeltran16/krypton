@@ -3,14 +3,16 @@ import { useBacktestStore } from "../store";
 import { BacktestSetup } from "./BacktestSetup";
 import { BacktestResults } from "./BacktestResults";
 import { BacktestCompare } from "./BacktestCompare";
+import OptimizeTab from "./OptimizeTab";
 
 const TABS = [
   { key: "setup" as const, label: "Setup" },
   { key: "results" as const, label: "Results" },
   { key: "compare" as const, label: "Compare" },
+  { key: "optimize" as const, label: "Optimize" },
 ];
 
-export function BacktestView({ onBack }: { onBack: () => void }) {
+export function BacktestView({ onBack }: { onBack?: () => void }) {
   const { tab, setTab, fetchRuns } = useBacktestStore();
 
   useEffect(() => {
@@ -20,17 +22,19 @@ export function BacktestView({ onBack }: { onBack: () => void }) {
   return (
     <div className="p-3 space-y-3">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-muted hover:text-foreground transition-colors"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <h1 className="text-lg font-semibold">Backtester</h1>
-      </div>
+      {onBack && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="text-muted hover:text-foreground transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <h1 className="text-lg font-semibold">Backtester</h1>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex bg-card rounded-lg border border-border p-0.5">
@@ -53,6 +57,7 @@ export function BacktestView({ onBack }: { onBack: () => void }) {
       {tab === "setup" && <BacktestSetup />}
       {tab === "results" && <BacktestResults />}
       {tab === "compare" && <BacktestCompare />}
+      {tab === "optimize" && <OptimizeTab />}
     </div>
   );
 }

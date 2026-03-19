@@ -13,6 +13,7 @@ export interface BacktestConfig {
   max_concurrent_positions: number;
   ml_enabled: boolean;
   ml_confidence_threshold: number;
+  parameter_overrides?: Record<string, number>;
 }
 
 export interface BacktestTrade {

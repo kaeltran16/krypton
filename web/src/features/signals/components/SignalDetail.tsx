@@ -4,6 +4,7 @@ import { formatPrice, formatScore } from "../../../shared/lib/format";
 import { api } from "../../../shared/lib/api";
 import { useSignalStore } from "../store";
 import { PatternDetailRow } from "./PatternBadges";
+import ParameterRow from "../../engine/components/ParameterRow";
 
 interface SignalDetailProps {
   signal: Signal | null;
@@ -108,7 +109,41 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       )}
 
       <JournalSection signal={signal} />
+
+      {signal.engine_snapshot ? (
+        <SnapshotSection snapshot={signal.engine_snapshot} />
+      ) : (
+        <p className="text-xs text-muted px-4 py-2">Parameter snapshot not available</p>
+      )}
     </dialog>
+  );
+}
+
+function SnapshotSection({ snapshot }: { snapshot: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="border-t border-border/50">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted hover:text-foreground"
+      >
+        Engine Parameters
+        <span>{open ? "\u2212" : "+"}</span>
+      </button>
+      {open && (
+        <div>
+          {Object.entries(snapshot).map(([key, value]) => (
+            <ParameterRow
+              key={key}
+              name={key}
+              value={value as unknown}
+              source="configurable"
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

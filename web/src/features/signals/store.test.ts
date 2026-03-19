@@ -23,6 +23,7 @@ function createSignal(overrides: Partial<Signal> = {}): Signal {
     risk_metrics: null,
     detected_patterns: null,
     correlated_news_ids: null,
+    engine_snapshot: null,
     created_at: "2026-02-27T12:00:00Z",
     ...overrides,
   };

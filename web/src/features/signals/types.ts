@@ -56,6 +56,7 @@ export interface Signal {
   risk_metrics: RiskMetrics | null;
   detected_patterns: DetectedPattern[] | null;
   correlated_news_ids: number[] | null;
+  engine_snapshot: Record<string, unknown> | null;
 }
 
 export interface PerformanceMetrics {

@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { AVAILABLE_PAIRS } from "../../shared/lib/constants";
 
-type BacktestTab = "setup" | "results" | "compare";
+type BacktestTab = "setup" | "results" | "compare" | "optimize";
 
 interface BacktestState {
   tab: BacktestTab;
@@ -88,6 +88,7 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
         tech_weight: config.tech_weight / 100,
         pattern_weight: config.pattern_weight / 100,
         ml_confidence_threshold: config.ml_confidence_threshold / 100,
+        parameter_overrides: config.parameter_overrides || undefined,
       };
       const { run_id } = await api.startBacktest(payload);
       get().pollRun(run_id);

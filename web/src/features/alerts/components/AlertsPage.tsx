@@ -7,7 +7,7 @@ import type { Alert } from "../types";
 
 type Tab = "active" | "create" | "history";
 
-export function AlertsPage({ onBack }: { onBack: () => void }) {
+export function AlertsPage({ onBack }: { onBack?: () => void }) {
   const [tab, setTab] = useState<Tab>("active");
   const [editingAlert, setEditingAlert] = useState<Alert | null>(null);
   const { fetchAlerts } = useAlertStore();
@@ -18,15 +18,17 @@ export function AlertsPage({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="p-3 space-y-4">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-muted text-sm p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
-        >
-          Back
-        </button>
-        <h2 className="text-lg font-semibold flex-1">Alerts</h2>
-      </div>
+      {onBack && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="text-muted text-sm p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          >
+            Back
+          </button>
+          <h2 className="text-lg font-semibold flex-1">Alerts</h2>
+        </div>
+      )}
 
       <div className="flex gap-1 bg-card rounded-lg p-1 border border-border">
         {(["active", "create", "history"] as Tab[]).map((t) => (

@@ -45,6 +45,61 @@ from app.db.models import RegimeWeights
 logger = logging.getLogger(__name__)
 
 
+_OVERRIDE_MAP = {
+    "traditional_weight": "engine_traditional_weight",
+    "flow_weight": "engine_flow_weight",
+    "onchain_weight": "engine_onchain_weight",
+    "pattern_weight": "engine_pattern_weight",
+    "ml_blend_weight": "engine_ml_weight",
+    "ml_confidence_threshold": "ml_confidence_threshold",
+    "llm_threshold": "engine_llm_threshold",
+    "llm_factor_weights": "llm_factor_weights",
+    "llm_factor_total_cap": "llm_factor_total_cap",
+    "confluence_max_score": "engine_confluence_max_score",
+}
+
+
+def _apply_pipeline_overrides(settings, ps):
+    """Apply non-None PipelineSettings overrides onto in-memory Settings."""
+    for db_col, settings_field in _OVERRIDE_MAP.items():
+        value = getattr(ps, db_col, None)
+        if value is not None:
+            object.__setattr__(settings, settings_field, value)
+
+
+def build_engine_snapshot(
+    settings, scoring_params, regime_mix, caps, outer, atr_tuple, atr_source
+) -> dict:
+    """Build the engine_snapshot dict for a signal record."""
+    return {
+        "source_weights": {
+            "traditional": settings.engine_traditional_weight,
+            "flow": settings.engine_flow_weight,
+            "onchain": settings.engine_onchain_weight,
+            "pattern": settings.engine_pattern_weight,
+        },
+        "ml_blend_weight": settings.engine_ml_weight,
+        "regime_mix": regime_mix,
+        "regime_caps": caps,
+        "regime_outer": outer,
+        "atr_multipliers": {
+            "sl": atr_tuple[0],
+            "tp1": atr_tuple[1],
+            "tp2": atr_tuple[2],
+            "source": atr_source,
+        },
+        "thresholds": {
+            "signal": settings.engine_signal_threshold,
+            "llm": settings.engine_llm_threshold,
+            "ml_confidence": settings.ml_confidence_threshold,
+        },
+        "mean_reversion": scoring_params or {},
+        "llm_factor_weights": dict(settings.llm_factor_weights),
+        "llm_factor_cap": settings.llm_factor_total_cap,
+        "confluence_max_score": settings.engine_confluence_max_score,
+    }
+
+
 async def _fetch_news_context(db, pair: str, window_minutes: int = 30) -> tuple[str, list[int]]:
     """Fetch recent high/medium impact news for LLM context and correlation.
 
@@ -131,6 +186,7 @@ async def persist_signal(db: Database, signal_data: dict):
                 risk_metrics=signal_data.get("risk_metrics"),
                 detected_patterns=signal_data.get("detected_patterns"),
                 correlated_news_ids=signal_data.get("correlated_news_ids"),
+                engine_snapshot=signal_data.get("engine_snapshot"),
             )
             session.add(row)
             await session.commit()
@@ -244,6 +300,10 @@ async def run_pipeline(app: FastAPI, candle: dict):
     order_flow = app.state.order_flow
     prompt_template = app.state.prompt_template
 
+    # snapshot mutable params to avoid mid-cycle mutation
+    scoring_params = dict(getattr(app.state, "scoring_params", {}) or {})
+    regime_weights_dict = dict(app.state.regime_weights)
+
     pair = candle["pair"]
     timeframe = candle["timeframe"]
 
@@ -263,11 +323,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # ── Step 1: Indicator scoring (always runs) ──
     rw_key = (pair, timeframe)
-    regime_weights = app.state.regime_weights.get(rw_key)
+    regime_weights = regime_weights_dict.get(rw_key)
     try:
         tech_result = compute_technical_score(
             df, regime_weights=regime_weights,
-            scoring_params=getattr(app.state, "scoring_params", None),
+            scoring_params=scoring_params or None,
         )
     except Exception as e:
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
@@ -612,6 +672,21 @@ async def run_pipeline(app: FastAPI, candle: dict):
         sl_max_atr=settings.ml_sl_max_atr,
     )
 
+    regime_mix = {
+        "trending": tech_result["indicators"].get("regime_trending", 0),
+        "ranging": tech_result["indicators"].get("regime_ranging", 0),
+        "volatile": tech_result["indicators"].get("regime_volatile", 0),
+    }
+    snapshot_caps = {k: round(v, 2) for k, v in tech_result["caps"].items()} if tech_result.get("caps") else {}
+    snapshot_outer = {k: round(v, 4) for k, v in outer.items()} if regime else {}
+    atr_source = "performance_tracker" if tracker else "defaults"
+    engine_snapshot = build_engine_snapshot(
+        settings,
+        scoring_params or None,
+        regime_mix, snapshot_caps, snapshot_outer,
+        (sl_base, tp1_base, tp2_base), atr_source,
+    )
+
     signal_data = {
         "pair": pair,
         "timeframe": timeframe,
@@ -657,6 +732,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             **({f"snap_{k}": v for k, v in snap_info.items()} if snap_info else {}),
         },
         "detected_patterns": detected_patterns or None,
+        "engine_snapshot": engine_snapshot,
     }
 
     await _emit_signal(app, signal_data, levels, correlated_news_ids)
@@ -966,6 +1042,7 @@ async def lifespan(app: FastAPI):
                     "squeeze_steepness": ps.squeeze_steepness,
                     "mean_rev_blend_ratio": ps.mean_rev_blend_ratio,
                 }
+                _apply_pipeline_overrides(settings, ps)
             else:
                 logger.warning("No PipelineSettings row found; using config defaults")
                 app.state.scoring_params = None
@@ -1189,6 +1266,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.alerts import router as alerts_router
     app.include_router(alerts_router)
+
+    from app.api.engine import router as engine_router
+    app.include_router(engine_router)
 
     return app
 
