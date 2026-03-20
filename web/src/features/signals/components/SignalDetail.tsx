@@ -28,35 +28,48 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
   if (!signal) return null;
 
   const isLong = signal.direction === "LONG";
-  const color = isLong ? "text-long" : "text-short";
+  const scoreNum = Math.abs(signal.final_score);
+  const sentimentLabel = isLong ? "Long Sentiment" : "Short Sentiment";
 
   return (
     <dialog ref={ref} onClose={onClose} onClick={(e) => {
       if (e.target === ref.current) onClose();
-    }}>
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-lg font-bold">{signal.pair}</span>
-            <span className="ml-2 text-sm text-muted">{signal.timeframe}</span>
+    }} className="bg-surface-container text-on-surface rounded-xl w-[calc(100%-2rem)] max-w-lg max-h-[90dvh] overflow-y-auto p-0 m-auto backdrop:bg-black/60">
+      {/* Hero Score Section */}
+      <div className="p-5 border-b border-outline-variant/10 flex justify-between items-center relative overflow-hidden">
+        <div className="relative z-10">
+          <p className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Overall Signal Score</p>
+          <div className="flex items-baseline gap-2">
+            <span className="font-headline font-bold text-5xl text-primary tabular">{formatScore(signal.final_score)}</span>
+            <span className="text-on-surface-variant font-headline font-medium text-lg">/100</span>
           </div>
-          <button onClick={onClose} aria-label="Close" className="text-muted hover:text-foreground text-xl leading-none">&times;</button>
+          <div className="mt-3 flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${isLong ? "bg-long" : "bg-short"}`} />
+            <span className={`text-xs font-medium uppercase tracking-wider ${isLong ? "text-long" : "text-short"}`}>
+              {sentimentLabel}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="font-headline font-bold text-on-surface">{signal.pair}</span>
+            <span className="text-on-surface-variant text-sm">{signal.timeframe}</span>
+          </div>
         </div>
-        <div className={`text-2xl font-mono font-bold mt-1 ${color}`}>
-          {signal.direction} {formatScore(signal.final_score)}
+        <div className="relative z-10 h-24 w-24">
+          <svg className="h-full w-full" viewBox="0 0 36 36">
+            <path className="stroke-surface-container-highest" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" strokeWidth="3" />
+            <path className="stroke-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" strokeDasharray={`${scoreNum}, 100`} strokeLinecap="butt" strokeWidth="3" />
+          </svg>
         </div>
+        <div className="absolute -right-10 -top-10 h-40 w-40 bg-primary/5 blur-3xl rounded-full" />
       </div>
 
-      <div className="p-4 border-b border-border">
-        <h3 className="text-sm text-muted mb-2">Score Breakdown</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            Traditional: <span className="font-mono">{formatScore(signal.traditional_score)}</span>
-          </div>
-          <div>
-            LLM: <span className="font-mono">{signal.llm_contribution != null ? (signal.llm_contribution >= 0 ? "+" : "") + signal.llm_contribution : "N/A"}</span>
-          </div>
-        </div>
+      {/* Score Breakdown */}
+      <div className="p-5 border-b border-outline-variant/10 space-y-4">
+        <h2 className="text-[10px] uppercase tracking-widest text-on-surface-variant">Intelligence Components</h2>
+        <ScoreBar label="Technical Analysis" value={Math.abs(signal.traditional_score)} />
+        {signal.llm_contribution != null && (
+          <ScoreBar label="LLM Consensus" value={Math.min(Math.abs(signal.llm_contribution), 100)} />
+        )}
         {signal.llm_factors && signal.llm_factors.length > 0 && (
           <div className="mt-2 space-y-1">
             {signal.llm_factors.map((f, i) => (
@@ -64,7 +77,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
                 <span className={f.direction === "bullish" ? "text-long" : "text-short"}>
                   {f.direction === "bullish" ? "+" : "-"}
                 </span>
-                <span className="text-muted">{f.type.replace(/_/g, " ")}</span>
+                <span className="text-on-surface-variant">{f.type.replace(/_/g, " ")}</span>
                 <span className="font-mono">{"*".repeat(f.strength)}</span>
               </div>
             ))}
@@ -77,32 +90,45 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       )}
 
       {signal.explanation && (
-        <div className="p-4 border-b border-border">
-          <h3 className="text-sm text-muted mb-2">AI Analysis</h3>
-          <p className="text-sm text-foreground leading-relaxed">{signal.explanation}</p>
+        <div className="p-5 border-b border-outline-variant/10">
+          <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">AI Analysis</h3>
+          <p className="text-sm text-on-surface leading-relaxed">{signal.explanation}</p>
         </div>
       )}
 
-      <div className="p-4 border-b border-border">
-        <h3 className="text-sm text-muted mb-2">Price Levels</h3>
-        <div className="font-mono text-sm space-y-1">
-          <LevelRow label="Entry" value={signal.levels.entry} />
-          <LevelRow label="Stop Loss" value={signal.levels.stop_loss} className="text-short" />
-          <LevelRow label="TP 1" value={signal.levels.take_profit_1} className="text-long" />
-          <LevelRow label="TP 2" value={signal.levels.take_profit_2} className="text-long" />
+      {/* Execution Matrix */}
+      <div className="p-5 border-b border-outline-variant/10">
+        <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-4">Execution Matrix</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-primary">
+            <p className="text-[10px] font-medium text-primary uppercase mb-1">Entry Range</p>
+            <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.entry)}</p>
+          </div>
+          <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-short">
+            <p className="text-[10px] font-medium text-short uppercase mb-1">Stop Loss</p>
+            <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.stop_loss)}</p>
+          </div>
+          <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-long">
+            <p className="text-[10px] font-medium text-long uppercase mb-1">Take Profit 1</p>
+            <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.take_profit_1)}</p>
+          </div>
+          <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-long/60">
+            <p className="text-[10px] font-medium text-long uppercase mb-1">Take Profit 2</p>
+            <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.take_profit_2)}</p>
+          </div>
         </div>
       </div>
 
       {signal.outcome && signal.outcome !== "PENDING" && (
-        <div className="p-4 border-b border-border">
-          <h3 className="text-sm text-muted mb-2">Outcome</h3>
+        <div className="p-5 border-b border-outline-variant/10">
+          <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Outcome</h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>Result: <span className={`font-mono font-bold ${signal.outcome.includes("TP") ? "text-long" : "text-short"}`}>{signal.outcome.replace("_", " ")}</span></div>
             {signal.outcome_pnl_pct != null && (
-              <div>P&L: <span className={`font-mono ${signal.outcome_pnl_pct >= 0 ? "text-long" : "text-short"}`}>{signal.outcome_pnl_pct >= 0 ? "+" : ""}{signal.outcome_pnl_pct.toFixed(2)}%</span></div>
+              <div>P&L: <span className={`font-mono tabular ${signal.outcome_pnl_pct >= 0 ? "text-long" : "text-short"}`}>{signal.outcome_pnl_pct >= 0 ? "+" : ""}{signal.outcome_pnl_pct.toFixed(2)}%</span></div>
             )}
             {signal.outcome_duration_minutes != null && (
-              <div>Duration: <span className="font-mono">{signal.outcome_duration_minutes < 60 ? `${signal.outcome_duration_minutes}m` : `${Math.floor(signal.outcome_duration_minutes / 60)}h ${signal.outcome_duration_minutes % 60}m`}</span></div>
+              <div>Duration: <span className="font-mono tabular">{signal.outcome_duration_minutes < 60 ? `${signal.outcome_duration_minutes}m` : `${Math.floor(signal.outcome_duration_minutes / 60)}h ${signal.outcome_duration_minutes % 60}m`}</span></div>
             )}
           </div>
         </div>
@@ -113,9 +139,23 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       {signal.engine_snapshot ? (
         <SnapshotSection snapshot={signal.engine_snapshot} />
       ) : (
-        <p className="text-xs text-muted px-4 py-2">Parameter snapshot not available</p>
+        <p className="text-xs text-on-surface-variant px-4 py-2">Parameter snapshot not available</p>
       )}
     </dialog>
+  );
+}
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-xs font-medium uppercase tracking-tighter">
+        <span className="text-on-surface">{label}</span>
+        <span className="text-primary tabular">{Math.round(value)}%</span>
+      </div>
+      <div className="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+        <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(value, 100)}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -123,10 +163,11 @@ function SnapshotSection({ snapshot }: { snapshot: Record<string, unknown> }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border-t border-border/50">
+    <div className="border-t border-outline-variant/10">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted hover:text-foreground"
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-2 text-xs text-on-surface-variant hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
       >
         Engine Parameters
         <span>{open ? "\u2212" : "+"}</span>
@@ -150,36 +191,51 @@ function SnapshotSection({ snapshot }: { snapshot: Record<string, unknown> }) {
 function JournalSection({ signal }: { signal: Signal }) {
   const updateSignal = useSignalStore((s) => s.updateSignal);
   const [note, setNote] = useState(signal.user_note ?? "");
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Reset note when signal changes
   useEffect(() => {
     setNote(signal.user_note ?? "");
   }, [signal.id, signal.user_note]);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const saveNote = useCallback(
     (value: string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
-        setSaving(true);
+        setSaveState("saving");
         try {
           await api.patchSignalJournal(signal.id, { note: value });
           updateSignal(signal.id, { user_note: value || null });
-        } catch { /* ignore */ }
-        setSaving(false);
+          setSaveState("saved");
+          if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+          savedTimerRef.current = setTimeout(() => setSaveState("idle"), 2000);
+        } catch {
+          setSaveState("idle");
+        }
       }, 800);
     },
     [signal.id, updateSignal],
   );
 
   const handleStatusChange = async (status: UserStatus) => {
-    setSaving(true);
+    setSaveState("saving");
     try {
       await api.patchSignalJournal(signal.id, { status });
       updateSignal(signal.id, { user_status: status });
-    } catch { /* ignore */ }
-    setSaving(false);
+      setSaveState("saved");
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaveState("idle"), 2000);
+    } catch {
+      setSaveState("idle");
+    }
   };
 
   const statuses: { value: UserStatus; label: string }[] = [
@@ -191,8 +247,9 @@ function JournalSection({ signal }: { signal: Signal }) {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm text-muted">Your Notes</h3>
-        {saving && <span className="text-xs text-muted">Saving...</span>}
+        <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant">Your Notes</h3>
+        {saveState === "saving" && <span className="text-xs text-on-surface-variant">Saving...</span>}
+        {saveState === "saved" && <span className="text-xs text-long">Saved</span>}
       </div>
 
       <div className="flex gap-1.5 mb-3">
@@ -200,14 +257,12 @@ function JournalSection({ signal }: { signal: Signal }) {
           <button
             key={value}
             onClick={() => handleStatusChange(value)}
-            className={`flex-1 py-1.5 text-xs font-medium rounded-full transition-colors ${
+            className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               signal.user_status === value
                 ? value === "TRADED"
                   ? "bg-long/20 text-long border border-long/40"
-                  : value === "SKIPPED"
-                    ? "bg-card-hover text-muted border border-border"
-                    : "bg-card-hover text-foreground border border-border"
-                : "text-muted border border-border"
+                  : "bg-surface-container-highest text-on-surface border border-outline-variant/15"
+                : "text-on-surface-variant border border-outline-variant/10"
             }`}
           >
             {label}
@@ -225,24 +280,9 @@ function JournalSection({ signal }: { signal: Signal }) {
         maxLength={500}
         rows={3}
         placeholder="Add a note about this signal..."
-        className="w-full bg-card-hover border border-border rounded-lg p-2.5 text-sm text-foreground placeholder-dim resize-none focus:outline-none focus:border-accent/50"
+        className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-lg p-2.5 text-sm text-on-surface placeholder-outline resize-none focus:outline-none focus:border-primary/50"
       />
-      <div className="text-xs text-dim text-right mt-1">{note.length}/500</div>
-    </div>
-  );
-}
-
-interface LevelRowProps {
-  label: string;
-  value: number;
-  className?: string;
-}
-
-function LevelRow({ label, value, className = "" }: LevelRowProps) {
-  return (
-    <div className="flex justify-between">
-      <span className={`text-muted ${className}`}>{label}</span>
-      <span>{formatPrice(value)}</span>
+      <div className="text-xs text-outline text-right mt-1">{note.length}/500</div>
     </div>
   );
 }

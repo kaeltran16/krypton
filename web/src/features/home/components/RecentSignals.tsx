@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { Zap } from "lucide-react";
 import { useSignalStore } from "../../signals/store";
-import { formatScore, formatRelativeTime } from "../../../shared/lib/format";
+import { formatScore, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import type { Signal } from "../../signals/types";
 
 export function RecentSignals() {
@@ -18,17 +19,16 @@ export function RecentSignals() {
   ));
 
   return (
-    <div className="bg-card rounded-lg border border-border overflow-hidden">
-      <div className="px-3 pt-3 pb-2 flex items-center justify-between">
-        <span className="text-[11px] text-muted uppercase tracking-wider font-semibold">
+    <div className="space-y-3">
+      <div className="px-1">
+        <h2 className="text-xs font-bold tracking-widest uppercase text-on-surface-variant">
           Recent Signals ({signals.length})
-        </span>
-        <span className="text-[11px] text-accent">&rarr;</span>
+        </h2>
       </div>
       {signals.length === 0 ? (
-        <p className="px-3 pb-3 text-sm text-dim">No signals in the last 24 hours</p>
+        <p className="px-1 text-sm text-outline">No signals in the last 24 hours</p>
       ) : (
-        <div className="divide-y divide-border">
+        <div className="bg-surface-container rounded-lg overflow-hidden divide-y divide-outline-variant/10">
           {signals.map((signal) => (
             <SignalRow key={signal.id} signal={signal} />
           ))}
@@ -44,17 +44,17 @@ function SignalRow({ signal }: { signal: Signal }) {
   return (
     <div className="px-3 py-2.5 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-accent flex-shrink-0"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-        <span className="text-sm font-medium">{signal.pair.replace("-USDT-SWAP", "")}</span>
+        <Zap size={14} className="text-primary flex-shrink-0" />
+        <span className="font-headline font-bold text-sm">{formatPair(signal.pair)}</span>
         <span className={`text-xs font-mono font-bold ${isLong ? "text-long" : "text-short"}`}>
           {signal.direction}
         </span>
-        <span className={`text-xs font-mono ${isLong ? "text-long" : "text-short"}`}>
+        <span className={`text-xs font-mono tabular ${isLong ? "text-long" : "text-short"}`}>
           {formatScore(signal.final_score)}
         </span>
-        <span className="text-xs text-dim">{signal.timeframe}</span>
+        <span className="text-[10px] text-outline">{signal.timeframe}</span>
       </div>
-      <span className="text-xs text-dim">{formatRelativeTime(signal.created_at)}</span>
+      <span className="text-[10px] text-outline tabular">{formatRelativeTime(signal.created_at)}</span>
     </div>
   );
 }

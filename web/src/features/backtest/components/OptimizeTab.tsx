@@ -7,7 +7,7 @@ import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 const TIMEFRAMES = ["15m", "1h", "4h", "1D"];
 
 export default function OptimizeTab() {
-  const [pair, setPair] = useState(AVAILABLE_PAIRS[0]);
+  const [pair, setPair] = useState<string>(AVAILABLE_PAIRS[0]);
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[1]);
   const [atrResult, setAtrResult] = useState<AtrOptimizationResult | null>(null);
   const [loading, setLoading] = useState(false);

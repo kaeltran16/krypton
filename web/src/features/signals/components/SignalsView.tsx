@@ -10,27 +10,29 @@ export function SignalsView() {
   return (
     <div className="flex flex-col h-full">
       {/* Segmented control */}
-      <div className="flex gap-1 p-3 pb-0">
-        <button
-          onClick={() => setActiveView("signals")}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-            activeView === "signals"
-              ? "bg-accent/15 text-accent border border-accent/30"
-              : "bg-card text-muted border border-border"
-          }`}
-        >
-          Signals
-        </button>
-        <button
-          onClick={() => setActiveView("journal")}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-            activeView === "journal"
-              ? "bg-accent/15 text-accent border border-accent/30"
-              : "bg-card text-muted border border-border"
-          }`}
-        >
-          Journal
-        </button>
+      <div className="p-3 pb-0">
+        <div className="flex gap-1 bg-surface-container-lowest p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setActiveView("signals")}
+            className={`px-4 py-1.5 rounded text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              activeView === "signals"
+                ? "bg-surface-container-highest text-primary"
+                : "text-on-surface-variant hover:bg-surface-container-highest"
+            }`}
+          >
+            Signals
+          </button>
+          <button
+            onClick={() => setActiveView("journal")}
+            className={`px-4 py-1.5 rounded text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              activeView === "journal"
+                ? "bg-surface-container-highest text-primary"
+                : "text-on-surface-variant hover:bg-surface-container-highest"
+            }`}
+          >
+            Journal
+          </button>
+        </div>
       </div>
 
       {/* Content */}

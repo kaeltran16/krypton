@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import { theme } from "../../../shared/theme";
 
 export interface IndicatorDef {
@@ -122,21 +123,19 @@ export function IndicatorSheet({ open, onClose, enabled, onToggle }: Props) {
       onClick={(e) => {
         if (e.target === dialogRef.current) onClose();
       }}
+      className="fixed inset-x-0 bottom-0 top-auto m-0 w-full max-h-[70dvh] overflow-y-auto rounded-t-xl bg-surface-container text-on-surface p-0 backdrop:bg-black/60"
     >
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">Indicators</h2>
-          <button onClick={onClose} className="text-muted p-1">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+          <h2 className="font-headline font-bold text-base">Indicators</h2>
+          <button onClick={onClose} aria-label="Close indicators" className="text-on-surface-variant p-2 hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg">
+            <X size={20} />
           </button>
         </div>
 
         {INDICATOR_GROUPS.map((group) => (
           <div key={group.label} className="mb-4">
-            <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
+            <h3 className="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-2">
               {group.label}
             </h3>
             <div className="space-y-1">
@@ -144,7 +143,9 @@ export function IndicatorSheet({ open, onClose, enabled, onToggle }: Props) {
                 <button
                   key={item.id}
                   onClick={() => handleToggle(item.id)}
-                  className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg active:bg-card-hover transition-colors"
+                  className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    enabled.has(item.id) ? "bg-primary/10 border border-primary/20" : "active:bg-surface-container-highest"
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
@@ -152,7 +153,7 @@ export function IndicatorSheet({ open, onClose, enabled, onToggle }: Props) {
                   </div>
                   <div
                     className={`w-9 h-5 rounded-full relative transition-colors ${
-                      enabled.has(item.id) ? "bg-accent" : "bg-border"
+                      enabled.has(item.id) ? "bg-primary" : "bg-outline-variant"
                     }`}
                   >
                     <div

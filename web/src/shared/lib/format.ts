@@ -26,6 +26,10 @@ export function formatTime(iso: string): string {
   return `${h}:${m}`;
 }
 
+export function formatPair(pair: string): string {
+  return pair.replace("-USDT-SWAP", "");
+}
+
 export function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);

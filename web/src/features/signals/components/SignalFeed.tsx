@@ -39,15 +39,15 @@ export function SignalFeed() {
   return (
     <div className="p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex gap-1 bg-surface-container-lowest p-1 rounded-lg">
           {FILTERS.map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setStatusFilter(value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 statusFilter === value
-                  ? "bg-accent/15 text-accent"
-                  : "text-muted border border-border"
+                  ? "bg-surface-container-highest text-primary"
+                  : "text-on-surface-variant hover:bg-surface-container-highest"
               }`}
             >
               {label}
@@ -58,13 +58,13 @@ export function SignalFeed() {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-muted text-center text-sm mt-8">
+        <p className="text-on-surface-variant text-center text-sm mt-8">
           {statusFilter === "ALL" ? "No signals in the last 24 hours" : `No ${statusFilter.toLowerCase()} signals`}
         </p>
       ) : (
         <div className="space-y-2">
           {filtered.map((signal, i) => (
-            <div key={signal.id} className={`animate-card-enter stagger-${Math.min(i + 1, 10)}`}>
+            <div key={signal.id} className={`motion-safe:animate-card-enter stagger-${Math.min(i + 1, 10)}`}>
               <SignalCard
                 signal={signal}
                 onSelect={selectSignal}

@@ -1,5 +1,6 @@
+import { Newspaper } from "lucide-react";
 import type { Signal } from "../types";
-import { formatScore, formatPrice, formatRelativeTime } from "../../../shared/lib/format";
+import { formatScore, formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { PatternBadges } from "./PatternBadges";
 
 interface SignalCardProps {
@@ -10,114 +11,116 @@ interface SignalCardProps {
 
 export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
   const isLong = signal.direction === "LONG";
-  const dirColor = isLong ? "text-long" : "text-short";
-  const borderColor = isLong ? "border-long/20" : "border-short/20";
-  const bgColor = isLong ? "bg-long/5" : "bg-short/5";
   const isPending = !signal.outcome || signal.outcome === "PENDING";
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(signal)}
-      className={`w-full p-3 rounded-lg border text-left transition-colors active:opacity-80 ${borderColor} ${bgColor}${isPending ? " animate-pulse-glow" : ""}`}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(signal); } }}
+      className={`w-full bg-surface-container border border-outline-variant/15 rounded-lg overflow-hidden text-left transition-all hover:bg-surface-container-high cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary${isPending ? " motion-safe:animate-pulse-glow" : ""}`}
     >
-      {/* Header: pair, direction badge, timeframe */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-accent flex-shrink-0"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-          <span className="font-medium text-sm">{signal.pair.replace("-USDT-SWAP", "")}</span>
-          <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-            isLong ? "bg-long/15 text-long" : "bg-short/15 text-short"
-          }`}>
-            {signal.direction}
-          </span>
-          <span className="text-xs text-dim px-1.5 py-0.5 rounded bg-card-hover">
-            {signal.timeframe}
+      {/* Header: pair, direction badge, score */}
+      <div className="p-4 flex justify-between items-start border-b border-outline-variant/10">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-headline text-lg font-bold tracking-tight">{formatPair(signal.pair)}</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+              isLong
+                ? "bg-long/20 text-long border-long/30"
+                : "bg-short/20 text-short border-short/30"
+            }`}>
+              {signal.direction} {signal.timeframe}
+            </span>
+          </div>
+          <span className="text-on-surface-variant text-[10px] uppercase tracking-widest mt-1 block">
+            {formatRelativeTime(signal.created_at)}
           </span>
         </div>
-        {!isPending && <OutcomeBadge outcome={signal.outcome} />}
-      </div>
-
-      {/* Score with visual bar */}
-      <div className="flex items-center gap-2 mt-2">
-        <span className="text-xs text-muted">Score</span>
-        <span className={`font-mono font-bold text-sm ${dirColor}`}>
-          {formatScore(signal.final_score)}
-        </span>
-        <div className="flex-1 h-1.5 bg-card-hover rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full ${isLong ? "bg-long" : "bg-short"}`}
-            style={{ width: `${Math.min(Math.max(signal.final_score, 0), 100)}%` }}
-          />
+        <div className="text-right">
+          <div className="text-xl font-headline font-bold text-primary tabular">
+            {formatScore(signal.final_score)}<span className="text-xs text-on-surface-variant font-medium">/100</span>
+          </div>
+          <div className="w-16 h-1 bg-surface-container-lowest mt-1 rounded-full overflow-hidden ml-auto">
+            <div
+              className="h-full bg-primary rounded-full shadow-[0_0_8px_rgba(105,218,255,0.4)]"
+              style={{ width: `${Math.min(Math.max(signal.final_score, 0), 100)}%` }}
+            />
+          </div>
+          {!isPending && <OutcomeBadge outcome={signal.outcome} />}
         </div>
       </div>
 
       {/* Pattern badges */}
       {signal.detected_patterns && signal.detected_patterns.length > 0 && (
-        <div className="mt-1.5">
-          <PatternBadges patterns={signal.detected_patterns} compact />
-        </div>
-      )}
-
-      {/* Price levels */}
-      <div className="flex items-center gap-3 mt-2 text-xs font-mono text-muted">
-        <span>Entry <span className="text-foreground">{formatPrice(signal.levels.entry)}</span></span>
-        <span>SL <span className="text-short">{formatPrice(signal.levels.stop_loss)}</span></span>
-        <span>TP <span className="text-long">{formatPrice(signal.levels.take_profit_1)}</span></span>
-      </div>
-
-      {/* Risk metrics */}
-      {signal.risk_metrics ? (
-        <div className="flex items-center gap-3 mt-1.5 text-[11px] font-mono text-muted">
-          <span>Size <span className="text-foreground">{signal.risk_metrics.position_size_base.toFixed(4)}</span></span>
-          <span>Risk <span className="text-short">${signal.risk_metrics.risk_amount_usd.toFixed(0)} ({signal.risk_metrics.risk_pct}%)</span></span>
-          {signal.risk_metrics.tp1_rr != null && (
-            <span>R:R <span className="text-long">1:{signal.risk_metrics.tp1_rr}{signal.risk_metrics.tp2_rr != null ? ` / 1:${signal.risk_metrics.tp2_rr}` : ""}</span></span>
-          )}
-        </div>
-      ) : (
-        <RRFallback levels={signal.levels} />
-      )}
-
-      {/* Footer: timestamp + badges */}
-      <div className="flex items-center justify-between mt-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-dim">{formatRelativeTime(signal.created_at)}</span>
+        <div className="px-4 py-3 flex items-center gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
+          <PatternBadges patterns={signal.detected_patterns} />
           {signal.correlated_news_ids && signal.correlated_news_ids.length > 0 && (
-            <span className="text-[11px] px-1 py-0.5 rounded bg-accent/10 text-accent" title="Correlated news">
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 inline-block mr-0.5 -mt-0.5">
-                <path d="M3 1h10a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 3v2h8V4H4zm0 4v1h5V8H4zm0 3v1h3v-1H4z" />
-              </svg>
-              {signal.correlated_news_ids.length}
-            </span>
+            <Newspaper size={16} className="text-primary ml-auto flex-shrink-0" />
           )}
         </div>
-        <div className="flex items-center gap-1.5">
-          {signal.user_status === "TRADED" && (
-            <span className="text-[11px] px-1.5 py-0.5 rounded border border-long/40 text-long">Traded</span>
-          )}
-          {signal.user_status === "SKIPPED" && (
-            <span className="text-[11px] px-1.5 py-0.5 rounded border border-border text-muted">Skipped</span>
-          )}
-          {!isPending && signal.outcome_pnl_pct != null && (
-            <span className={`text-xs font-mono ${signal.outcome_pnl_pct >= 0 ? "text-long" : "text-short"}`}>
-              {signal.outcome_pnl_pct >= 0 ? "+" : ""}{signal.outcome_pnl_pct.toFixed(2)}%
-            </span>
-          )}
+      )}
+
+      {/* Price grid */}
+      <div className="px-4 py-3 grid grid-cols-2 gap-y-3 gap-x-6 bg-surface-container-low/50">
+        <div>
+          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Entry Price</span>
+          <span className="font-headline font-bold text-sm tabular">{formatPrice(signal.levels.entry)}</span>
+        </div>
+        <div>
+          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Stop Loss</span>
+          <span className="font-headline font-bold text-sm text-short tabular">{formatPrice(signal.levels.stop_loss)}</span>
+        </div>
+        <div>
+          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Take Profit 1</span>
+          <span className="font-headline font-bold text-sm text-long tabular">{formatPrice(signal.levels.take_profit_1)}</span>
+        </div>
+        <div>
+          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Take Profit 2</span>
+          <span className="font-headline font-bold text-sm text-long tabular">{formatPrice(signal.levels.take_profit_2)}</span>
         </div>
       </div>
 
-      {/* Execute button */}
-      {onExecute && isPending && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onExecute(signal); }}
-          className={`mt-2 w-full py-2 rounded text-xs font-medium transition-colors active:opacity-80 ${
-            isLong ? "bg-long/15 text-long" : "bg-short/15 text-short"
-          }`}
-        >
-          Execute {signal.direction}
-        </button>
-      )}
-    </button>
+      {/* Footer: risk metrics + execute */}
+      <div className="p-4 border-t border-outline-variant/10 flex items-center justify-between">
+        <div className="flex gap-4">
+          {signal.risk_metrics ? (
+            <>
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase text-on-surface-variant">Risk</span>
+                <span className="text-[11px] font-bold tabular">{signal.risk_metrics.risk_pct}%</span>
+              </div>
+              {signal.risk_metrics.tp1_rr != null && (
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase text-on-surface-variant">R:R</span>
+                  <span className="text-[11px] font-bold tabular">
+                    {signal.risk_metrics.tp1_rr}{signal.risk_metrics.tp2_rr != null ? ` / ${signal.risk_metrics.tp2_rr}` : ""}
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <RRFallback levels={signal.levels} />
+          )}
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase text-on-surface-variant">Status</span>
+            <span className={`text-[11px] font-bold uppercase flex items-center gap-1 ${isPending ? "text-long" : "text-on-surface-variant"}`}>
+              {isPending && <span className="w-1 h-1 rounded-full bg-long motion-safe:animate-pulse" />}
+              {isPending ? "Active" : signal.user_status ?? signal.outcome}
+            </span>
+          </div>
+        </div>
+        {onExecute && isPending && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onExecute(signal); }}
+            className="bg-primary-container text-on-primary-fixed px-5 py-2 rounded-lg font-bold text-xs hover:opacity-90 active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            Execute
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -127,9 +130,9 @@ function RRFallback({ levels }: { levels: Signal["levels"] }) {
   const tp1rr = (Math.abs(levels.take_profit_1 - levels.entry) / slDist).toFixed(1);
   const tp2rr = (Math.abs(levels.take_profit_2 - levels.entry) / slDist).toFixed(1);
   return (
-    <div className="flex items-center gap-3 mt-1.5 text-[11px] font-mono text-muted">
-      <span>R:R <span className="text-long">1:{tp1rr} / 1:{tp2rr}</span></span>
-      <span className="text-dim italic">Connect OKX for sizing</span>
+    <div className="flex flex-col">
+      <span className="text-[10px] uppercase text-on-surface-variant">R:R</span>
+      <span className="text-[11px] font-bold tabular">1:{tp1rr} / 1:{tp2rr}</span>
     </div>
   );
 }
@@ -139,7 +142,7 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
     TP1_HIT: "bg-long/20 text-long",
     TP2_HIT: "bg-long/20 text-long",
     SL_HIT: "bg-short/20 text-short",
-    EXPIRED: "bg-card-hover text-dim",
+    EXPIRED: "bg-surface-container-highest text-outline",
   };
   const labels: Record<string, string> = {
     TP1_HIT: "TP1 Hit",
@@ -149,7 +152,7 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   };
 
   return (
-    <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${styles[outcome] ?? ""}`}>
+    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium mt-1 inline-block ${styles[outcome] ?? ""}`}>
       {labels[outcome] ?? outcome}
     </span>
   );

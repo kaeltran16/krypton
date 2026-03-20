@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSignalStats } from "../../home/hooks/useSignalStats";
 import { theme } from "../../../shared/theme";
+import { formatPair } from "../../../shared/lib/format";
 import type { SignalStats, PerformanceMetrics } from "../types";
 
 type Period = "7" | "30" | "365";
@@ -19,7 +20,7 @@ export function DeepDiveView() {
     return (
       <div className="p-3 space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 bg-card rounded-lg animate-pulse" />
+          <div key={i} className="h-24 bg-surface-container rounded-lg animate-pulse" />
         ))}
       </div>
     );
@@ -28,7 +29,7 @@ export function DeepDiveView() {
   if (!stats || stats.total_resolved < 5) {
     return (
       <div className="p-3">
-        <p className="text-muted text-center text-sm mt-12">
+        <p className="text-on-surface-variant text-center text-sm mt-12">
           Need more resolved trades to show metrics
         </p>
       </div>
@@ -38,13 +39,15 @@ export function DeepDiveView() {
   return (
     <div className="p-3 space-y-3 overflow-y-auto">
       {/* Period selector */}
-      <div className="flex gap-2">
+      <div className="flex gap-1 bg-surface-container-lowest p-1 rounded-lg w-fit">
         {PERIODS.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => setPeriod(value)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-              period === value ? "bg-accent/15 text-accent" : "text-muted border border-border"
+            className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              period === value
+                ? "bg-surface-container-highest text-primary"
+                : "text-on-surface-variant hover:bg-surface-container-highest"
             }`}
           >
             {label}
@@ -52,7 +55,7 @@ export function DeepDiveView() {
         ))}
       </div>
 
-      <MetricsGrid perf={stats.performance} />
+      <MetricsGrid perf={stats.performance} totalResolved={stats.total_resolved} />
       <BestWorstTrades perf={stats.performance} />
       <DrawdownChart data={stats.drawdown_series} />
       <PnlDistribution data={stats.pnl_distribution} />
@@ -60,42 +63,42 @@ export function DeepDiveView() {
   );
 }
 
-function MetricsGrid({ perf }: { perf: PerformanceMetrics }) {
+function MetricsGrid({ perf, totalResolved }: { perf: PerformanceMetrics; totalResolved: number }) {
   return (
-    <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Performance Metrics</h3>
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">Performance Metrics</h3>
       <div className="grid grid-cols-3 gap-3 text-center">
         <MetricCell
           label="Sharpe"
           value={perf.sharpe_ratio != null ? String(perf.sharpe_ratio) : "—"}
           tooltip={perf.sharpe_ratio == null ? "Not enough data (need 7+ days)" : undefined}
-          color={perf.sharpe_ratio != null && perf.sharpe_ratio > 0 ? "text-long" : perf.sharpe_ratio != null ? "text-short" : "text-dim"}
+          color={perf.sharpe_ratio != null && perf.sharpe_ratio > 0 ? "text-long" : perf.sharpe_ratio != null ? "text-short" : "text-outline"}
         />
         <MetricCell
           label="Profit F"
           value={perf.profit_factor != null ? String(perf.profit_factor) : "—"}
           tooltip={perf.profit_factor == null ? "No losing trades" : undefined}
-          color={perf.profit_factor != null && perf.profit_factor > 1 ? "text-long" : perf.profit_factor != null ? "text-short" : "text-dim"}
+          color={perf.profit_factor != null && perf.profit_factor > 1 ? "text-long" : perf.profit_factor != null ? "text-short" : "text-outline"}
         />
         <MetricCell
           label="Max DD"
           value={perf.max_drawdown_pct > 0 ? `-${perf.max_drawdown_pct}%` : "0%"}
-          color={perf.max_drawdown_pct > 3 ? "text-short" : "text-foreground"}
+          color={perf.max_drawdown_pct > 3 ? "text-short" : "text-on-surface"}
         />
         <MetricCell
           label="Expectancy"
           value={perf.expectancy != null ? `${perf.expectancy >= 0 ? "+" : ""}${perf.expectancy}%` : "—"}
-          color={perf.expectancy != null && perf.expectancy >= 0 ? "text-long" : perf.expectancy != null ? "text-short" : "text-dim"}
+          color={perf.expectancy != null && perf.expectancy >= 0 ? "text-long" : perf.expectancy != null ? "text-short" : "text-outline"}
         />
         <MetricCell
           label="Avg Hold"
           value={perf.avg_hold_time_minutes != null ? formatHoldTime(perf.avg_hold_time_minutes) : "—"}
-          color="text-foreground"
+          color="text-on-surface"
         />
         <MetricCell
           label="Trades"
-          value="—"
-          color="text-dim"
+          value={String(totalResolved)}
+          color="text-on-surface"
         />
       </div>
     </div>
@@ -110,8 +113,8 @@ function MetricCell({ label, value, color, tooltip }: {
 }) {
   return (
     <div title={tooltip}>
-      <div className={`text-base font-mono font-bold ${color}`}>{value}</div>
-      <div className="text-[11px] text-muted">{label}</div>
+      <div className={`text-base font-headline font-bold tabular ${color}`}>{value}</div>
+      <div className="text-[10px] text-on-surface-variant">{label}</div>
     </div>
   );
 }
@@ -120,29 +123,29 @@ function BestWorstTrades({ perf }: { perf: PerformanceMetrics }) {
   if (!perf.best_trade && !perf.worst_trade) return null;
 
   return (
-    <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Notable Trades</h3>
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">Notable Trades</h3>
       <div className="space-y-1.5">
         {perf.best_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
-              <span className="text-muted">
-                {perf.best_trade.pair.replace("-USDT-SWAP", "")} {perf.best_trade.timeframe} {perf.best_trade.direction}
+              <span className="text-[10px] text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
+              <span className="text-on-surface-variant">
+                {formatPair(perf.best_trade.pair)} {perf.best_trade.timeframe} {perf.best_trade.direction}
               </span>
             </div>
-            <span className="font-mono text-long">+{perf.best_trade.pnl_pct}%</span>
+            <span className="font-mono text-long tabular">+{perf.best_trade.pnl_pct}%</span>
           </div>
         )}
         {perf.worst_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
-              <span className="text-muted">
-                {perf.worst_trade.pair.replace("-USDT-SWAP", "")} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
+              <span className="text-[10px] text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
+              <span className="text-on-surface-variant">
+                {formatPair(perf.worst_trade.pair)} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
               </span>
             </div>
-            <span className="font-mono text-short">{perf.worst_trade.pnl_pct}%</span>
+            <span className="font-mono text-short tabular">{perf.worst_trade.pnl_pct}%</span>
           </div>
         )}
       </div>
@@ -171,18 +174,17 @@ function DrawdownChart({ data }: { data: SignalStats["drawdown_series"] }) {
     })
     .join(" ");
 
-  // Fill area under the line
   const firstX = pad.left;
   const lastX = pad.left + w;
   const fillPoints = `${firstX},${pad.top} ${points} ${lastX},${pad.top}`;
 
   return (
-    <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">Drawdown</h3>
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Drawdown</h3>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         <polygon fill={theme.colors.short + "15"} points={fillPoints} />
         <polyline fill="none" stroke={theme.colors.short} strokeWidth="1.5" strokeLinejoin="round" points={points} />
-        <text x={width - pad.right} y={height - 2} textAnchor="end" fontSize="8" fill={theme.colors.dim}>
+        <text x={width - pad.right} y={height - 2} textAnchor="end" fontSize="8" fill={theme.colors.outline}>
           {minVal.toFixed(1)}%
         </text>
       </svg>
@@ -202,8 +204,8 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
   const barWidth = Math.max(w / data.length - 2, 4);
 
   return (
-    <div className="bg-card rounded-lg p-3 border border-border">
-      <h3 className="text-[11px] text-muted uppercase tracking-wider mb-2">P&L Distribution</h3>
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">P&L Distribution</h3>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         {data.map((d, i) => {
           const barH = (d.count / maxCount) * h;
@@ -223,14 +225,13 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
             />
           );
         })}
-        {/* zero line */}
         {data.some(d => d.bucket < 0) && data.some(d => d.bucket >= 0) && (
           <line
             x1={pad.left + (data.findIndex(d => d.bucket >= 0) / data.length) * w}
             y1={pad.top}
             x2={pad.left + (data.findIndex(d => d.bucket >= 0) / data.length) * w}
             y2={pad.top + h}
-            stroke={theme.colors.border}
+            stroke={theme.colors["outline-variant"]}
             strokeWidth="0.5"
             strokeDasharray="3"
           />

@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { CandlestickChart } from "./CandlestickChart";
 import { IndicatorSheet, getStoredIndicators, hasOscillator } from "./IndicatorSheet";
 import { useChartData } from "../hooks/useChartData";
@@ -33,41 +34,32 @@ export function ChartView({ pair }: Props) {
   return (
     <div className={`flex flex-col ${fullScreen ? "h-[calc(100dvh-4rem)]" : "h-[calc(100dvh-6.5rem)]"}`}>
       {/* Timeframe selector + indicator gear */}
-      <div className="flex items-center justify-between px-3 py-1.5">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-container border-b border-outline-variant/10">
         <div className="flex gap-1">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              className={`px-3 py-1 text-xs font-bold font-headline rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 timeframe === tf
-                  ? "bg-accent/15 text-accent"
-                  : "text-muted active:bg-card-hover"
+                  ? "bg-surface-container-highest text-primary"
+                  : "text-on-surface-variant hover:bg-surface-container-highest"
               }`}
             >
-              {tf}
+              {tf.toUpperCase()}
             </button>
           ))}
         </div>
         <button
           onClick={() => setSheetOpen(true)}
-          className={`relative p-1.5 rounded transition-colors active:bg-card-hover ${
-            enabledIds.size > 0 ? "text-accent" : "text-muted"
+          aria-label={`Indicators${enabledIds.size > 0 ? ` (${enabledIds.size} active)` : ""}`}
+          className={`relative p-2 rounded-lg transition-colors active:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            enabledIds.size > 0 ? "text-primary" : "text-on-surface-variant"
           }`}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="4" y1="21" x2="4" y2="14" />
-            <line x1="4" y1="10" x2="4" y2="3" />
-            <line x1="12" y1="21" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12" y2="3" />
-            <line x1="20" y1="21" x2="20" y2="16" />
-            <line x1="20" y1="12" x2="20" y2="3" />
-            <line x1="1" y1="14" x2="7" y2="14" />
-            <line x1="9" y1="8" x2="15" y2="8" />
-            <line x1="17" y1="16" x2="23" y2="16" />
-          </svg>
+          <SlidersHorizontal size={18} />
           {enabledIds.size > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-accent text-surface text-[10px] font-bold rounded-full flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary-container text-on-primary-fixed text-[10px] font-bold rounded-full flex items-center justify-center">
               {enabledIds.size}
             </span>
           )}
@@ -83,21 +75,21 @@ export function ChartView({ pair }: Props) {
 
       {/* OHLC Strip — hidden when oscillators are active */}
       {!fullScreen && (
-        <div className="px-3 py-2 border-t border-border">
-          <div className="flex items-center justify-between text-xs font-mono text-muted">
+        <div className="px-3 py-2 border-t border-outline-variant/10">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">
             <div className="flex gap-3">
-              <span>O <span className="text-foreground">{open24h ? formatPrice(open24h) : "—"}</span></span>
-              <span>H <span className="text-foreground">{high24h ? formatPrice(high24h) : "—"}</span></span>
-              <span>L <span className="text-foreground">{low24h ? formatPrice(low24h) : "—"}</span></span>
-              <span>C <span className="text-foreground">{price ? formatPrice(price) : "—"}</span></span>
+              <span>O <span className="text-on-surface tabular">{open24h ? formatPrice(open24h) : "—"}</span></span>
+              <span>H <span className="text-on-surface tabular">{high24h ? formatPrice(high24h) : "—"}</span></span>
+              <span>L <span className="text-on-surface tabular">{low24h ? formatPrice(low24h) : "—"}</span></span>
+              <span>C <span className="text-on-surface tabular">{price ? formatPrice(price) : "—"}</span></span>
             </div>
           </div>
           <div className="flex items-center justify-between text-xs font-mono mt-0.5">
-            <span className="text-muted">
-              Vol <span className="text-foreground">{vol24h ? formatVolume(vol24h) : "—"}</span>
+            <span className="text-on-surface-variant">
+              Vol <span className="text-on-surface tabular">{vol24h ? formatVolume(vol24h) : "—"}</span>
             </span>
             {change24h !== null && (
-              <span className={change24h >= 0 ? "text-long" : "text-short"}>
+              <span className={`tabular ${change24h >= 0 ? "text-long" : "text-short"}`}>
                 24h {change24h >= 0 ? "+" : ""}{change24h.toFixed(2)}%
               </span>
             )}
