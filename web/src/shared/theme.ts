@@ -1,29 +1,89 @@
 // ─── Design Tokens ─────────────────────────────────────────────
-// Single source of truth for all visual constants.
-// Tailwind config consumes `colors` + `fontFamily`.
-// Chart components import `chart` + `indicators`.
-// CSS custom properties in index.css mirror the `glass` + `gradient` values.
+// "The Kinetic Terminal" — M3 tonal surface hierarchy.
+// Single source of truth. Tailwind config consumes colors + fontFamily + borderRadius.
+// Chart components import chart + indicators.
 
 export const theme = {
-  // ── Semantic colors (Tailwind utilities: bg-surface, text-muted, etc.) ──
   colors: {
-    // Surfaces
-    surface: "#0B0E11",
-    card: "#12161C",
-    "card-hover": "#1A1F28",
-    border: "#1E2530",
+    // ── M3 Surface Hierarchy ──
+    surface: "#0a0f14",
+    "surface-dim": "#0a0f14",
+    "surface-container-lowest": "#000000",
+    "surface-container-low": "#0e141a",
+    "surface-container": "#141a21",
+    "surface-container-high": "#1a2028",
+    "surface-container-highest": "#1f262f",
+    "surface-bright": "#252d36",
+    "surface-variant": "#1f262f",
+    "surface-tint": "#69daff",
+    background: "#0a0f14",
 
-    // Text
-    foreground: "#EAECEF",
-    muted: "#848E9C",
-    dim: "#5E6673",
+    // ── Primary (cyan) ──
+    primary: "#69daff",
+    "primary-container": "#00cffc",
+    "primary-dim": "#00c0ea",
+    "primary-fixed": "#00cffc",
+    "primary-fixed-dim": "#00c0ea",
+    "on-primary": "#004a5d",
+    "on-primary-container": "#004050",
+    "on-primary-fixed": "#002a35",
+    "on-primary-fixed-variant": "#004a5c",
+    "inverse-primary": "#006880",
 
-    // Trading
-    long: "#0ECB81",
-    short: "#F6465D",
-    accent: "#F0B90B",
+    // ── Secondary (neutral) ──
+    secondary: "#e1e2e7",
+    "secondary-container": "#44474b",
+    "secondary-dim": "#d3d4d9",
+    "secondary-fixed": "#e1e2e7",
+    "secondary-fixed-dim": "#d3d4d9",
+    "on-secondary": "#4f5256",
+    "on-secondary-container": "#cfd0d4",
+    "on-secondary-fixed": "#3d4043",
+    "on-secondary-fixed-variant": "#595c5f",
 
-    // Extended palette (indicators, tool icons, badges)
+    // ── Tertiary (green/bullish) ──
+    tertiary: "#c1ffd4",
+    "tertiary-container": "#66fdac",
+    "tertiary-dim": "#56ef9f",
+    "tertiary-fixed": "#66fdac",
+    "tertiary-fixed-dim": "#56ef9f",
+    "on-tertiary": "#00683d",
+    "on-tertiary-container": "#005e37",
+    "on-tertiary-fixed": "#004a2a",
+    "on-tertiary-fixed-variant": "#00693e",
+
+    // ── Error (red/bearish) ──
+    error: "#ff716c",
+    "error-container": "#9f0519",
+    "error-dim": "#d7383b",
+    "on-error": "#490006",
+    "on-error-container": "#ffa8a3",
+
+    // ── On-surface / text ──
+    "on-surface": "#e7ebf3",
+    "on-surface-variant": "#a7abb3",
+    "on-background": "#e7ebf3",
+
+    // ── Outline ──
+    outline: "#71767d",
+    "outline-variant": "#43484f",
+
+    // ── Inverse ──
+    "inverse-surface": "#f7f9ff",
+    "inverse-on-surface": "#50555c",
+
+    // ── Legacy aliases (backward compat for existing components) ──
+    long: "#56ef9f",
+    short: "#ff716c",
+    accent: "#00cffc",
+    foreground: "#e7ebf3",
+    muted: "#a7abb3",
+    dim: "#71767d",
+    card: "#141a21",
+    "card-hover": "#1a2028",
+    border: "#43484f",
+
+    // ── Extended palette (indicators, tool icons, badges — unchanged) ──
     blue: "#3B82F6",
     purple: "#8B5CF6",
     pink: "#EC4899",
@@ -33,70 +93,68 @@ export const theme = {
     neutral: "#6B7280",
   },
 
-  // ── Font stacks ──
   fontFamily: {
     sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+    headline: ["Space Grotesk", "system-ui", "sans-serif"],
     mono: ["JetBrains Mono", "Fira Code", "monospace"],
   },
 
-  // ── Body gradient stops ──
-  gradient: {
-    from: "#0d1117",
-    via: "#0B0E11",
-    to: "#080a0e",
+  borderRadius: {
+    DEFAULT: "0.125rem",
+    lg: "0.25rem",
+    xl: "0.5rem",
+    pill: "0.75rem",
   },
 
-  // ── Glass / transparency (used in CSS via custom properties) ──
   glass: {
-    card: "rgba(18, 22, 28, 0.65)",
-    dialog: "rgba(18, 22, 28, 0.9)",
-    border: "rgba(255, 255, 255, 0.06)",
+    nav: "rgba(31, 38, 47, 0.60)",
+    card: "rgba(20, 26, 33, 0.65)",
+    dialog: "rgba(10, 15, 20, 0.9)",
+    border: "rgba(67, 72, 79, 0.15)",
     backdrop: "rgba(0, 0, 0, 0.7)",
     blur: { nav: "24px", dialog: "20px", card: "12px" },
   },
 
-  // ── Chart config (lightweight-charts API) ──
   chart: {
-    background: "#12161C",     // = colors.card
-    text: "#848E9C",           // = colors.muted
-    grid: "rgba(31, 41, 55, 0.5)",
-    scaleBorder: "#1E2530",    // = colors.border
-    candleUp: "#0ECB81",       // = colors.long
-    candleDown: "#F6465D",     // = colors.short
-    volumeUp: "rgba(14, 203, 129, 0.3)",
-    volumeDown: "rgba(246, 70, 93, 0.3)",
-    macdHistUp: "rgba(14, 203, 129, 0.6)",
-    macdHistDown: "rgba(246, 70, 93, 0.6)",
+    background: "#0a0f14",
+    text: "#a7abb3",
+    grid: "rgba(31, 38, 47, 0.3)",
+    scaleBorder: "#43484f",
+    candleUp: "#56ef9f",
+    candleDown: "#ff716c",
+    volumeUp: "rgba(86, 239, 159, 0.3)",
+    volumeDown: "rgba(255, 113, 108, 0.3)",
+    macdHistUp: "rgba(86, 239, 159, 0.6)",
+    macdHistDown: "rgba(255, 113, 108, 0.6)",
   },
 
-  // ── Indicator line colors (ordered for visual distinction) ──
   indicators: {
-    ema21: "#F0B90B",    // accent / gold
-    ema50: "#3B82F6",    // blue
-    ema200: "#A855F7",   // violet
-    sma21: "#F59E0B",    // amber
-    sma50: "#6366F1",    // indigo
-    sma200: "#EC4899",   // pink
-    rsi: "#F0B90B",
-    macd: "#3B82F6",
+    ema21: "#00cffc",
+    ema50: "#69daff",
+    ema200: "#A855F7",
+    sma21: "#F59E0B",
+    sma50: "#6366F1",
+    sma200: "#EC4899",
+    rsi: "#00cffc",
+    macd: "#69daff",
     macdSignal: "#F97316",
-    stochK: "#10B981",
-    stochD: "#EF4444",
-    bb: "#6B7280",       // neutral
+    stochK: "#56ef9f",
+    stochD: "#ff716c",
+    bb: "#6B7280",
     vwap: "#F97316",
-    ichTenkan: "#2196F3",
-    ichKijun: "#EF4444",
-    ichSenkouA: "#0ECB81",
-    ichSenkouB: "#F6465D",
-    supertrend: "#10B981",
+    ichTenkan: "#69daff",
+    ichKijun: "#ff716c",
+    ichSenkouA: "#56ef9f",
+    ichSenkouB: "#ff716c",
+    supertrend: "#56ef9f",
     psar: "#8B5CF6",
     pivots: "#14B8A6",
     cci: "#F97316",
     atr: "#EC4899",
     adx: "#8B5CF6",
     willr: "#14B8A6",
-    mfi: "#EF4444",
+    mfi: "#ff716c",
     obv: "#6366F1",
-    curveColors: ["#F0B90B", "#0ECB81", "#F6465D", "#3B82F6"],
+    curveColors: ["#00cffc", "#56ef9f", "#ff716c", "#69daff"],
   },
 } as const;

@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { formatPrice } from "../lib/format";
 import { AVAILABLE_PAIRS } from "../lib/constants";
 
@@ -12,34 +13,42 @@ export function TickerBar({ price, change24h, pair, onPairChange }: TickerBarPro
   const isPositive = (change24h ?? 0) >= 0;
 
   return (
-    <div className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl border-b border-white/[0.06] safe-top">
-      <div className="flex items-center justify-between px-3 py-2">
-        <select
-          value={pair}
-          onChange={(e) => onPairChange(e.target.value)}
-          className="bg-transparent text-accent font-extrabold text-sm tracking-tight border-none outline-none appearance-none pr-4"
-          style={{
-            backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23848E9C' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")",
-            backgroundPosition: "right 0 center",
-            backgroundRepeat: "no-repeat",
-            backgroundSize: "16px",
-          }}
-        >
-          {AVAILABLE_PAIRS.map((p) => (
-            <option key={p} value={p} className="bg-card">{p.replace("-SWAP", "")}</option>
-          ))}
-        </select>
-        <div className="flex items-center gap-2">
-          {price !== null && (
-            <span className="font-mono text-display text-sm">${formatPrice(price)}</span>
-          )}
-          {change24h !== null && (
-            <span className={`text-xs font-mono ${isPositive ? "text-long" : "text-short"}`}>
-              {isPositive ? "+"  : ""}{change24h.toFixed(2)}%
-            </span>
-          )}
+    <header className="bg-surface flex justify-between items-center w-full px-4 h-14 z-40 sticky top-0 safe-top">
+      <div className="flex items-center gap-3">
+        <span className="text-on-surface font-headline font-bold text-lg tracking-tight">KRYPTON</span>
+        <div className="h-4 w-px bg-outline-variant/30" />
+        <div className="relative flex items-center">
+          <select
+            value={pair}
+            onChange={(e) => onPairChange(e.target.value)}
+            aria-label="Select trading pair"
+            className="bg-transparent font-headline font-bold tracking-tight text-base text-primary-container border-none outline-none appearance-none cursor-pointer pr-5"
+          >
+            {AVAILABLE_PAIRS.map((p) => (
+              <option key={p} value={p} className="bg-surface-container text-on-surface">
+                {p.replace("-SWAP", "")}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={14} className="absolute right-0 pointer-events-none text-primary-container/60" />
         </div>
       </div>
-    </div>
+      <div className="flex items-center gap-4">
+        {change24h !== null && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-surface-container rounded-lg">
+            <span className={`text-[10px] font-headline font-bold tracking-widest uppercase ${
+              isPositive ? "text-tertiary-dim" : "text-error"
+            }`}>
+              {isPositive ? "+" : ""}{change24h.toFixed(2)}%
+            </span>
+          </div>
+        )}
+        {price !== null && (
+          <span className="font-mono text-sm tabular text-on-surface">
+            ${formatPrice(price)}
+          </span>
+        )}
+      </div>
+    </header>
   );
 }

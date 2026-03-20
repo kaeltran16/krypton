@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krypton More Menu</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "background": "#0a0f14",
+                        "secondary": "#e1e2e7",
+                        "tertiary-fixed": "#66fdac",
+                        "on-secondary": "#4f5256",
+                        "tertiary-fixed-dim": "#56ef9f",
+                        "on-background": "#e7ebf3",
+                        "outline-variant": "#43484f",
+                        "on-primary": "#004a5d",
+                        "surface-bright": "#252d36",
+                        "secondary-container": "#44474b",
+                        "on-secondary-fixed-variant": "#595c5f",
+                        "tertiary-container": "#66fdac",
+                        "on-secondary-container": "#cfd0d4",
+                        "surface-container-lowest": "#000000",
+                        "surface-tint": "#69daff",
+                        "surface-container-high": "#1a2028",
+                        "secondary-fixed": "#e1e2e7",
+                        "on-primary-fixed": "#002a35",
+                        "on-error-container": "#ffa8a3",
+                        "on-secondary-fixed": "#3d4043",
+                        "on-primary-fixed-variant": "#004a5c",
+                        "on-tertiary": "#00683d",
+                        "primary-dim": "#00c0ea",
+                        "tertiary-dim": "#56ef9f",
+                        "surface-container-low": "#0e141a",
+                        "on-surface-variant": "#a7abb3",
+                        "surface": "#0a0f14",
+                        "primary-fixed": "#00cffc",
+                        "error": "#ff716c",
+                        "tertiary": "#c1ffd4",
+                        "secondary-fixed-dim": "#d3d4d9",
+                        "on-tertiary-fixed": "#004a2a",
+                        "primary-container": "#00cffc",
+                        "surface-container-highest": "#1f262f",
+                        "on-tertiary-container": "#005e37",
+                        "on-surface": "#e7ebf3",
+                        "surface-variant": "#1f262f",
+                        "surface-dim": "#0a0f14",
+                        "primary": "#69daff",
+                        "on-tertiary-fixed-variant": "#00693e",
+                        "inverse-on-surface": "#50555c",
+                        "primary-fixed-dim": "#00c0ea",
+                        "inverse-primary": "#006880",
+                        "outline": "#71767d",
+                        "secondary-dim": "#d3d4d9",
+                        "surface-container": "#141a21",
+                        "on-primary-container": "#004050",
+                        "on-error": "#490006",
+                        "error-container": "#9f0519",
+                        "error-dim": "#d7383b",
+                        "inverse-surface": "#f7f9ff"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .terminal-grid {
+            background-size: 40px 40px;
+            background-image: linear-gradient(to right, rgba(0, 207, 252, 0.03) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(0, 207, 252, 0.03) 1px, transparent 1px);
+        }
+        .scanline {
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 207, 252, 0.02) 50%);
+            background-size: 100% 4px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body select-none">
+<!-- Top Navigation Bar -->
+<nav class="flex justify-between items-center px-4 h-14 w-full z-50 bg-[#0a0f14] dark:bg-[#0a0f14] fixed top-0">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00D1FF]" data-icon="terminal">terminal</span>
+<span class="font-['Space_Grotesk'] font-bold tracking-tight uppercase text-[#00D1FF] text-lg font-black tracking-tighter">Engine Control</span>
+</div>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-[#1f262f] transition-colors rounded-lg">
+<span class="material-symbols-outlined text-[#00D1FF]" data-icon="settings_input_component">settings_input_component</span>
+</button>
+</nav>
+<!-- Main Content Canvas -->
+<main class="pt-14 pb-24 min-h-screen terminal-grid relative overflow-hidden">
+<div class="absolute inset-0 scanline pointer-events-none"></div>
+<!-- Header Section -->
+<header class="px-6 py-8">
+<h1 class="font-headline text-3xl font-bold text-on-background tracking-tight">System Hub</h1>
+<p class="text-on-surface-variant text-sm mt-1 uppercase tracking-widest font-label opacity-70">Core Protocol v4.0.2-Beta</p>
+</header>
+<!-- Navigation Clusters -->
+<div class="px-4 space-y-6 relative z-10">
+<!-- Trading Engine Cluster -->
+<section>
+<div class="px-2 mb-2">
+<span class="text-[10px] font-bold text-primary tracking-widest uppercase opacity-80">Execution Layer</span>
+</div>
+<div class="bg-surface-container rounded-lg overflow-hidden border border-outline-variant/10">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="memory">memory</span>
+</div>
+<div class="text-left">
+<span class="block text-on-surface font-semibold">Engine</span>
+<span class="block text-xs text-on-surface-variant">Active Instances: 4 / LATENCY: 2ms</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 bg-surface-container-low/50 hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-tertiary-fixed/10 flex items-center justify-center text-tertiary-fixed">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+</div>
+<div class="text-left">
+<span class="block text-on-surface font-semibold">Backtest</span>
+<span class="block text-xs text-on-surface-variant">Historical Simulation Hub</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-tertiary-fixed transition-colors" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Intelligence Cluster -->
+<section>
+<div class="px-2 mb-2">
+<span class="text-[10px] font-bold text-primary tracking-widest uppercase opacity-80">Intelligence Hub</span>
+</div>
+<div class="bg-surface-container rounded-lg overflow-hidden border border-outline-variant/10">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group border-b border-outline-variant/5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="model_training">model_training</span>
+</div>
+<div class="text-left">
+<span class="block text-on-surface font-semibold">ML Training</span>
+<span class="block text-xs text-on-surface-variant">Neural Net Performance Optimization</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-error/10 flex items-center justify-center text-error">
+<span class="material-symbols-outlined" data-icon="notifications_active">notifications_active</span>
+</div>
+<div class="text-left">
+<span class="block text-on-surface font-semibold">Alerts</span>
+<span class="block text-xs text-on-surface-variant">Critical Signal Configurations</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-error transition-colors" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Risk Management Cluster -->
+<section>
+<div class="px-2 mb-2">
+<span class="text-[10px] font-bold text-primary tracking-widest uppercase opacity-80">Safety &amp; Security</span>
+</div>
+<div class="bg-surface-container rounded-lg overflow-hidden border border-outline-variant/10">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group border-b border-outline-variant/5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="shield">shield</span>
+</div>
+<div class="text-left">
+<span class="block text-on-surface font-semibold">Risk</span>
+<span class="block text-xs text-on-surface-variant">Exposure Limits &amp; Kill Switches</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-outline/10 flex items-center justify-center text-outline">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</div>
+<div class="text-left">
+<span class="block text-on-surface font-semibold">Settings</span>
+<span class="block text-xs text-on-surface-variant">Global System Preferences</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface transition-colors" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Status Card Asymmetric -->
+<section class="mt-8">
+<div class="bg-surface-container-lowest p-5 border-l-4 border-primary rounded-r-lg">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline font-bold text-on-surface uppercase text-sm tracking-widest">Connection Secure</h3>
+<p class="text-xs text-on-surface-variant mt-1 font-mono">ENCRYPTED_NODE: FR-PAR-02</p>
+</div>
+<div class="bg-primary/20 px-2 py-0.5 rounded-full">
+<span class="text-[10px] font-bold text-primary uppercase">99.9% Uptime</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center pt-2 pb-safe px-2 bg-[#1f262f]/60 backdrop-blur-3xl shadow-[0_-4px_12px_rgba(0,0,0,0.5)] z-50">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase mt-1">Home</span>
+</a>
+<!-- Chart -->
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase mt-1">Chart</span>
+</a>
+<!-- Signals -->
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="auto_graph">auto_graph</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase mt-1">Signals</span>
+</a>
+<!-- News -->
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="newspaper">newspaper</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase mt-1">News</span>
+</a>
+<!-- More (Active) -->
+<a class="flex flex-col items-center justify-center text-[#00D1FF] drop-shadow-[0_0_8px_rgba(105,218,255,0.4)] scale-95 transition-transform duration-150 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase mt-1">More</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krypton Terminal - Backtest Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-surface": "#e7ebf3",
+                "tertiary": "#c1ffd4",
+                "surface-container-lowest": "#000000",
+                "error-dim": "#d7383b",
+                "outline-variant": "#43484f",
+                "primary-fixed": "#00cffc",
+                "on-tertiary-fixed": "#004a2a",
+                "primary-container": "#00cffc",
+                "error": "#ff716c",
+                "surface-container": "#141a21",
+                "outline": "#71767d",
+                "surface-container-low": "#0e141a",
+                "on-primary": "#004a5d",
+                "surface-tint": "#69daff",
+                "surface-container-highest": "#1f262f",
+                "surface-variant": "#1f262f",
+                "on-secondary-fixed-variant": "#595c5f",
+                "surface": "#0a0f14",
+                "on-secondary-fixed": "#3d4043",
+                "inverse-primary": "#006880",
+                "on-tertiary-fixed-variant": "#00693e",
+                "primary-fixed-dim": "#00c0ea",
+                "secondary-fixed-dim": "#d3d4d9",
+                "on-background": "#e7ebf3",
+                "on-secondary-container": "#cfd0d4",
+                "on-primary-fixed-variant": "#004a5c",
+                "on-primary-container": "#004050",
+                "inverse-surface": "#f7f9ff",
+                "tertiary-container": "#66fdac",
+                "tertiary-dim": "#56ef9f",
+                "on-tertiary": "#00683d",
+                "on-surface-variant": "#a7abb3",
+                "on-error-container": "#ffa8a3",
+                "surface-container-high": "#1a2028",
+                "secondary-dim": "#d3d4d9",
+                "secondary-container": "#44474b",
+                "secondary": "#e1e2e7",
+                "on-secondary": "#4f5256",
+                "on-error": "#490006",
+                "error-container": "#9f0519",
+                "background": "#0a0f14",
+                "inverse-on-surface": "#50555c",
+                "surface-bright": "#252d36",
+                "primary-dim": "#00c0ea",
+                "primary": "#69daff",
+                "surface-dim": "#0a0f14",
+                "tertiary-fixed": "#66fdac",
+                "tertiary-fixed-dim": "#56ef9f",
+                "on-primary-fixed": "#002a35",
+                "on-tertiary-container": "#005e37",
+                "secondary-fixed": "#e1e2e7"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .terminal-font { font-family: 'Space Grotesk', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-20 md:pb-0">
+<!-- TopAppBar -->
+<header class="bg-[#0a0f14] flex justify-between items-center px-4 h-14 w-full border-b border-[#1f262f]/15 sticky top-0 z-50">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00cffc]" data-icon="terminal">terminal</span>
+<h1 class="font-['Space_Grotesk'] uppercase tracking-widest font-bold text-sm text-[#00cffc]">BACKTEST</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex gap-6 items-center">
+<span class="text-xs font-headline tracking-tighter text-[#a7abb3] hover:text-[#00cffc] cursor-pointer transition-colors">STRATEGY_BUILDER</span>
+<span class="text-xs font-headline tracking-tighter text-[#00cffc] shadow-[0_0_8px_rgba(105,218,255,0.15)] cursor-pointer">BACKTEST_ENGINE</span>
+<span class="text-xs font-headline tracking-tighter text-[#a7abb3] hover:text-[#00cffc] cursor-pointer transition-colors">PAPER_TRADING</span>
+</div>
+<span class="material-symbols-outlined text-[#69daff] cursor-pointer active:scale-95 transition-transform" data-icon="refresh">refresh</span>
+</div>
+</header>
+<main class="max-w-[1400px] mx-auto p-4 md:p-6 lg:p-8 space-y-8">
+<!-- Setup Section -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<div class="lg:col-span-12">
+<div class="flex items-center gap-2 mb-4">
+<div class="w-1 h-4 bg-primary"></div>
+<h2 class="text-sm font-headline font-bold tracking-widest uppercase text-on-surface">Engine Configuration</h2>
+</div>
+</div>
+<!-- Left Config Column -->
+<div class="lg:col-span-4 space-y-4">
+<div class="bg-surface-container p-5 rounded">
+<label class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider mb-3 block">Trading Pairs</label>
+<div class="space-y-2">
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded border border-primary/20">
+<span class="text-xs font-mono font-medium">BTC-USDT-SWAP</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded border border-primary/20">
+<span class="text-xs font-mono font-medium">ETH-USDT-SWAP</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-low rounded border border-outline-variant/10 opacity-60">
+<span class="text-xs font-mono font-medium">WIF-USDT-SWAP</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="add_circle">add_circle</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-container p-5 rounded">
+<label class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider mb-3 block">Timeframe &amp; Lookback</label>
+<div class="grid grid-cols-2 gap-3 mb-4">
+<div class="bg-surface-container-lowest p-2 rounded text-center border border-primary/40 cursor-pointer">
+<span class="text-[10px] block text-on-surface-variant">TIMEFRAME</span>
+<span class="text-xs font-bold text-primary">1H</span>
+</div>
+<div class="bg-surface-container-lowest p-2 rounded text-center border border-outline-variant/20 cursor-pointer">
+<span class="text-[10px] block text-on-surface-variant">LOOKBACK</span>
+<span class="text-xs font-bold">180D</span>
+</div>
+</div>
+<div class="flex justify-between gap-1">
+<button class="flex-1 py-1 text-[10px] font-bold bg-surface-container-highest text-on-surface-variant rounded">15m</button>
+<button class="flex-1 py-1 text-[10px] font-bold bg-primary-container text-on-primary-container rounded">1H</button>
+<button class="flex-1 py-1 text-[10px] font-bold bg-surface-container-highest text-on-surface-variant rounded">4H</button>
+<button class="flex-1 py-1 text-[10px] font-bold bg-surface-container-highest text-on-surface-variant rounded">1D</button>
+</div>
+</div>
+</div>
+<!-- Middle Config Column -->
+<div class="lg:col-span-4 space-y-4">
+<div class="bg-surface-container p-5 rounded h-full flex flex-col justify-between">
+<div>
+<label class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider mb-6 block">Scoring Weights</label>
+<div class="space-y-8">
+<div>
+<div class="flex justify-between mb-2">
+<span class="text-[10px] font-bold text-on-surface">TECHNICAL BIAS</span>
+<span class="text-[10px] font-mono text-primary">75%</span>
+</div>
+<div class="relative w-full h-1 bg-surface-container-lowest rounded-full">
+<div class="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_8px_rgba(105,218,255,0.4)]" style="width: 75%;"></div>
+<div class="absolute top-1/2 left-[75%] -translate-y-1/2 w-3 h-3 bg-on-surface border-2 border-primary rounded-full"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-2">
+<span class="text-[10px] font-bold text-on-surface">PATTERN RECOGNITION</span>
+<span class="text-[10px] font-mono text-primary">25%</span>
+</div>
+<div class="relative w-full h-1 bg-surface-container-lowest rounded-full">
+<div class="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_8px_rgba(105,218,255,0.4)]" style="width: 25%;"></div>
+<div class="absolute top-1/2 left-[25%] -translate-y-1/2 w-3 h-3 bg-on-surface border-2 border-primary rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant/10 mt-6 grid grid-cols-2 gap-4">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-bold text-on-surface-variant">INDICATORS</span>
+<div class="w-8 h-4 bg-primary rounded-full relative cursor-pointer">
+<div class="absolute right-0.5 top-0.5 w-3 h-3 bg-on-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-bold text-on-surface-variant">SL/TP ATR</span>
+<div class="w-8 h-4 bg-surface-container-highest rounded-full relative cursor-pointer">
+<div class="absolute left-0.5 top-0.5 w-3 h-3 bg-on-surface-variant rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Config Column / Run -->
+<div class="lg:col-span-4">
+<div class="bg-surface-container-high p-6 rounded h-full flex flex-col justify-center items-center border border-primary/5">
+<div class="mb-8 text-center">
+<div class="relative inline-block mb-4">
+<svg class="w-24 h-24 transform -rotate-90">
+<circle class="text-surface-container-lowest" cx="48" cy="48" fill="transparent" r="44" stroke="currentColor" stroke-width="4"></circle>
+<circle class="text-primary" cx="48" cy="48" fill="transparent" r="44" stroke="currentColor" stroke-dasharray="276" stroke-dashoffset="96.6" stroke-width="4"></circle>
+</svg>
+<span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 font-headline font-bold text-xl">65%</span>
+</div>
+<p class="text-[10px] font-headline font-bold text-primary tracking-widest animate-pulse">OPTIMIZING PARAMETERS...</p>
+</div>
+<button class="w-full bg-primary-container text-on-primary-fixed py-4 font-headline font-bold text-xs tracking-widest uppercase hover:brightness-110 active:scale-[0.98] transition-all rounded">
+                        Run Backtest
+                    </button>
+<p class="mt-4 text-[10px] text-on-surface-variant font-mono">EST. TIME: 4.2s • SAMPLES: 14.2k</p>
+</div>
+</div>
+</section>
+<!-- Results Section -->
+<section class="space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-1 h-4 bg-tertiary-dim"></div>
+<h2 class="text-sm font-headline font-bold tracking-widest uppercase text-on-surface">Execution Results</h2>
+</div>
+<div class="flex gap-2">
+<span class="px-2 py-1 bg-tertiary-container text-on-tertiary-fixed text-[10px] font-bold rounded">SUCCESSFUL_RUN</span>
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant text-[10px] font-mono rounded">ID: #KT-9912</span>
+</div>
+</div>
+<!-- Summary Stats -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="bg-surface-container p-4 rounded border-l-2 border-primary">
+<span class="text-[10px] font-bold text-on-surface-variant block mb-1">WIN RATE</span>
+<div class="flex items-baseline gap-1">
+<span class="text-2xl font-headline font-bold">68.4</span>
+<span class="text-xs font-headline font-bold text-primary">%</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded border-l-2 border-tertiary-dim">
+<span class="text-[10px] font-bold text-on-surface-variant block mb-1">PROFIT FACTOR</span>
+<div class="flex items-baseline gap-1">
+<span class="text-2xl font-headline font-bold">2.41</span>
+<span class="text-xs font-headline font-bold text-tertiary-dim">X</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded border-l-2 border-error">
+<span class="text-[10px] font-bold text-on-surface-variant block mb-1">MAX DRAWDOWN</span>
+<div class="flex items-baseline gap-1">
+<span class="text-2xl font-headline font-bold">12.2</span>
+<span class="text-xs font-headline font-bold text-error">%</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded border-l-2 border-tertiary">
+<span class="text-[10px] font-bold text-on-surface-variant block mb-1">NET P&amp;L</span>
+<div class="flex items-baseline gap-1">
+<span class="text-2xl font-headline font-bold">+18.2</span>
+<span class="text-xs font-headline font-bold text-tertiary">K</span>
+</div>
+</div>
+</div>
+<!-- Chart & Detail Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Equity Curve -->
+<div class="lg:col-span-2 bg-surface-container p-6 rounded relative overflow-hidden">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-xs font-headline font-bold tracking-widest text-on-surface uppercase">Equity Curve</h3>
+<div class="flex gap-4">
+<div class="flex items-center gap-1.5">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">PORTFOLIO</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">BENCHMARK</span>
+</div>
+</div>
+</div>
+<!-- Mock Chart Visualization -->
+<div class="h-64 flex items-end gap-[2px]">
+<div class="w-full h-full relative">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 40">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#69daff" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#69daff" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,35 Q10,30 20,32 T40,20 T60,25 T80,10 T100,5 L100,40 L0,40 Z" fill="url(#chartGradient)"></path>
+<path d="M0,35 Q10,30 20,32 T40,20 T60,25 T80,10 T100,5" fill="none" stroke="#69daff" stroke-width="0.5"></path>
+<path d="M0,38 Q10,37 20,36 T40,34 T60,35 T80,32 T100,30" fill="none" stroke="#43484f" stroke-dasharray="1,1" stroke-width="0.3"></path>
+</svg>
+<!-- Tooltip Mock -->
+<div class="absolute top-10 left-[60%] -translate-x-1/2 p-2 bg-surface-bright border border-primary/20 rounded shadow-xl pointer-events-none">
+<div class="text-[9px] font-mono text-on-surface-variant">2024-03-12</div>
+<div class="text-[11px] font-bold text-primary">+$1,240.42</div>
+</div>
+</div>
+</div>
+<div class="flex justify-between mt-4 border-t border-outline-variant/10 pt-4">
+<span class="text-[10px] font-mono text-on-surface-variant">JAN</span>
+<span class="text-[10px] font-mono text-on-surface-variant">FEB</span>
+<span class="text-[10px] font-mono text-on-surface-variant">MAR</span>
+<span class="text-[10px] font-mono text-on-surface-variant">APR</span>
+</div>
+</div>
+<!-- Per-Pair Breakdown -->
+<div class="bg-surface-container p-6 rounded">
+<h3 class="text-xs font-headline font-bold tracking-widest text-on-surface uppercase mb-6">Asset Attribution</h3>
+<div class="space-y-4">
+<div class="bg-surface-container-low p-4 rounded flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#f7931a]/10 flex items-center justify-center">
+<span class="text-[10px] font-bold text-[#f7931a]">BTC</span>
+</div>
+<div>
+<div class="text-[10px] font-bold">BTC-USDT</div>
+<div class="text-[9px] text-on-surface-variant">42 TRADES</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-xs font-bold text-tertiary-dim">+$12,400</div>
+<div class="text-[9px] text-on-surface-variant">72% WR</div>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#627eea]/10 flex items-center justify-center">
+<span class="text-[10px] font-bold text-[#627eea]">ETH</span>
+</div>
+<div>
+<div class="text-[10px] font-bold">ETH-USDT</div>
+<div class="text-[9px] text-on-surface-variant">38 TRADES</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-xs font-bold text-tertiary-dim">+$5,800</div>
+<div class="text-[9px] text-on-surface-variant">64% WR</div>
+</div>
+</div>
+<div class="p-4 border border-dashed border-outline-variant/20 rounded flex items-center justify-center">
+<span class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest">+ ADD SYMBOL TO ANALYSIS</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-1 pb-safe h-16 bg-[#1f262f]/60 backdrop-blur-xl shadow-[0_-12px_32px_rgba(0,0,0,0.2)] z-50 md:hidden">
+<a class="flex flex-col items-center justify-center text-[#a7abb3] py-1 w-full hover:text-[#e7ebf3] active:opacity-80" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">HOME</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] py-1 w-full hover:text-[#e7ebf3] active:opacity-80" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insights">insights</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">CHART</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#00cffc] bg-[#69daff]/10 rounded-sm py-1 w-full hover:text-[#e7ebf3] active:opacity-80" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="sensors" style="font-variation-settings: 'FILL' 1;">sensors</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">SIGNALS</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] py-1 w-full hover:text-[#e7ebf3] active:opacity-80" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="rss_feed">rss_feed</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">NEWS</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] py-1 w-full hover:text-[#e7ebf3] active:opacity-80" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="menu">menu</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">MORE</span>
+</a>
+</nav>
+<!-- Floating Branding Accent -->
+<div class="fixed top-20 right-4 hidden 2xl:block opacity-10 pointer-events-none">
+<div class="font-headline font-black text-8xl rotate-90 origin-top-right text-primary-fixed uppercase select-none">KRYPTON</div>
+</div>
+</body></html>

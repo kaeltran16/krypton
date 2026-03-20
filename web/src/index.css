@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,21 +7,20 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Theme tokens — keep in sync with shared/theme.ts */
-  --color-foreground: #EAECEF;
-  --color-accent: #F0B90B;
-  --gradient-from: #0d1117;
-  --gradient-via: #0B0E11;
-  --gradient-to: #080a0e;
-  --glass-card: rgba(18, 22, 28, 0.65);
-  --glass-dialog: rgba(18, 22, 28, 0.9);
-  --glass-border: rgba(255, 255, 255, 0.06);
+  --color-foreground: #e7ebf3;
+  --color-primary: #69daff;
+  --color-primary-container: #00cffc;
+  --glass-nav: rgba(31, 38, 47, 0.60);
+  --glass-card: rgba(20, 26, 33, 0.65);
+  --glass-dialog: rgba(10, 15, 20, 0.9);
+  --glass-border: rgba(67, 72, 79, 0.15);
   --glass-backdrop: rgba(0, 0, 0, 0.7);
   --glass-blur-card: 12px;
   --glass-blur-dialog: 20px;
 }
 
 body {
-  background: linear-gradient(180deg, var(--gradient-from) 0%, var(--gradient-via) 40%, var(--gradient-to) 100%);
+  background-color: #0a0f14;
   color: var(--color-foreground);
   font-family: Inter, system-ui, -apple-system, sans-serif;
   margin: 0;
@@ -41,18 +38,27 @@ button, a, [role="button"], [role="switch"] {
 
 /* Global focus-visible ring for keyboard navigation */
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 60%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* Remove focus ring for pointer interactions */
 :focus:not(:focus-visible) {
   outline: none;
 }
 
 input, select, textarea {
   font-size: 16px; /* Prevent iOS zoom on focus */
+}
+
+/* Scrollbar — thin terminal style */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #0a0f14; }
+::-webkit-scrollbar-thumb { background: #1f262f; border-radius: 2px; }
+
+/* Selection */
+::selection {
+  background: rgba(105, 218, 255, 0.3);
 }
 
 dialog::backdrop {
@@ -69,7 +75,7 @@ dialog {
   max-height: 85vh;
   width: 100%;
   max-width: 32rem;
-  border-radius: 1rem 1rem 0 0;
+  border-radius: 0.5rem 0.5rem 0 0;
   overflow-y: auto;
   background: var(--glass-dialog);
   backdrop-filter: blur(var(--glass-blur-dialog));
@@ -99,16 +105,13 @@ dialog {
   scrollbar-width: none;
 }
 
-@keyframes slide-down {
-  from { transform: translateY(-100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+/* Tabular numbers for prices and metrics */
+.tabular {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
 }
 
-.animate-slide-down {
-  animation: slide-down 0.3s ease-out;
-}
-
-/* OKX-style typography utilities */
+/* Typography utilities */
 .text-display {
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -134,13 +137,20 @@ dialog {
 .stagger-9 { animation-delay: 320ms; }
 .stagger-10 { animation-delay: 360ms; }
 
-/* Elevated glass card — use on primary dashboard cards for visual hierarchy */
+/* Glass card — updated for terminal aesthetic */
 .glass-card {
   background: var(--glass-card);
   backdrop-filter: blur(var(--glass-blur-card));
   -webkit-backdrop-filter: blur(var(--glass-blur-card));
   border: 1px solid var(--glass-border);
-  border-radius: 0.5rem;
+  border-radius: 0.25rem;
+}
+
+/* Terminal grid background for More/Engine pages */
+.terminal-grid {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(0, 207, 252, 0.03) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0, 207, 252, 0.03) 1px, transparent 1px);
 }
 
 /* Respect reduced-motion preferences (WCAG 2.1) */

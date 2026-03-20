@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krypton News Feed</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-container": "#005e37",
+                        "on-surface": "#e7ebf3",
+                        "on-primary-container": "#004050",
+                        "tertiary-fixed-dim": "#56ef9f",
+                        "tertiary-fixed": "#66fdac",
+                        "on-primary-fixed-variant": "#004a5c",
+                        "surface-container-low": "#0e141a",
+                        "surface": "#0a0f14",
+                        "surface-dim": "#0a0f14",
+                        "secondary-container": "#44474b",
+                        "on-tertiary": "#00683d",
+                        "surface-variant": "#1f262f",
+                        "on-tertiary-fixed-variant": "#00693e",
+                        "surface-tint": "#69daff",
+                        "outline-variant": "#43484f",
+                        "on-primary": "#004a5d",
+                        "primary-fixed-dim": "#00c0ea",
+                        "tertiary": "#c1ffd4",
+                        "primary": "#69daff",
+                        "inverse-primary": "#006880",
+                        "surface-container-highest": "#1f262f",
+                        "on-secondary-fixed-variant": "#595c5f",
+                        "error": "#ff716c",
+                        "on-error-container": "#ffa8a3",
+                        "secondary-fixed-dim": "#d3d4d9",
+                        "secondary-dim": "#d3d4d9",
+                        "primary-dim": "#00c0ea",
+                        "outline": "#71767d",
+                        "on-surface-variant": "#a7abb3",
+                        "surface-bright": "#252d36",
+                        "error-dim": "#d7383b",
+                        "on-background": "#e7ebf3",
+                        "error-container": "#9f0519",
+                        "primary-container": "#00cffc",
+                        "surface-container-high": "#1a2028",
+                        "tertiary-container": "#66fdac",
+                        "on-primary-fixed": "#002a35",
+                        "inverse-surface": "#f7f9ff",
+                        "on-tertiary-fixed": "#004a2a",
+                        "on-secondary": "#4f5256",
+                        "secondary-fixed": "#e1e2e7",
+                        "tertiary-dim": "#56ef9f",
+                        "primary-fixed": "#00cffc",
+                        "on-error": "#490006",
+                        "inverse-on-surface": "#50555c",
+                        "background": "#0a0f14",
+                        "surface-container-lowest": "#000000",
+                        "on-secondary-fixed": "#3d4043",
+                        "surface-container": "#141a21",
+                        "on-secondary-container": "#cfd0d4",
+                        "secondary": "#e1e2e7"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0f14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f262f;
+            border-radius: 2px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-fixed">
+<!-- Top Navigation Anchor -->
+<header class="bg-[#0a0f14] flex justify-between items-center w-full px-4 h-14 z-50 sticky top-0 border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00cffc]" data-icon="search">search</span>
+<h1 class="text-[#e7ebf3] font-headline font-bold text-lg tracking-tight">BTC-USDT-SWAP</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[#56ef9f] font-headline font-bold tracking-tight text-base">+2.45%</span>
+</div>
+</header>
+<main class="max-w-4xl mx-auto px-4 pb-24 pt-6">
+<!-- Filter Header Section -->
+<section class="mb-8">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div class="space-y-1">
+<h2 class="font-headline text-3xl font-bold tracking-tighter text-on-surface">News Feed</h2>
+<p class="text-on-surface-variant text-sm">Real-time market intelligence and macro events.</p>
+</div>
+<div class="flex flex-wrap gap-3">
+<!-- Category Filters -->
+<div class="bg-surface-container-low p-1 rounded-lg flex gap-1">
+<button class="px-3 py-1.5 text-xs font-label uppercase tracking-widest bg-surface-container-highest text-primary shadow-[0_0_8px_rgba(105,218,255,0.15)] rounded">All</button>
+<button class="px-3 py-1.5 text-xs font-label uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors rounded">Crypto</button>
+<button class="px-3 py-1.5 text-xs font-label uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors rounded">Macro</button>
+</div>
+</div>
+</div>
+<!-- Impact Toggles -->
+<div class="flex items-center gap-4 mt-4 overflow-x-auto pb-2 scrollbar-hide">
+<span class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant shrink-0">Impact Level:</span>
+<button class="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant/20 hover:border-primary/40 transition-all group">
+<div class="w-1.5 h-1.5 rounded-full bg-error"></div>
+<span class="text-xs text-on-surface">High</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant/20 hover:border-primary/40 transition-all opacity-50">
+<div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+<span class="text-xs text-on-surface">Medium</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant/20 hover:border-primary/40 transition-all opacity-50">
+<div class="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></div>
+<span class="text-xs text-on-surface">Low</span>
+</button>
+</div>
+</section>
+<!-- News Feed Grid -->
+<div class="space-y-4">
+<!-- High Impact Item (Expanded State Concept) -->
+<article class="bg-surface-container-low rounded-lg p-5 border-l-4 border-error hover:bg-surface-container transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-label tracking-widest px-2 py-0.5 bg-error-container text-on-error uppercase rounded">High Impact</span>
+<span class="text-xs text-on-surface-variant tabular-nums">15m ago • CoinDesk</span>
+</div>
+<div class="flex items-center gap-1 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span class="text-[10px] font-label uppercase tracking-widest">Bullish</span>
+</div>
+</div>
+<h3 class="font-headline text-xl font-bold leading-tight mb-4 text-on-surface group-hover:text-primary transition-colors">Fed signals possible rate cut in Q3 as inflation cools faster than forecast</h3>
+<div class="flex flex-wrap gap-2 mb-4">
+<div class="bg-surface-container-highest px-2 py-1 rounded flex items-center gap-2">
+<span class="text-[10px] font-mono font-bold text-on-surface">BTC</span>
+<span class="text-[10px] text-tertiary-dim font-bold tabular-nums">+1.2%</span>
+</div>
+<div class="bg-surface-container-highest px-2 py-1 rounded flex items-center gap-2">
+<span class="text-[10px] font-mono font-bold text-on-surface">ETH</span>
+<span class="text-[10px] text-tertiary-dim font-bold tabular-nums">+0.8%</span>
+</div>
+</div>
+<!-- LLM Summary Section -->
+<div class="bg-surface-container-lowest rounded-lg p-4 border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="bolt">bolt</span>
+<span class="text-[10px] font-label uppercase tracking-widest text-primary">Krypton AI Summary</span>
+</div>
+<ul class="space-y-2 text-sm text-on-surface-variant list-none">
+<li class="flex gap-2">
+<span class="text-primary">•</span>
+<span>Jerome Powell emphasizes a "pivot ready" stance if CPI remains under 3.0%.</span>
+</li>
+<li class="flex gap-2">
+<span class="text-primary">•</span>
+<span>Market pricing for September cut shifts from 45% to 72% following the statement.</span>
+</li>
+<li class="flex gap-2">
+<span class="text-primary">•</span>
+<span>Correlation between BTC and Nasdaq 100 expected to tighten in the short term.</span>
+</li>
+</ul>
+</div>
+</article>
+<!-- Regular Item 2 -->
+<article class="bg-surface-container-low rounded-lg p-5 border-l-4 border-primary/40 hover:bg-surface-container transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-label tracking-widest px-2 py-0.5 bg-surface-container-highest text-on-surface-variant uppercase rounded">Medium Impact</span>
+<span class="text-xs text-on-surface-variant tabular-nums">1h ago • The Block</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="horizontal_rule">horizontal_rule</span>
+<span class="text-[10px] font-label uppercase tracking-widest">Neutral</span>
+</div>
+</div>
+<h3 class="font-headline text-xl font-bold leading-tight mb-4 text-on-surface group-hover:text-primary transition-colors">SEC Delays Decision on Spot Ethereum ETF Options Trading</h3>
+<div class="flex flex-wrap gap-2">
+<div class="bg-surface-container-highest px-2 py-1 rounded flex items-center gap-2">
+<span class="text-[10px] font-mono font-bold text-on-surface">ETH</span>
+<span class="text-[10px] text-on-surface-variant font-bold tabular-nums">0.0%</span>
+</div>
+</div>
+</article>
+<!-- Regular Item 3 -->
+<article class="bg-surface-container-low rounded-lg p-5 border-l-4 border-error/50 hover:bg-surface-container transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-label tracking-widest px-2 py-0.5 bg-error-container text-on-error uppercase rounded">High Impact</span>
+<span class="text-xs text-on-surface-variant tabular-nums">2h ago • Reuters</span>
+</div>
+<div class="flex items-center gap-1 text-error">
+<span class="material-symbols-outlined text-sm" data-icon="trending_down">trending_down</span>
+<span class="text-[10px] font-label uppercase tracking-widest">Bearish</span>
+</div>
+</div>
+<h3 class="font-headline text-xl font-bold leading-tight mb-4 text-on-surface group-hover:text-primary transition-colors">Mt. Gox Trustee transfers $2.4B in BTC to unknown wallet for "Distribution"</h3>
+<div class="flex flex-wrap gap-2 mb-4">
+<div class="bg-surface-container-highest px-2 py-1 rounded flex items-center gap-2">
+<span class="text-[10px] font-mono font-bold text-on-surface">BTC</span>
+<span class="text-[10px] text-error font-bold tabular-nums">-2.1%</span>
+</div>
+</div>
+<!-- Collapsed AI Summary indicator -->
+<button class="flex items-center gap-2 text-[10px] font-label uppercase tracking-widest text-primary-dim hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="expand_more">expand_more</span>
+                    View AI Analysis
+                </button>
+</article>
+<!-- Regular Item 4 -->
+<article class="bg-surface-container-low rounded-lg p-5 border-l-4 border-on-surface-variant/20 hover:bg-surface-container transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-label tracking-widest px-2 py-0.5 bg-surface-container-highest text-on-surface-variant uppercase rounded">Low Impact</span>
+<span class="text-xs text-on-surface-variant tabular-nums">4h ago • Cryptoslate</span>
+</div>
+<div class="flex items-center gap-1 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span class="text-[10px] font-label uppercase tracking-widest">Bullish</span>
+</div>
+</div>
+<h3 class="font-headline text-xl font-bold leading-tight mb-4 text-on-surface group-hover:text-primary transition-colors">Layer 2 TVL hits new All-Time High despite mainnet congestion</h3>
+<div class="flex flex-wrap gap-2">
+<div class="bg-surface-container-highest px-2 py-1 rounded flex items-center gap-2">
+<span class="text-[10px] font-mono font-bold text-on-surface">ARB</span>
+<span class="text-[10px] text-tertiary-dim font-bold tabular-nums">+4.5%</span>
+</div>
+<div class="bg-surface-container-highest px-2 py-1 rounded flex items-center gap-2">
+<span class="text-[10px] font-mono font-bold text-on-surface">OP</span>
+<span class="text-[10px] text-tertiary-dim font-bold tabular-nums">+3.1%</span>
+</div>
+</div>
+</article>
+</div>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center pt-2 pb-safe px-2 bg-[#1f262f]/60 backdrop-blur-xl border-t border-[#43484f]/15 shadow-[0_-12px_32px_rgba(0,0,0,0.2)] z-50">
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all duration-200 py-2">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-label font-medium text-[10px] uppercase tracking-wider">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all duration-200 py-2">
+<span class="material-symbols-outlined mb-1" data-icon="show_chart">show_chart</span>
+<span class="font-label font-medium text-[10px] uppercase tracking-wider">Chart</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all duration-200 py-2">
+<span class="material-symbols-outlined mb-1" data-icon="sensors">sensors</span>
+<span class="font-label font-medium text-[10px] uppercase tracking-wider">Signals</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#00cffc] shadow-[0_0_8px_rgba(105,218,255,0.15)] py-2">
+<span class="material-symbols-outlined mb-1" data-icon="newspaper" style="font-variation-settings: 'FILL' 1;">newspaper</span>
+<span class="font-label font-medium text-[10px] uppercase tracking-wider">News</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all duration-200 py-2">
+<span class="material-symbols-outlined mb-1" data-icon="more_horiz">more_horiz</span>
+<span class="font-label font-medium text-[10px] uppercase tracking-wider">More</span>
+</div>
+</nav>
+<!-- Floating Action Button for Alerts (Contextual) -->
+<button class="fixed right-6 bottom-24 w-12 h-12 bg-primary-container text-on-primary-fixed rounded shadow-xl flex items-center justify-center group active:scale-95 transition-transform z-40">
+<span class="material-symbols-outlined" data-icon="notification_add">notification_add</span>
+</button>
+</body></html>

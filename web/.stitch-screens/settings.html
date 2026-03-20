@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&amp;family=Inter:wght@100;200;300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "background": "#0a0f14",
+              "secondary": "#e1e2e7",
+              "tertiary-fixed": "#66fdac",
+              "on-secondary": "#4f5256",
+              "tertiary-fixed-dim": "#56ef9f",
+              "on-background": "#e7ebf3",
+              "outline-variant": "#43484f",
+              "on-primary": "#004a5d",
+              "surface-bright": "#252d36",
+              "secondary-container": "#44474b",
+              "on-secondary-fixed-variant": "#595c5f",
+              "tertiary-container": "#66fdac",
+              "on-secondary-container": "#cfd0d4",
+              "surface-container-lowest": "#000000",
+              "surface-tint": "#69daff",
+              "surface-container-high": "#1a2028",
+              "secondary-fixed": "#e1e2e7",
+              "on-primary-fixed": "#002a35",
+              "on-error-container": "#ffa8a3",
+              "on-secondary-fixed": "#3d4043",
+              "on-primary-fixed-variant": "#004a5c",
+              "on-tertiary": "#00683d",
+              "primary-dim": "#00c0ea",
+              "tertiary-dim": "#56ef9f",
+              "surface-container-low": "#0e141a",
+              "on-surface-variant": "#a7abb3",
+              "surface": "#0a0f14",
+              "primary-fixed": "#00cffc",
+              "error": "#ff716c",
+              "tertiary": "#c1ffd4",
+              "secondary-fixed-dim": "#d3d4d9",
+              "on-tertiary-fixed": "#004a2a",
+              "primary-container": "#00cffc",
+              "surface-container-highest": "#1f262f",
+              "on-tertiary-container": "#005e37",
+              "on-surface": "#e7ebf3",
+              "surface-variant": "#1f262f",
+              "surface-dim": "#0a0f14",
+              "primary": "#69daff",
+              "on-tertiary-fixed-variant": "#00693e",
+              "inverse-on-surface": "#50555c",
+              "primary-fixed-dim": "#00c0ea",
+              "inverse-primary": "#006880",
+              "outline": "#71767d",
+              "secondary-dim": "#d3d4d9",
+              "surface-container": "#141a21",
+              "on-primary-container": "#004050",
+              "on-error": "#490006",
+              "error-container": "#9f0519",
+              "error-dim": "#d7383b",
+              "inverse-surface": "#f7f9ff"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tnum { font-feature-settings: "tnum"; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0a0f14; }
+        ::-webkit-scrollbar-thumb { background: #1f262f; border-radius: 4px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30 selection:text-primary">
+<!-- TopAppBar Shell -->
+<header class="bg-[#0a0f14] dark:bg-[#0a0f14] flex justify-between items-center px-4 h-14 w-full z-50 fixed top-0">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00D1FF] dark:text-[#00D1FF]" data-icon="terminal">terminal</span>
+<h1 class="font-['Space_Grotesk'] font-bold tracking-tight uppercase text-lg text-[#00D1FF] tracking-tighter">Engine Control</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="hover:bg-[#1f262f] transition-colors p-2 rounded active:opacity-80">
+<span class="material-symbols-outlined text-[#00D1FF] dark:text-[#00D1FF]" data-icon="settings_input_component">settings_input_component</span>
+</button>
+</div>
+</header>
+<main class="pt-20 pb-24 px-4 max-w-lg mx-auto space-y-6">
+<!-- Module: Asset Pairs -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<h2 class="font-headline text-xs font-bold uppercase tracking-widest text-on-surface-variant">Active Trading Pairs</h2>
+<span class="text-[10px] font-mono text-primary/60">3 TOTAL</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<!-- Pair BTC -->
+<button class="bg-surface-container-highest border-b-2 border-primary p-3 flex flex-col items-center gap-1 transition-all active:scale-95 shadow-[0_0_8px_rgba(105,218,255,0.1)]">
+<span class="font-headline font-bold text-sm text-primary">BTC</span>
+<span class="text-[10px] text-on-surface-variant uppercase">Bitcoin</span>
+</button>
+<!-- Pair ETH -->
+<button class="bg-surface-container-highest border-b-2 border-primary p-3 flex flex-col items-center gap-1 transition-all active:scale-95 shadow-[0_0_8px_rgba(105,218,255,0.1)]">
+<span class="font-headline font-bold text-sm text-primary">ETH</span>
+<span class="text-[10px] text-on-surface-variant uppercase">Ethereum</span>
+</button>
+<!-- Pair WIF -->
+<button class="bg-surface-container-highest border-b-2 border-primary p-3 flex flex-col items-center gap-1 transition-all active:scale-95 shadow-[0_0_8px_rgba(105,218,255,0.1)]">
+<span class="font-headline font-bold text-sm text-primary">WIF</span>
+<span class="text-[10px] text-on-surface-variant uppercase">Dogwifhat</span>
+</button>
+</div>
+</section>
+<!-- Module: Execution Parameters -->
+<section class="bg-surface-container-low p-4 rounded-lg space-y-6">
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<label class="text-[10px] font-bold uppercase tracking-tighter text-on-surface-variant">Signal Sensitivity Threshold</label>
+<span class="font-headline text-xl text-primary font-bold tnum">82.5</span>
+</div>
+<div class="relative h-6 flex items-center">
+<div class="absolute w-full h-1 bg-surface-container-highest rounded-full"></div>
+<div class="absolute w-[82.5%] h-1 bg-primary rounded-full shadow-[0_0_10px_rgba(105,218,255,0.5)]"></div>
+<div class="absolute left-[82.5%] -translate-x-1/2 w-4 h-4 bg-primary-container rounded-sm transform rotate-45 border-2 border-background"></div>
+</div>
+<div class="flex justify-between text-[10px] font-mono text-outline">
+<span>MIN_0</span>
+<span>MAX_100</span>
+</div>
+</div>
+<div class="h-[1px] bg-outline-variant/20"></div>
+<!-- Toggles Cluster -->
+<div class="space-y-4">
+<!-- Toggle 1 -->
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-bold uppercase text-on-surface">On-chain scoring</p>
+<p class="text-[10px] text-on-surface-variant">Enable real-time liquidity flow analysis</p>
+</div>
+<button class="w-10 h-5 bg-tertiary-container/20 rounded-full relative flex items-center px-1">
+<div class="w-3 h-3 bg-tertiary-fixed-dim rounded-full shadow-[0_0_8px_rgba(86,239,159,0.5)] ml-auto"></div>
+</button>
+</div>
+<!-- Toggle 2 -->
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-bold uppercase text-on-surface">News alerts</p>
+<p class="text-[10px] text-on-surface-variant">Trigger execution on sentiment shifts</p>
+</div>
+<button class="w-10 h-5 bg-tertiary-container/20 rounded-full relative flex items-center px-1">
+<div class="w-3 h-3 bg-tertiary-fixed-dim rounded-full shadow-[0_0_8px_rgba(86,239,159,0.5)] ml-auto"></div>
+</button>
+</div>
+<!-- Toggle 3 -->
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-bold uppercase text-on-surface">Push notifications</p>
+<p class="text-[10px] text-on-surface-variant">Global device broadcast</p>
+</div>
+<button class="w-10 h-5 bg-surface-container-highest rounded-full relative flex items-center px-1">
+<div class="w-3 h-3 bg-outline rounded-full"></div>
+</button>
+</div>
+</div>
+</section>
+<!-- Module: LLM Analysis Window -->
+<section class="space-y-3">
+<h2 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">LLM Analysis Window</h2>
+<div class="bg-surface-container-lowest p-1 flex gap-1 rounded-lg">
+<button class="flex-1 py-2 text-[10px] font-bold uppercase text-on-surface-variant hover:bg-surface-container transition-colors">15m</button>
+<button class="flex-1 py-2 text-[10px] font-bold uppercase bg-surface-container-high text-primary rounded shadow-[0_0_12px_rgba(0,0,0,0.5)] border border-primary/20">30m</button>
+<button class="flex-1 py-2 text-[10px] font-bold uppercase text-on-surface-variant hover:bg-surface-container transition-colors">60m</button>
+</div>
+<p class="text-[9px] text-center text-outline-variant italic">Latency increases with larger analysis windows.</p>
+</section>
+<!-- Module: Connectivity & System -->
+<section class="space-y-4 pt-4">
+<div class="bg-surface-container p-4 rounded-lg space-y-4">
+<div class="space-y-1">
+<label class="text-[9px] uppercase font-bold text-outline tracking-wider">API Endpoint</label>
+<div class="flex items-center gap-2 bg-surface-container-lowest px-3 py-2 rounded text-[11px] font-mono text-on-surface">
+<span class="text-tertiary-fixed">●</span>
+<span class="truncate">https://api.krypton-terminal.io/v3/node-142</span>
+<span class="material-symbols-outlined text-xs ml-auto text-outline" data-icon="content_copy">content_copy</span>
+</div>
+</div>
+<div class="flex justify-between items-center text-[10px] font-mono text-outline">
+<span>LATENCY: 12ms</span>
+<span>SSL: VERIFIED</span>
+</div>
+</div>
+<div class="flex justify-between items-center px-1">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 bg-tertiary-fixed rounded-full animate-pulse"></div>
+<span class="text-[10px] font-mono text-tertiary-fixed uppercase">System Operational</span>
+</div>
+<span class="text-[10px] font-mono text-outline">v2.4.9-STABLE</span>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center pt-2 pb-safe px-2 bg-[#1f262f]/60 backdrop-blur-3xl z-50 shadow-[0_-4px_12px_rgba(0,0,0,0.5)]">
+<button class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase">Chart</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="auto_graph">auto_graph</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase">Signals</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="newspaper">newspaper</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase">News</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#00D1FF] drop-shadow-[0_0_8px_rgba(105,218,255,0.4)] scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide uppercase">More</span>
+</button>
+</nav>
+</body></html>

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Krypton Terminal | Alerts</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0f14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f262f;
+            border-radius: 2px;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-error": "#490006",
+                        "error-container": "#9f0519",
+                        "background": "#0a0f14",
+                        "secondary-container": "#44474b",
+                        "secondary": "#e1e2e7",
+                        "on-secondary": "#4f5256",
+                        "surface-container-high": "#1a2028",
+                        "secondary-dim": "#d3d4d9",
+                        "inverse-surface": "#f7f9ff",
+                        "tertiary-dim": "#56ef9f",
+                        "on-tertiary": "#00683d",
+                        "on-surface-variant": "#a7abb3",
+                        "on-error-container": "#ffa8a3",
+                        "tertiary-container": "#66fdac",
+                        "secondary-fixed": "#e1e2e7",
+                        "primary": "#69daff",
+                        "surface-dim": "#0a0f14",
+                        "tertiary-fixed": "#66fdac",
+                        "on-tertiary-container": "#005e37",
+                        "tertiary-fixed-dim": "#56ef9f",
+                        "on-primary-fixed": "#002a35",
+                        "inverse-on-surface": "#50555c",
+                        "surface-bright": "#252d36",
+                        "primary-dim": "#00c0ea",
+                        "outline": "#71767d",
+                        "surface-container-low": "#0e141a",
+                        "surface-tint": "#69daff",
+                        "surface-container-highest": "#1f262f",
+                        "on-primary": "#004a5d",
+                        "primary-fixed": "#00cffc",
+                        "on-tertiary-fixed": "#004a2a",
+                        "primary-container": "#00cffc",
+                        "surface-container": "#141a21",
+                        "error": "#ff716c",
+                        "error-dim": "#d7383b",
+                        "outline-variant": "#43484f",
+                        "on-surface": "#e7ebf3",
+                        "tertiary": "#c1ffd4",
+                        "surface-container-lowest": "#000000",
+                        "on-secondary-container": "#cfd0d4",
+                        "on-primary-fixed-variant": "#004a5c",
+                        "on-primary-container": "#004050",
+                        "primary-fixed-dim": "#00c0ea",
+                        "secondary-fixed-dim": "#d3d4d9",
+                        "on-background": "#e7ebf3",
+                        "inverse-primary": "#006880",
+                        "on-secondary-fixed": "#3d4043",
+                        "on-tertiary-fixed-variant": "#00693e",
+                        "surface-variant": "#1f262f",
+                        "on-secondary-fixed-variant": "#595c5f",
+                        "surface": "#0a0f14"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 min-h-screen pb-20 md:pb-0">
+<!-- Top Navigation Anchor (Shared Component) -->
+<header class="bg-[#0a0f14] dark:bg-[#0a0f14] flex justify-between items-center w-full px-4 h-16 sticky top-0 z-50">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00D1FF]" data-icon="terminal">terminal</span>
+<h1 class="font-['Space_Grotesk'] font-bold tracking-tighter uppercase text-[#00D1FF] text-xl tracking-widest">ALERTS</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex gap-6 mr-6">
+<a class="font-['Space_Grotesk'] text-sm font-bold tracking-wider text-[#a7abb3] hover:text-[#00D1FF] transition-colors" href="#">DASHBOARD</a>
+<a class="font-['Space_Grotesk'] text-sm font-bold tracking-wider text-[#00D1FF] transition-colors" href="#">ALERTS</a>
+<a class="font-['Space_Grotesk'] text-sm font-bold tracking-wider text-[#a7abb3] hover:text-[#00D1FF] transition-colors" href="#">TERMINAL</a>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant/30 flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Abstract user avatar minimalist geometric icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrYjO2YsyHNCi6GlquLcky5XRG9nOhQzPn8RfOBfsC26VXMQbNAvrkhk7vMK0xsYcyIKv-Ktj1IwB6-_4HRSRVne03UyW1XHl9Zw5axO1AZuoRBOUWT3WEWUZ_iRsvFXXLnPXmsGcRlogIrbqlEqL_OcKnH1ecPqtinblflv2R7C0phN_8FedAKobew7pD5jkIRa5jfJK2uLSUa5UDZi2Zfqhdo_UX_QUd3zbUQI-4VN-vnbOQ08AT5ObIg7Tz8_Ps4KTbh_9HuY4"/>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column: Controls & Configuration -->
+<aside class="lg:col-span-4 space-y-6">
+<!-- Create Alert Section -->
+<section class="bg-surface-container rounded-lg p-5 border-l-2 border-primary shadow-lg">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="add_alert">add_alert</span>
+<h2 class="font-headline font-bold text-lg tracking-tight uppercase">Configure New Alert</h2>
+</div>
+<div class="space-y-4">
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase mb-2 ml-1">Alert Type</label>
+<div class="grid grid-cols-2 gap-2">
+<button class="bg-surface-container-highest text-primary border border-primary/40 rounded py-2 px-3 text-sm font-medium flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="show_chart">show_chart</span> Signal
+                            </button>
+<button class="bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded py-2 px-3 text-sm font-medium flex items-center justify-center gap-2 hover:bg-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="attach_money">attach_money</span> Price
+                            </button>
+</div>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase mb-2 ml-1">Label</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:opacity-30" placeholder="e.g. BTC Breakout 70k" type="text"/>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase mb-2 ml-1">Condition</label>
+<div class="flex gap-2">
+<select class="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded px-2 py-2 text-sm appearance-none focus:border-primary outline-none">
+<option>BTC</option>
+<option>ETH</option>
+<option>WIF</option>
+</select>
+<select class="w-20 bg-surface-container-lowest border border-outline-variant/20 rounded px-2 py-2 text-sm appearance-none focus:border-primary outline-none">
+<option>&gt;</option>
+<option>&lt;</option>
+<option>cross</option>
+</select>
+<input class="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm tabular-nums focus:border-primary outline-none" placeholder="70,000" type="text"/>
+</div>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase mb-2 ml-1">Urgency</label>
+<div class="flex bg-surface-container-lowest rounded p-1 gap-1">
+<button class="flex-1 py-1 text-xs font-bold rounded bg-surface-container-highest text-on-surface">LOW</button>
+<button class="flex-1 py-1 text-xs font-bold rounded text-on-surface-variant hover:text-on-surface transition-colors">MED</button>
+<button class="flex-1 py-1 text-xs font-bold rounded text-on-surface-variant hover:text-on-surface transition-colors">HIGH</button>
+</div>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase mb-2 ml-1">Notification Channels</label>
+<div class="grid grid-cols-2 gap-2">
+<label class="flex items-center gap-2 bg-surface-container-lowest p-2 rounded border border-outline-variant/10 cursor-pointer">
+<input checked="" class="w-4 h-4 rounded-sm border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0" type="checkbox"/>
+<span class="text-xs font-medium">In-App</span>
+</label>
+<label class="flex items-center gap-2 bg-surface-container-lowest p-2 rounded border border-outline-variant/10 cursor-pointer">
+<input checked="" class="w-4 h-4 rounded-sm border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0" type="checkbox"/>
+<span class="text-xs font-medium">Push</span>
+</label>
+<label class="flex items-center gap-2 bg-surface-container-lowest p-2 rounded border border-outline-variant/10 cursor-pointer">
+<input class="w-4 h-4 rounded-sm border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0" type="checkbox"/>
+<span class="text-xs font-medium">Discord</span>
+</label>
+<label class="flex items-center gap-2 bg-surface-container-lowest p-2 rounded border border-outline-variant/10 cursor-pointer">
+<input class="w-4 h-4 rounded-sm border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0" type="checkbox"/>
+<span class="text-xs font-medium">Email</span>
+</label>
+</div>
+</div>
+<button class="w-full bg-[#00cffc] text-[#002a35] py-3 rounded font-headline font-bold uppercase tracking-widest text-sm mt-4 hover:shadow-[0_0_15px_rgba(0,207,252,0.3)] transition-all active:scale-[0.98]">
+                        Create Alert
+                    </button>
+</div>
+</section>
+<!-- Quick Stats/Info (Density Filler) -->
+<div class="bg-surface-container-low rounded-lg p-4 grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<p class="text-[10px] text-on-surface-variant uppercase font-bold tracking-tighter">Active Slots</p>
+<p class="text-xl font-headline font-bold text-primary tabular-nums">12 / 50</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-on-surface-variant uppercase font-bold tracking-tighter">API Status</p>
+<div class="flex items-center gap-1.5">
+<div class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_6px_rgba(193,255,212,0.4)]"></div>
+<p class="text-xs font-bold text-on-surface">CONNECTED</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Right Column: Active & History -->
+<div class="lg:col-span-8 space-y-6">
+<!-- Active Alerts Section -->
+<section class="bg-surface-container rounded-lg overflow-hidden flex flex-col min-h-[400px]">
+<div class="p-4 bg-surface-container-high flex justify-between items-center border-b border-outline-variant/10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="list">list</span>
+<h2 class="font-headline font-bold text-md uppercase tracking-wide">Active Alerts</h2>
+</div>
+<div class="flex gap-2">
+<button class="text-xs font-bold text-on-surface-variant hover:text-primary px-2 py-1 transition-colors uppercase">Pause All</button>
+<button class="text-xs font-bold text-error px-2 py-1 hover:bg-error-container/20 rounded transition-all uppercase">Clear All</button>
+</div>
+</div>
+<div class="p-2 space-y-2 overflow-y-auto">
+<!-- Alert Item 1 -->
+<div class="group bg-surface-container-lowest p-3 flex items-center justify-between gap-4 border-l-2 border-tertiary-dim">
+<div class="flex items-center gap-4 flex-1">
+<div class="flex flex-col items-center justify-center bg-surface-container-highest w-10 h-10 rounded">
+<span class="material-symbols-outlined text-tertiary-dim text-lg" data-icon="show_chart">show_chart</span>
+<span class="text-[8px] font-bold text-tertiary-dim uppercase">High</span>
+</div>
+<div class="flex-1 min-w-0">
+<h3 class="font-headline font-bold text-on-surface truncate">BTC &gt; 70,000.00</h3>
+<p class="text-[10px] text-on-surface-variant font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-[12px]" data-icon="history">history</span>
+                                    LAST TRIGGERED: 2024-05-20 14:02:11
+                                </p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end mr-2">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface-variant peer-checked:after:bg-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary/20"></div>
+</label>
+</div>
+<div class="flex gap-1">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="edit">edit</span></button>
+<button class="p-2 text-on-surface-variant hover:text-error transition-colors hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="delete">delete</span></button>
+</div>
+</div>
+</div>
+<!-- Alert Item 2 -->
+<div class="group bg-surface-container-lowest p-3 flex items-center justify-between gap-4 border-l-2 border-primary">
+<div class="flex items-center gap-4 flex-1">
+<div class="flex flex-col items-center justify-center bg-surface-container-highest w-10 h-10 rounded">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="sensors">sensors</span>
+<span class="text-[8px] font-bold text-primary uppercase">Med</span>
+</div>
+<div class="flex-1 min-w-0">
+<h3 class="font-headline font-bold text-on-surface truncate">ETH RSI (14) CROSSES 30</h3>
+<p class="text-[10px] text-on-surface-variant font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-[12px]" data-icon="history">history</span>
+                                    NEVER TRIGGERED
+                                </p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end mr-2">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface-variant peer-checked:after:bg-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary/20"></div>
+</label>
+</div>
+<div class="flex gap-1">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="edit">edit</span></button>
+<button class="p-2 text-on-surface-variant hover:text-error transition-colors hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="delete">delete</span></button>
+</div>
+</div>
+</div>
+<!-- Alert Item 3 -->
+<div class="group bg-surface-container-lowest p-3 flex items-center justify-between gap-4 border-l-2 border-outline-variant/30">
+<div class="flex items-center gap-4 flex-1">
+<div class="flex flex-col items-center justify-center bg-surface-container-highest w-10 h-10 rounded opacity-60">
+<span class="material-symbols-outlined text-on-surface-variant text-lg" data-icon="equalizer">equalizer</span>
+<span class="text-[8px] font-bold text-on-surface-variant uppercase">Low</span>
+</div>
+<div class="flex-1 min-w-0 opacity-60">
+<h3 class="font-headline font-bold text-on-surface truncate">WIF VOLUME SPIKE &gt; 2M</h3>
+<p class="text-[10px] text-on-surface-variant font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-[12px]" data-icon="history">history</span>
+                                    LAST TRIGGERED: 12H AGO
+                                </p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end mr-2">
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface-variant peer-checked:after:bg-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary/20"></div>
+</label>
+</div>
+<div class="flex gap-1">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="edit">edit</span></button>
+<button class="p-2 text-on-surface-variant hover:text-error transition-colors hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="delete">delete</span></button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Alert History (Terminal Style) -->
+<section class="bg-surface-container-lowest border border-outline-variant/20 rounded overflow-hidden">
+<div class="p-3 bg-surface-container flex items-center gap-2">
+<div class="flex gap-1.5">
+<div class="w-2.5 h-2.5 rounded-full bg-error-dim"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-primary-dim"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-tertiary-dim"></div>
+</div>
+<span class="text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant ml-2">Terminal Alert Log</span>
+</div>
+<div class="p-4 font-mono text-[11px] leading-relaxed space-y-1 h-64 overflow-y-auto tabular-nums">
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[16:44:02]</span>
+<span class="text-primary shrink-0">TRIGGER:</span>
+<span class="text-on-surface flex-1">BTC &gt; 70k @ 70,042.12</span>
+<span class="text-tertiary font-bold group-hover:animate-pulse">✓ SENT</span>
+</div>
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[16:42:15]</span>
+<span class="text-primary shrink-0">TRIGGER:</span>
+<span class="text-on-surface flex-1">SOL RSI Oversold @ 28.4</span>
+<span class="text-tertiary font-bold">✓ SENT</span>
+</div>
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[15:30:11]</span>
+<span class="text-error shrink-0">ERROR:</span>
+<span class="text-on-surface flex-1">Discord Webhook Failed (Timeout)</span>
+<span class="text-error font-bold">✗ FAIL</span>
+</div>
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[14:12:55]</span>
+<span class="text-primary shrink-0">TRIGGER:</span>
+<span class="text-on-surface flex-1">PEPE Volume &gt; 10M @ 14.2M</span>
+<span class="text-tertiary font-bold">✓ SENT</span>
+</div>
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[12:05:30]</span>
+<span class="text-primary shrink-0">TRIGGER:</span>
+<span class="text-on-surface flex-1">BTC Daily Open Cross @ 66,200</span>
+<span class="text-tertiary font-bold">✓ SENT</span>
+</div>
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[09:22:18]</span>
+<span class="text-primary shrink-0">SYSTEM:</span>
+<span class="text-on-surface flex-1">Krypton Core Initialized v4.2.0</span>
+<span class="text-primary font-bold">READY</span>
+</div>
+<div class="flex gap-4 hover:bg-surface-variant/30 px-2 py-0.5 rounded transition-colors group">
+<span class="text-on-surface-variant shrink-0">[09:22:15]</span>
+<span class="text-primary shrink-0">SYSTEM:</span>
+<span class="text-on-surface flex-1">Fetching User Configuration...</span>
+<span class="text-primary font-bold">DONE</span>
+</div>
+<div class="mt-4 animate-pulse">
+<span class="text-on-surface-variant shrink-0">_</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Navigation Anchor (Shared Component Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-2 py-3 pb-safe bg-[#1f262f]/60 backdrop-blur-xl border-t border-[#43484f]/15 shadow-[0_-4px_12px_rgba(0,0,0,0.5)] z-50 rounded-t-sm">
+<a class="flex flex-col items-center justify-center text-[#a7abb3] opacity-70 px-3 py-1 hover:text-[#00D1FF] hover:opacity-100 transition-all duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] opacity-70 px-3 py-1 hover:text-[#00D1FF] hover:opacity-100 transition-all duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="show_chart">show_chart</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-wider">Chart</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#00D1FF] shadow-[0_0_8px_rgba(105,218,255,0.15)] bg-[#141a21] rounded-[4px] px-3 py-1 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="sensors">sensors</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-wider">Signals</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] opacity-70 px-3 py-1 hover:text-[#00D1FF] hover:opacity-100 transition-all duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="領_news">news</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-wider">News</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] opacity-70 px-3 py-1 hover:text-[#00D1FF] hover:opacity-100 transition-all duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-wider">More</span>
+</a>
+</nav>
+</body></html>

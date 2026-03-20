@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Krypton ML Training Terminal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-low": "#0e141a",
+              "on-tertiary-fixed": "#004a2a",
+              "primary-fixed": "#00cffc",
+              "secondary": "#e1e2e7",
+              "outline-variant": "#43484f",
+              "primary": "#69daff",
+              "surface": "#0a0f14",
+              "on-secondary": "#4f5256",
+              "tertiary": "#c1ffd4",
+              "on-tertiary-container": "#005e37",
+              "surface-container-lowest": "#000000",
+              "on-primary": "#004a5d",
+              "primary-dim": "#00c0ea",
+              "tertiary-container": "#66fdac",
+              "inverse-on-surface": "#50555c",
+              "inverse-primary": "#006880",
+              "on-primary-container": "#004050",
+              "inverse-surface": "#f7f9ff",
+              "error-dim": "#d7383b",
+              "surface-variant": "#1f262f",
+              "secondary-fixed-dim": "#d3d4d9",
+              "on-error": "#490006",
+              "on-background": "#e7ebf3",
+              "surface-container-high": "#1a2028",
+              "tertiary-fixed": "#66fdac",
+              "secondary-fixed": "#e1e2e7",
+              "on-secondary-fixed-variant": "#595c5f",
+              "error": "#ff716c",
+              "on-surface-variant": "#a7abb3",
+              "surface-container-highest": "#1f262f",
+              "on-secondary-container": "#cfd0d4",
+              "primary-container": "#00cffc",
+              "error-container": "#9f0519",
+              "secondary-container": "#44474b",
+              "surface-tint": "#69daff",
+              "surface-container": "#141a21",
+              "surface-dim": "#0a0f14",
+              "on-error-container": "#ffa8a3",
+              "background": "#0a0f14",
+              "tertiary-fixed-dim": "#56ef9f",
+              "on-primary-fixed-variant": "#004a5c",
+              "on-primary-fixed": "#002a35",
+              "surface-bright": "#252d36",
+              "secondary-dim": "#d3d4d9",
+              "outline": "#71767d",
+              "on-tertiary": "#00683d",
+              "on-tertiary-fixed-variant": "#00693e",
+              "tertiary-dim": "#56ef9f",
+              "on-secondary-fixed": "#3d4043",
+              "primary-fixed-dim": "#00c0ea",
+              "on-surface": "#e7ebf3"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glow-sm {
+            text-shadow: 0 0 8px rgba(105, 218, 255, 0.4);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            background: #1f262f;
+            height: 4px;
+            border-radius: 2px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            background: #00cffc;
+            border-radius: 2px;
+            margin-top: -5px;
+            box-shadow: 0 0 10px rgba(0, 207, 252, 0.4);
+        }
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar Shell -->
+<header class="bg-[#0a0f14] flex items-center justify-between px-4 h-14 w-full sticky top-0 z-50">
+<div class="flex items-center gap-3">
+<button class="text-[#00cffc] active:scale-95 transition-transform">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-['Space_Grotesk'] font-bold tracking-tight text-sm uppercase text-[#00cffc]">ML TRAINING</h1>
+</div>
+<div class="text-lg font-black tracking-tighter text-[#e7ebf3]">KRYPTON</div>
+<button class="text-[#00cffc] active:scale-95 transition-transform">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<main class="pb-24 px-4 pt-4 max-w-4xl mx-auto space-y-6">
+<!-- Active Training Section (Priority 1) -->
+<section class="bg-surface-container rounded-lg p-4 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="w-2 h-2 rounded-full bg-tertiary-dim animate-pulse"></span>
+<span class="font-headline font-bold text-xs tracking-widest text-tertiary-dim">TRAINING_ACTIVE</span>
+</div>
+<h2 class="font-headline text-xl font-bold text-on-surface">BTC-USDT-SWAP</h2>
+</div>
+<button class="bg-error-container text-on-error-container px-3 py-1 text-[10px] font-bold uppercase rounded-sm hover:opacity-90 transition-opacity">
+                    Cancel Run
+                </button>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div class="bg-surface-container-lowest p-3 rounded">
+<span class="block text-[10px] text-on-surface-variant uppercase mb-1">Epoch Progress</span>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-headline font-bold tabular-nums">12</span>
+<span class="text-on-surface-variant text-sm tabular-nums">/ 50</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[24%]" style="box-shadow: 0 0 8px rgba(105, 218, 255, 0.5)"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 rounded">
+<span class="block text-[10px] text-on-surface-variant uppercase mb-1">Current Loss</span>
+<div class="text-2xl font-headline font-bold text-primary tabular-nums">0.0042</div>
+<div class="text-[10px] text-tertiary-dim mt-1">▼ 1.2% from prev</div>
+</div>
+</div>
+<div class="h-24 w-full bg-surface-container-lowest rounded relative p-2 overflow-hidden">
+<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: linear-gradient(#43484f 1px, transparent 1px), linear-gradient(90deg, #43484f 1px, transparent 1px); background-size: 20px 20px;"></div>
+<div class="flex items-end justify-between h-full gap-1">
+<!-- Placeholder for line chart sparklines -->
+<div class="w-2 bg-primary/20 h-[40%]"></div>
+<div class="w-2 bg-primary/20 h-[35%]"></div>
+<div class="w-2 bg-primary/20 h-[50%]"></div>
+<div class="w-2 bg-primary/20 h-[45%]"></div>
+<div class="w-2 bg-primary/20 h-[30%]"></div>
+<div class="w-2 bg-primary/20 h-[25%]"></div>
+<div class="w-2 bg-primary/20 h-[38%]"></div>
+<div class="w-2 bg-primary/20 h-[22%]"></div>
+<div class="w-2 bg-primary/40 h-[18%]"></div>
+<div class="w-2 bg-primary/40 h-[15%]"></div>
+<div class="w-2 bg-primary h-[12%]"></div>
+<div class="w-2 bg-tertiary-dim h-[10%]"></div>
+</div>
+<div class="absolute top-2 right-2 flex gap-2">
+<div class="flex items-center gap-1 text-[8px] uppercase font-bold text-primary"><span class="w-1.5 h-1.5 bg-primary"></span> Train</div>
+<div class="flex items-center gap-1 text-[8px] uppercase font-bold text-tertiary-dim"><span class="w-1.5 h-1.5 bg-tertiary-dim"></span> Val</div>
+</div>
+</div>
+</section>
+<!-- Model Configuration -->
+<section class="space-y-4">
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">tune</span> Model Configuration
+            </h3>
+<div class="bg-surface-container rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-4">
+<div class="space-y-2">
+<div class="flex justify-between">
+<label class="text-[10px] text-on-surface-variant uppercase font-bold">Epochs</label>
+<span class="text-xs font-headline font-bold text-primary tabular-nums">50</span>
+</div>
+<input class="w-full cursor-pointer" max="500" min="1" type="range" value="50"/>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between">
+<label class="text-[10px] text-on-surface-variant uppercase font-bold">Batch Size</label>
+<span class="text-xs font-headline font-bold text-primary tabular-nums">32</span>
+</div>
+<div class="grid grid-cols-4 gap-2">
+<button class="bg-surface-container-highest py-1 text-[10px] font-bold rounded hover:bg-surface-bright transition-colors border border-outline-variant/10">16</button>
+<button class="bg-primary-container text-on-primary-fixed py-1 text-[10px] font-bold rounded border border-primary/20">32</button>
+<button class="bg-surface-container-highest py-1 text-[10px] font-bold rounded hover:bg-surface-bright transition-colors border border-outline-variant/10">64</button>
+<button class="bg-surface-container-highest py-1 text-[10px] font-bold rounded hover:bg-surface-bright transition-colors border border-outline-variant/10">128</button>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="space-y-2">
+<label class="text-[10px] text-on-surface-variant uppercase font-bold">Learning Rate</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-none rounded p-2 font-headline text-sm tabular-nums text-on-surface focus:ring-1 focus:ring-primary/40" type="text" value="0.001"/>
+<span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-outline italic">auto-opt</span>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] text-on-surface-variant uppercase font-bold">Sequence Length</label>
+<div class="flex items-center gap-4">
+<input class="flex-1 bg-surface-container-lowest border-none rounded p-2 font-headline text-sm tabular-nums text-on-surface focus:ring-1 focus:ring-primary/40" type="number" value="120"/>
+<span class="text-[10px] text-on-surface-variant uppercase font-bold">T-Ticks</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Data Backfill -->
+<section class="space-y-4">
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">database</span> Data Ingestion
+            </h3>
+<div class="bg-surface-container rounded-lg p-4 border-l-2 border-primary">
+<div class="flex flex-col md:flex-row gap-4 mb-4">
+<div class="flex-1">
+<label class="text-[10px] text-on-surface-variant uppercase font-bold block mb-1">Lookback Period</label>
+<select class="w-full bg-surface-container-lowest border-none rounded p-2 text-xs font-headline font-bold text-on-surface">
+<option>Last 6 Months</option>
+<option>Last 1 Year</option>
+<option>Max Available</option>
+</select>
+</div>
+<div class="flex-1">
+<label class="text-[10px] text-on-surface-variant uppercase font-bold block mb-1">Timeframe</label>
+<div class="flex bg-surface-container-lowest p-1 rounded gap-1">
+<button class="flex-1 text-[9px] font-bold py-1 rounded bg-surface-container-highest text-primary">1M</button>
+<button class="flex-1 text-[9px] font-bold py-1 rounded hover:bg-surface-bright">5M</button>
+<button class="flex-1 text-[9px] font-bold py-1 rounded hover:bg-surface-bright">15M</button>
+<button class="flex-1 text-[9px] font-bold py-1 rounded hover:bg-surface-bright">1H</button>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-mono text-on-surface-variant">BACKFILL_INGESTION_STATUS</span>
+<span class="text-[10px] font-mono text-primary">82%</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[82%]" style="box-shadow: 0 0 8px rgba(105, 218, 255, 0.4)"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Training History -->
+<section class="space-y-4">
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">history</span> Run Archive
+            </h3>
+<div class="space-y-2">
+<!-- Run Card 1 -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-3 rounded-lg flex items-center justify-between group">
+<div class="flex items-center gap-4">
+<div class="text-xs font-black font-headline text-on-surface-variant w-10">ETH</div>
+<div class="space-y-1">
+<div class="text-[10px] text-on-surface uppercase font-bold">Best Epoch: <span class="text-primary tabular-nums">42/100</span></div>
+<div class="text-[9px] text-on-surface-variant tabular-nums">Val Loss: 0.0031 • Samples: 1.2M</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-[9px] font-bold uppercase text-primary bg-primary/10 px-2 py-1 rounded hover:bg-primary/20 transition-colors">Retrain</button>
+<button class="text-[9px] font-bold uppercase text-error-dim p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+<!-- Run Card 2 -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-3 rounded-lg flex items-center justify-between group">
+<div class="flex items-center gap-4">
+<div class="text-xs font-black font-headline text-on-surface-variant w-10">SOL</div>
+<div class="space-y-1">
+<div class="text-[10px] text-on-surface uppercase font-bold">Best Epoch: <span class="text-primary tabular-nums">89/200</span></div>
+<div class="text-[9px] text-on-surface-variant tabular-nums">Val Loss: 0.0058 • Samples: 840K</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-[9px] font-bold uppercase text-primary bg-primary/10 px-2 py-1 rounded hover:bg-primary/20 transition-colors">Retrain</button>
+<button class="text-[9px] font-bold uppercase text-error-dim p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+<!-- Run Card 3 -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-3 rounded-lg flex items-center justify-between group">
+<div class="flex items-center gap-4">
+<div class="text-xs font-black font-headline text-on-surface-variant w-10">BTC</div>
+<div class="space-y-1">
+<div class="text-[10px] text-on-surface uppercase font-bold">Best Epoch: <span class="text-primary tabular-nums">142/150</span></div>
+<div class="text-[9px] text-on-surface-variant tabular-nums">Val Loss: 0.0012 • Samples: 4.5M</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-[9px] font-bold uppercase text-primary bg-primary/10 px-2 py-1 rounded hover:bg-primary/20 transition-colors">Retrain</button>
+<button class="text-[9px] font-bold uppercase text-error-dim p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Terminal Logs (Extra density component) -->
+<section class="space-y-2">
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-on-surface-variant">System Output</h3>
+<div class="bg-surface-container-lowest font-mono text-[9px] p-3 rounded border-t border-primary/20 leading-relaxed text-on-surface-variant max-h-32 overflow-y-auto">
+<div class="flex gap-2"><span class="text-primary">[12:45:01]</span> <span>LOAD_DATASET: Success. 4,500,000 observations mapped.</span></div>
+<div class="flex gap-2"><span class="text-primary">[12:45:05]</span> <span>INIT_MODEL: LSTM_v4 architectures confirmed. Weights randomized.</span></div>
+<div class="flex gap-2"><span class="text-primary">[12:45:10]</span> <span>EPOCH_1: Loss 0.045 - Val_Loss 0.048 - Time 2.1s</span></div>
+<div class="flex gap-2"><span class="text-primary">[12:45:12]</span> <span>EPOCH_2: Loss 0.038 - Val_Loss 0.040 - Time 2.0s</span></div>
+<div class="flex gap-2"><span class="text-tertiary-dim">[12:45:14]</span> <span>CHECKPOINT: Best validation loss achieved (0.0042). Saving weights...</span></div>
+<div class="flex gap-2"><span class="animate-pulse">_</span></div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-safe h-16 bg-[#1f262f]/60 backdrop-blur-xl z-50 rounded-t-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)]">
+<button class="flex flex-col items-center justify-center text-[#a7abb3] py-1 px-3 hover:text-[#e7ebf3] tap-highlight-transparent active:opacity-80">
+<span class="material-symbols-outlined text-lg">home</span>
+<span class="font-['Inter'] font-medium text-[10px] tabular-nums mt-1">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#a7abb3] py-1 px-3 hover:text-[#e7ebf3] tap-highlight-transparent active:opacity-80">
+<span class="material-symbols-outlined text-lg">bar_chart</span>
+<span class="font-['Inter'] font-medium text-[10px] tabular-nums mt-1">Chart</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#00cffc] bg-[#69daff]/10 rounded-sm py-1 px-3 shadow-[0_0_8px_rgba(105,218,255,0.15)] tap-highlight-transparent active:opacity-80">
+<span class="material-symbols-outlined text-lg">sensors</span>
+<span class="font-['Inter'] font-medium text-[10px] tabular-nums mt-1">Signals</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#a7abb3] py-1 px-3 hover:text-[#e7ebf3] tap-highlight-transparent active:opacity-80">
+<span class="material-symbols-outlined text-lg">newspaper</span>
+<span class="font-['Inter'] font-medium text-[10px] tabular-nums mt-1">News</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#a7abb3] py-1 px-3 hover:text-[#e7ebf3] tap-highlight-transparent active:opacity-80">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+<span class="font-['Inter'] font-medium text-[10px] tabular-nums mt-1">More</span>
+</button>
+</nav>
+</body></html>

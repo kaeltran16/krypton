@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-container": "#005e37",
+                        "on-surface": "#e7ebf3",
+                        "on-primary-container": "#004050",
+                        "tertiary-fixed-dim": "#56ef9f",
+                        "tertiary-fixed": "#66fdac",
+                        "on-primary-fixed-variant": "#004a5c",
+                        "surface-container-low": "#0e141a",
+                        "surface": "#0a0f14",
+                        "surface-dim": "#0a0f14",
+                        "secondary-container": "#44474b",
+                        "on-tertiary": "#00683d",
+                        "surface-variant": "#1f262f",
+                        "on-tertiary-fixed-variant": "#00693e",
+                        "surface-tint": "#69daff",
+                        "outline-variant": "#43484f",
+                        "on-primary": "#004a5d",
+                        "primary-fixed-dim": "#00c0ea",
+                        "tertiary": "#c1ffd4",
+                        "primary": "#69daff",
+                        "inverse-primary": "#006880",
+                        "surface-container-highest": "#1f262f",
+                        "on-secondary-fixed-variant": "#595c5f",
+                        "error": "#ff716c",
+                        "on-error-container": "#ffa8a3",
+                        "secondary-fixed-dim": "#d3d4d9",
+                        "secondary-dim": "#d3d4d9",
+                        "primary-dim": "#00c0ea",
+                        "outline": "#71767d",
+                        "on-surface-variant": "#a7abb3",
+                        "surface-bright": "#252d36",
+                        "error-dim": "#d7383b",
+                        "on-background": "#e7ebf3",
+                        "error-container": "#9f0519",
+                        "primary-container": "#00cffc",
+                        "surface-container-high": "#1a2028",
+                        "tertiary-container": "#66fdac",
+                        "on-primary-fixed": "#002a35",
+                        "inverse-surface": "#f7f9ff",
+                        "on-tertiary-fixed": "#004a2a",
+                        "on-secondary": "#4f5256",
+                        "secondary-fixed": "#e1e2e7",
+                        "tertiary-dim": "#56ef9f",
+                        "primary-fixed": "#00cffc",
+                        "on-error": "#490006",
+                        "inverse-on-surface": "#50555c",
+                        "background": "#0a0f14",
+                        "surface-container-lowest": "#000000",
+                        "on-secondary-fixed": "#3d4043",
+                        "surface-container": "#141a21",
+                        "on-secondary-container": "#cfd0d4",
+                        "secondary": "#e1e2e7"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular-nums { font-feature-settings: "tnum"; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30 antialiased overflow-x-hidden">
+<!-- TopAppBar from JSON -->
+<header class="flex justify-between items-center w-full px-4 h-14 z-50 fixed top-0 bg-[#0a0f14] dark:bg-[#0a0f14]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00cffc]">arrow_back</span>
+<h1 class="font-['Space_Grotesk'] font-bold tracking-tight text-base text-[#00cffc] dark:text-[#69daff]">BTC-USDT-SWAP</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-['Space_Grotesk'] font-bold tracking-tight text-base text-[#56ef9f]">+2.45%</span>
+<span class="material-symbols-outlined text-[#a7abb3] hover:bg-[#1f262f] transition-colors p-1 rounded">share</span>
+</div>
+</header>
+<main class="pt-14 pb-24 px-4 max-w-2xl mx-auto space-y-4">
+<!-- Hero Score Section -->
+<section class="mt-4 p-5 rounded bg-surface-container border border-outline-variant/15 flex justify-between items-center relative overflow-hidden">
+<div class="relative z-10">
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Overall Signal Score</p>
+<div class="flex items-baseline gap-2">
+<span class="font-headline font-bold text-5xl text-primary tabular-nums">92</span>
+<span class="text-on-surface-variant font-headline font-medium text-lg">/100</span>
+</div>
+<div class="mt-3 flex items-center gap-2">
+<span class="flex h-2 w-2 rounded-full bg-tertiary-dim"></span>
+<span class="text-xs font-medium text-tertiary-dim uppercase tracking-wider">Strong Long Sentiment</span>
+</div>
+</div>
+<div class="relative z-10 h-24 w-24">
+<svg class="h-full w-full" viewbox="0 0 36 36">
+<path class="stroke-surface-container-highest" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="stroke-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="92, 100" stroke-linecap="butt" stroke-width="3"></path>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+</div>
+<!-- Decorative Glow -->
+<div class="absolute -right-10 -top-10 h-40 w-40 bg-primary/5 blur-3xl rounded-full"></div>
+</section>
+<!-- Bento Grid: Levels & Timeframe -->
+<div class="grid grid-cols-2 gap-4">
+<div class="p-4 rounded bg-surface-container-low border border-outline-variant/10">
+<p class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mb-2">Timeframe</p>
+<p class="font-headline font-bold text-xl text-on-surface">4H <span class="text-xs font-normal text-on-surface-variant">Interval</span></p>
+</div>
+<div class="p-4 rounded bg-surface-container-low border border-outline-variant/10">
+<p class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mb-2">Trend Strength</p>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-tertiary-dim text-lg">trending_up</span>
+<p class="font-headline font-bold text-xl text-on-surface">Bullish</p>
+</div>
+</div>
+</div>
+<!-- Price Levels Matrix -->
+<section class="p-4 rounded bg-surface-container border border-outline-variant/15">
+<h2 class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-4">Execution Matrix</h2>
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 rounded bg-surface-container-lowest border-l-2 border-primary">
+<p class="text-[10px] font-medium text-primary uppercase mb-1">Entry Range</p>
+<p class="font-headline font-bold text-lg tabular-nums">64,250.00</p>
+</div>
+<div class="p-3 rounded bg-surface-container-lowest border-l-2 border-error">
+<p class="text-[10px] font-medium text-error uppercase mb-1">Stop Loss</p>
+<p class="font-headline font-bold text-lg tabular-nums">63,180.00</p>
+</div>
+<div class="p-3 rounded bg-surface-container-lowest border-l-2 border-tertiary-dim">
+<p class="text-[10px] font-medium text-tertiary-dim uppercase mb-1">Take Profit 1</p>
+<p class="font-headline font-bold text-lg tabular-nums">66,400.00</p>
+</div>
+<div class="p-3 rounded bg-surface-container-lowest border-l-2 border-tertiary">
+<p class="text-[10px] font-medium text-tertiary uppercase mb-1">Take Profit 2</p>
+<p class="font-headline font-bold text-lg tabular-nums">68,900.00</p>
+</div>
+</div>
+</section>
+<!-- Score Breakdown -->
+<section class="p-5 rounded bg-surface-container border border-outline-variant/15 space-y-5">
+<h2 class="text-xs font-label uppercase tracking-widest text-on-surface-variant">Intelligence Components</h2>
+<div class="space-y-4">
+<div class="space-y-1.5">
+<div class="flex justify-between text-xs font-medium uppercase tracking-tighter">
+<span class="text-on-surface">Technical Analysis</span>
+<span class="text-primary tabular-nums">95%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 95%"></div>
+</div>
+</div>
+<div class="space-y-1.5">
+<div class="flex justify-between text-xs font-medium uppercase tracking-tighter">
+<span class="text-on-surface">Order Flow</span>
+<span class="text-primary tabular-nums">88%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 88%"></div>
+</div>
+</div>
+<div class="space-y-1.5">
+<div class="flex justify-between text-xs font-medium uppercase tracking-tighter">
+<span class="text-on-surface">On-Chain Data</span>
+<span class="text-primary tabular-nums">72%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 72%"></div>
+</div>
+</div>
+<div class="space-y-1.5">
+<div class="flex justify-between text-xs font-medium uppercase tracking-tighter">
+<span class="text-on-surface">LLM Consensus Score</span>
+<span class="text-primary tabular-nums">94%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 94%"></div>
+</div>
+</div>
+</div>
+<div class="pt-2 flex flex-wrap gap-2">
+<span class="px-2.5 py-1 rounded-full bg-tertiary-container/10 border border-tertiary-container/20 text-[10px] font-bold text-tertiary-fixed-dim uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> Strong Buy Volume
+                </span>
+<span class="px-2.5 py-1 rounded-full bg-tertiary-container/10 border border-tertiary-container/20 text-[10px] font-bold text-tertiary-fixed-dim uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">group</span> Active whale accumulation
+                </span>
+</div>
+</section>
+<!-- AI Analysis Block -->
+<section class="p-5 rounded-lg bg-surface-container border border-outline-variant/10 leading-relaxed">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-primary text-sm">psychology</span>
+<h2 class="text-xs font-label uppercase tracking-widest text-on-surface-variant">AI Logic Synthesis</h2>
+</div>
+<p class="text-sm text-on-surface/90 font-light">
+                The confluence of a <span class="text-primary font-medium">4H falling wedge breakout</span> and significant bullish order flow imbalance indicates a high-probability reversal. Derivative data shows localized short liquidations accumulating around the <span class="text-tertiary-dim">64k level</span>, providing fuel for a push toward TP1. On-chain metrics confirm that exchange reserves are at a 3-year low, suggesting a supply-side shock is imminent.
+            </p>
+</section>
+<!-- Journal Actions -->
+<section class="grid grid-cols-3 gap-3">
+<button class="flex flex-col items-center justify-center p-4 rounded bg-primary-container text-on-primary-fixed hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined mb-1">done_all</span>
+<span class="text-[10px] font-bold uppercase">Traded</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded bg-surface-container-highest text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
+<span class="material-symbols-outlined mb-1">block</span>
+<span class="text-[10px] font-bold uppercase">Skipped</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded bg-surface-container-highest text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
+<span class="material-symbols-outlined mb-1">edit_note</span>
+<span class="text-[10px] font-bold uppercase">Add Note</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar from JSON -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center pt-2 pb-6 px-2 bg-[#1f262f]/60 backdrop-blur-xl border-t border-[#43484f]/15 shadow-[0_-12px_32px_rgba(0,0,0,0.2)] z-50">
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3]">
+<span class="material-symbols-outlined text-2xl">home</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3]">
+<span class="material-symbols-outlined text-2xl">show_chart</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1">Chart</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#00cffc] shadow-[0_0_8px_rgba(105,218,255,0.15)]">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">sensors</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1">Signals</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3]">
+<span class="material-symbols-outlined text-2xl">newspaper</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1">News</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3]">
+<span class="material-symbols-outlined text-2xl">more_horiz</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider mt-1">More</span>
+</div>
+</nav>
+</body></html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krypton Chart View - BTC-USDT-SWAP</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-tertiary-container": "#005e37",
+                "on-surface": "#e7ebf3",
+                "on-primary-container": "#004050",
+                "tertiary-fixed-dim": "#56ef9f",
+                "tertiary-fixed": "#66fdac",
+                "on-primary-fixed-variant": "#004a5c",
+                "surface-container-low": "#0e141a",
+                "surface": "#0a0f14",
+                "surface-dim": "#0a0f14",
+                "secondary-container": "#44474b",
+                "on-tertiary": "#00683d",
+                "surface-variant": "#1f262f",
+                "on-tertiary-fixed-variant": "#00693e",
+                "surface-tint": "#69daff",
+                "outline-variant": "#43484f",
+                "on-primary": "#004a5d",
+                "primary-fixed-dim": "#00c0ea",
+                "tertiary": "#c1ffd4",
+                "primary": "#69daff",
+                "inverse-primary": "#006880",
+                "surface-container-highest": "#1f262f",
+                "on-secondary-fixed-variant": "#595c5f",
+                "error": "#ff716c",
+                "on-error-container": "#ffa8a3",
+                "secondary-fixed-dim": "#d3d4d9",
+                "secondary-dim": "#d3d4d9",
+                "primary-dim": "#00c0ea",
+                "outline": "#71767d",
+                "on-surface-variant": "#a7abb3",
+                "surface-bright": "#252d36",
+                "error-dim": "#d7383b",
+                "on-background": "#e7ebf3",
+                "error-container": "#9f0519",
+                "primary-container": "#00cffc",
+                "surface-container-high": "#1a2028",
+                "tertiary-container": "#66fdac",
+                "on-primary-fixed": "#002a35",
+                "inverse-surface": "#f7f9ff",
+                "on-tertiary-fixed": "#004a2a",
+                "on-secondary": "#4f5256",
+                "secondary-fixed": "#e1e2e7",
+                "tertiary-dim": "#56ef9f",
+                "primary-fixed": "#00cffc",
+                "on-error": "#490006",
+                "inverse-on-surface": "#50555c",
+                "background": "#0a0f14",
+                "surface-container-lowest": "#000000",
+                "on-secondary-fixed": "#3d4043",
+                "surface-container": "#141a21",
+                "on-secondary-container": "#cfd0d4",
+                "secondary": "#e1e2e7"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums {
+            font-feature-settings: "tnum";
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 selection:text-primary min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-[#0a0f14] flex justify-between items-center w-full px-4 h-14 z-50 fixed top-0 docked full-width">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00cffc]">search</span>
+<h1 class="font-['Space_Grotesk'] font-bold tracking-tight text-base text-[#e7ebf3]">BTC-USDT-SWAP</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[#56ef9f] font-headline font-bold text-sm">+2.45%</span>
+<button class="hover:bg-[#1f262f] transition-colors p-2 rounded-lg active:opacity-80 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[#a7abb3]">more_vert</span>
+</button>
+</div>
+</header>
+<main class="flex-1 mt-14 mb-20 flex flex-col overflow-hidden">
+<!-- Timeframe Selector -->
+<section class="bg-surface-container border-b border-outline-variant/10 px-4 py-2 flex items-center justify-between">
+<div class="flex gap-1 overflow-x-auto hide-scrollbar">
+<button class="px-3 py-1 text-xs font-bold font-headline bg-surface-container-highest text-primary rounded-lg transition-all duration-200">15M</button>
+<button class="px-3 py-1 text-xs font-bold font-headline text-on-surface-variant hover:bg-surface-variant transition-all duration-200">1H</button>
+<button class="px-3 py-1 text-xs font-bold font-headline text-on-surface-variant hover:bg-surface-variant transition-all duration-200">4H</button>
+<button class="px-3 py-1 text-xs font-bold font-headline text-on-surface-variant hover:bg-surface-variant transition-all duration-200">1D</button>
+<button class="px-3 py-1 text-xs font-bold font-headline text-on-surface-variant hover:bg-surface-variant transition-all duration-200">1W</button>
+</div>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" style="font-variation-settings: 'FILL' 1;">auto_graph</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">settings</span>
+</div>
+</section>
+<!-- Chart Area Container -->
+<div class="relative flex-1 bg-surface-container-lowest flex flex-col">
+<!-- Price Overlay (OHLC) -->
+<div class="absolute top-4 left-4 z-10 pointer-events-none flex flex-col gap-1">
+<div class="flex items-center gap-3 text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">
+<span>O <span class="text-on-surface tabular-nums">42,543.20</span></span>
+<span>H <span class="text-on-surface tabular-nums">43,102.50</span></span>
+<span>L <span class="text-on-surface tabular-nums">42,120.00</span></span>
+<span>C <span class="text-on-surface tabular-nums">42,890.15</span></span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xl font-headline font-bold text-on-surface tabular-nums">42,890.15</span>
+<span class="text-xs font-bold text-tertiary-fixed-dim bg-tertiary-container/10 px-1.5 py-0.5 rounded-lg">+1,024.40 (2.45%)</span>
+</div>
+</div>
+<!-- Main Candlestick Visualizer -->
+<div class="flex-1 relative w-full overflow-hidden flex flex-col justify-end">
+<div class="absolute inset-0 flex items-end justify-between px-2 pb-8 gap-[2px]">
+<!-- Candle Mockup -->
+<div class="flex-1 h-full flex flex-col justify-center items-center opacity-30">
+<div class="w-[1px] h-32 bg-outline-variant"></div>
+<div class="w-full max-w-[8px] h-20 bg-error rounded-sm"></div>
+<div class="w-[1px] h-12 bg-outline-variant"></div>
+</div>
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-24 bg-tertiary"></div>
+<div class="w-full max-w-[8px] h-32 bg-tertiary rounded-sm shadow-[0_0_8px_rgba(86,239,159,0.3)]"></div>
+<div class="w-[1px] h-16 bg-tertiary"></div>
+</div>
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-12 bg-tertiary"></div>
+<div class="w-full max-w-[8px] h-40 bg-tertiary rounded-sm shadow-[0_0_8px_rgba(86,239,159,0.3)]"></div>
+<div class="w-[1px] h-20 bg-tertiary"></div>
+</div>
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-20 bg-error"></div>
+<div class="w-full max-w-[8px] h-16 bg-error rounded-sm"></div>
+<div class="w-[1px] h-12 bg-outline-variant"></div>
+</div>
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-32 bg-tertiary"></div>
+<div class="w-full max-w-[8px] h-24 bg-tertiary rounded-sm shadow-[0_0_8px_rgba(86,239,159,0.3)]"></div>
+<div class="w-[1px] h-10 bg-tertiary"></div>
+</div>
+<!-- Repeated pattern for visualization -->
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-16 bg-tertiary"></div>
+<div class="w-full max-w-[8px] h-28 bg-tertiary rounded-sm shadow-[0_0_8px_rgba(86,239,159,0.3)]"></div>
+<div class="w-[1px] h-16 bg-tertiary"></div>
+</div>
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-20 bg-error"></div>
+<div class="w-full max-w-[8px] h-48 bg-error rounded-sm shadow-[0_0_8px_rgba(255,113,108,0.2)]"></div>
+<div class="w-[1px] h-10 bg-error"></div>
+</div>
+<div class="flex-1 h-full flex flex-col justify-center items-center">
+<div class="w-[1px] h-12 bg-tertiary"></div>
+<div class="w-full max-w-[8px] h-32 bg-tertiary rounded-sm shadow-[0_0_8px_rgba(86,239,159,0.3)]"></div>
+<div class="w-[1px] h-16 bg-tertiary"></div>
+</div>
+</div>
+<!-- Grid Lines -->
+<div class="absolute inset-0 pointer-events-none">
+<div class="h-full w-full grid grid-cols-4 grid-rows-6">
+<div class="border-r border-b border-outline-variant/10"></div>
+<div class="border-r border-b border-outline-variant/10"></div>
+<div class="border-r border-b border-outline-variant/10"></div>
+<div class="border-b border-outline-variant/10"></div>
+<div class="border-r border-b border-outline-variant/10"></div>
+<div class="border-r border-b border-outline-variant/10"></div>
+<div class="border-r border-b border-outline-variant/10"></div>
+<div class="border-b border-outline-variant/10"></div>
+</div>
+</div>
+<!-- Volume Bars -->
+<div class="h-20 w-full flex items-end px-2 gap-[2px] opacity-40">
+<div class="flex-1 h-1/2 bg-error rounded-t-sm"></div>
+<div class="flex-1 h-3/4 bg-tertiary rounded-t-sm"></div>
+<div class="flex-1 h-full bg-tertiary rounded-t-sm"></div>
+<div class="flex-1 h-1/3 bg-error rounded-t-sm"></div>
+<div class="flex-1 h-1/2 bg-tertiary rounded-t-sm"></div>
+<div class="flex-1 h-2/3 bg-tertiary rounded-t-sm"></div>
+<div class="flex-1 h-3/4 bg-error rounded-t-sm"></div>
+<div class="flex-1 h-1/2 bg-tertiary rounded-t-sm"></div>
+</div>
+</div>
+<!-- Indicator Controls Floating Panel -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-surface-container-high/80 backdrop-blur-xl rounded-lg p-3 shadow-2xl border border-outline-variant/20 z-20">
+<div class="flex flex-col gap-4">
+<!-- Moving Averages Group -->
+<div>
+<span class="text-[9px] uppercase tracking-[0.2em] text-on-surface-variant font-bold mb-2 block">Moving Averages</span>
+<div class="flex gap-2">
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-primary/20 bg-primary/10 text-primary rounded-lg">EMA 21</button>
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">EMA 50</button>
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">EMA 200</button>
+</div>
+</div>
+<!-- Overlays Group -->
+<div>
+<span class="text-[9px] uppercase tracking-[0.2em] text-on-surface-variant font-bold mb-2 block">Overlays</span>
+<div class="flex gap-2">
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">BOLL</button>
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">VWAP</button>
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">ICHIMOKU</button>
+</div>
+</div>
+<!-- Oscillators Group -->
+<div>
+<span class="text-[9px] uppercase tracking-[0.2em] text-on-surface-variant font-bold mb-2 block">Oscillators</span>
+<div class="flex gap-2">
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">RSI</button>
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">MACD</button>
+<button class="flex-1 py-1.5 text-[10px] font-bold border border-outline-variant/20 text-on-surface-variant hover:bg-surface-variant rounded-lg">KDJ</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center pt-2 pb-safe px-2 bg-[#1f262f]/60 backdrop-blur-xl z-50 border-t border-[#43484f]/15 shadow-[0_-12px_32px_rgba(0,0,0,0.2)]">
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] flex-1 py-2" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#00cffc] shadow-[0_0_8px_rgba(105,218,255,0.15)] flex-1 py-2 scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">show_chart</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Chart</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] flex-1 py-2" href="#">
+<span class="material-symbols-outlined mb-1">sensors</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Signals</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] flex-1 py-2" href="#">
+<span class="material-symbols-outlined mb-1">newspaper</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">News</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] flex-1 py-2" href="#">
+<span class="material-symbols-outlined mb-1">more_horiz</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">More</span>
+</a>
+</nav>
+<!-- Side Order Entry (Asymmetric Highlight) -->
+<div class="fixed right-4 bottom-24 flex flex-col gap-2 z-30">
+<button class="w-12 h-12 bg-tertiary-container text-on-tertiary-fixed font-bold text-xs rounded-lg shadow-lg flex items-center justify-center active:scale-90 transition-all">BUY</button>
+<button class="w-12 h-12 bg-error text-on-error font-bold text-xs rounded-lg shadow-lg flex items-center justify-center active:scale-90 transition-all">SELL</button>
+</div>
+</body></html>

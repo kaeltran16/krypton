@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from "react";
+import { motion, MotionConfig } from "motion/react";
+import { Home, BarChart3, Zap, Newspaper, MoreHorizontal } from "lucide-react";
 import { TickerBar } from "./TickerBar";
+import { EngineHeader } from "./EngineHeader";
 import { hapticTap } from "../lib/haptics";
 
 type Tab = "home" | "chart" | "signals" | "news" | "more";
@@ -16,99 +19,94 @@ interface LayoutProps {
   onPairChange: (pair: string) => void;
 }
 
+const TAB_ICONS = {
+  home: Home,
+  chart: BarChart3,
+  signals: Zap,
+  news: Newspaper,
+  more: MoreHorizontal,
+} as const;
+
+const TAB_LABELS: Record<Tab, string> = {
+  home: "Home",
+  chart: "Chart",
+  signals: "Signals",
+  news: "News",
+  more: "More",
+};
+
+const TABS: Tab[] = ["home", "chart", "signals", "news", "more"];
+
 export function Layout({
   home, chart, signals, news, more,
   price, change24h, selectedPair, onPairChange,
 }: LayoutProps) {
   const [tab, setTab] = useState<Tab>("home");
 
-  return (
-    <div className="min-h-screen min-h-dvh text-foreground flex flex-col">
-      <TickerBar
-        price={price}
-        change24h={change24h}
-        pair={selectedPair}
-        onPairChange={onPairChange}
-      />
-      <main className="flex-1 overflow-y-auto pb-16 scroll-container transition-opacity duration-150 ease-in-out">
-        <div className={tab === "home" ? "" : "hidden"}>{home}</div>
-        <div className={tab === "chart" ? "" : "hidden"}>{chart}</div>
-        <div className={tab === "signals" ? "" : "hidden"}>{signals}</div>
-        <div className={tab === "news" ? "" : "hidden"}>{news}</div>
-        <div className={tab === "more" ? "" : "hidden"}>{more}</div>
-      </main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-xl border-t border-white/[0.06] flex safe-bottom z-30">
-        <TabButton active={tab === "home"} onClick={() => setTab("home")} label="Home" icon={<IconHome />} />
-        <TabButton active={tab === "chart"} onClick={() => setTab("chart")} label="Chart" icon={<IconChart />} />
-        <TabButton active={tab === "signals"} onClick={() => setTab("signals")} label="Signals" icon={<IconSignals />} />
-        <TabButton active={tab === "news"} onClick={() => setTab("news")} label="News" icon={<IconNews />} />
-        <TabButton active={tab === "more"} onClick={() => setTab("more")} label="More" icon={<IconMore />} />
-      </nav>
-    </div>
-  );
-}
+  const isMarketTab = tab !== "more";
+  const views = { home, chart, signals, news, more } as const;
 
-function TabButton({ active, onClick, label, icon }: {
-  active: boolean; onClick: () => void; label: string; icon: ReactNode;
-}) {
   return (
-    <button
-      onClick={() => { hapticTap(); onClick(); }}
-      className={`flex-1 py-2 flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors min-h-[44px] ${
-        active ? "text-accent" : "text-muted"
-      }`}
-    >
-      <span className="w-5 h-5">{icon}</span>
-      {label}
-    </button>
-  );
-}
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen min-h-dvh text-on-surface flex flex-col">
+        {isMarketTab ? (
+          <TickerBar
+            price={price}
+            change24h={change24h}
+            pair={selectedPair}
+            onPairChange={onPairChange}
+          />
+        ) : (
+          <EngineHeader />
+        )}
 
-function IconHome() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="3" y="3" width="8" height="8" rx="1.5" />
-      <rect x="13" y="3" width="8" height="8" rx="1.5" />
-      <rect x="3" y="13" width="8" height="8" rx="1.5" />
-      <rect x="13" y="13" width="8" height="8" rx="1.5" />
-    </svg>
-  );
-}
+        <main className="flex-1 overflow-y-auto pb-20 scroll-container relative">
+          {TABS.map((t) => (
+            <motion.div
+              key={t}
+              animate={{
+                opacity: tab === t ? 1 : 0,
+                y: tab === t ? 0 : 8,
+              }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className={tab === t
+                ? ""
+                : "pointer-events-none absolute inset-0 overflow-hidden"
+              }
+            >
+              {views[t]}
+            </motion.div>
+          ))}
+        </main>
 
-function IconChart() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M3 3v18h18" />
-      <path d="M7 16l4-6 4 4 5-8" />
-    </svg>
-  );
-}
-
-function IconSignals() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-    </svg>
-  );
-}
-
-function IconNews() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2" />
-      <path d="M18 14h-8" />
-      <path d="M15 18h-5" />
-      <path d="M10 6h8v4h-8z" />
-    </svg>
-  );
-}
-
-function IconMore() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-      <circle cx="12" cy="5" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="12" cy="19" r="1.5" />
-    </svg>
+        <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center pt-2 px-2 safe-bottom bg-[var(--glass-nav)] backdrop-blur-xl z-30 border-t border-outline-variant/15 shadow-[0_-12px_32px_rgba(0,0,0,0.2)]">
+          {TABS.map((t) => {
+            const Icon = TAB_ICONS[t];
+            const active = tab === t;
+            return (
+              <button
+                key={t}
+                onClick={() => { hapticTap(); setTab(t); }}
+                aria-current={active ? "page" : undefined}
+                className={`flex flex-col items-center justify-center min-h-[44px] py-2 px-3 transition-all duration-200 active:scale-95 ${
+                  active
+                    ? "text-primary-container shadow-[0_0_8px_rgba(105,218,255,0.15)]"
+                    : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                <Icon
+                  size={20}
+                  strokeWidth={active ? 2.5 : 1.5}
+                  className="mb-0.5"
+                />
+                <span className="font-sans font-medium text-[10px] uppercase tracking-wider">
+                  {TAB_LABELS[t]}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    </MotionConfig>
   );
 }

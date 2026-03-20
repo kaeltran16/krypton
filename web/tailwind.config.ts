@@ -7,6 +7,7 @@ export default {
     extend: {
       colors: theme.colors,
       fontFamily: theme.fontFamily,
+      borderRadius: theme.borderRadius,
       animation: {
         'slide-down': 'slideDown 0.3s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
@@ -19,7 +20,7 @@ export default {
         slideUp: { '0%': { transform: 'translateY(20px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
         cardEnter: { '0%': { transform: 'translateY(12px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
-        pulseGlow: { '0%, 100%': { boxShadow: '0 0 0 0 rgba(240, 185, 11, 0)' }, '50%': { boxShadow: '0 0 8px 2px rgba(240, 185, 11, 0.15)' } },
+        pulseGlow: { '0%, 100%': { boxShadow: '0 0 0 0 rgba(0, 207, 252, 0)' }, '50%': { boxShadow: '0 0 8px 2px rgba(0, 207, 252, 0.15)' } },
       },
     },
   },
@@ -34,6 +35,11 @@ export default {
     "border-long/40", "border-short/40",
     "bg-accent/15", "bg-accent/20",
     "text-accent",
+    "text-tertiary-dim", "text-error", "text-primary",
+    "bg-tertiary-dim/10", "bg-tertiary-dim/20",
+    "bg-error/10", "bg-error/20",
+    "border-tertiary-dim/30", "border-error/30",
+    "border-outline-variant/10", "border-outline-variant/15",
   ],
   plugins: [],
 } satisfies Config;

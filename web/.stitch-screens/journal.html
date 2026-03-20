@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krypton Journal &amp; Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-container": "#005e37",
+                        "on-surface": "#e7ebf3",
+                        "on-primary-container": "#004050",
+                        "tertiary-fixed-dim": "#56ef9f",
+                        "tertiary-fixed": "#66fdac",
+                        "on-primary-fixed-variant": "#004a5c",
+                        "surface-container-low": "#0e141a",
+                        "surface": "#0a0f14",
+                        "surface-dim": "#0a0f14",
+                        "secondary-container": "#44474b",
+                        "on-tertiary": "#00683d",
+                        "surface-variant": "#1f262f",
+                        "on-tertiary-fixed-variant": "#00693e",
+                        "surface-tint": "#69daff",
+                        "outline-variant": "#43484f",
+                        "on-primary": "#004a5d",
+                        "primary-fixed-dim": "#00c0ea",
+                        "tertiary": "#c1ffd4",
+                        "primary": "#69daff",
+                        "inverse-primary": "#006880",
+                        "surface-container-highest": "#1f262f",
+                        "on-secondary-fixed-variant": "#595c5f",
+                        "error": "#ff716c",
+                        "on-error-container": "#ffa8a3",
+                        "secondary-fixed-dim": "#d3d4d9",
+                        "secondary-dim": "#d3d4d9",
+                        "primary-dim": "#00c0ea",
+                        "outline": "#71767d",
+                        "on-surface-variant": "#a7abb3",
+                        "surface-bright": "#252d36",
+                        "error-dim": "#d7383b",
+                        "on-background": "#e7ebf3",
+                        "error-container": "#9f0519",
+                        "primary-container": "#00cffc",
+                        "surface-container-high": "#1a2028",
+                        "tertiary-container": "#66fdac",
+                        "on-primary-fixed": "#002a35",
+                        "inverse-surface": "#f7f9ff",
+                        "on-tertiary-fixed": "#004a2a",
+                        "on-secondary": "#4f5256",
+                        "secondary-fixed": "#e1e2e7",
+                        "tertiary-dim": "#56ef9f",
+                        "primary-fixed": "#00cffc",
+                        "on-error": "#490006",
+                        "inverse-on-surface": "#50555c",
+                        "background": "#0a0f14",
+                        "surface-container-lowest": "#000000",
+                        "on-secondary-fixed": "#3d4043",
+                        "surface-container": "#141a21",
+                        "on-secondary-container": "#cfd0d4",
+                        "secondary": "#e1e2e7"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0a0f14; color: #e7ebf3; }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .tabular { font-variant-numeric: tabular-nums; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-4 h-14 z-50 fixed top-0 bg-[#0a0f14]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00cffc]">search</span>
+<h1 class="font-headline font-bold tracking-tight text-base text-[#e7ebf3]">BTC-USDT-SWAP</h1>
+</div>
+<div class="bg-surface-container-highest px-2 py-1 rounded">
+<span class="font-headline font-bold text-[#56ef9f] text-sm">+2.45%</span>
+</div>
+</header>
+<main class="pt-16 px-4 space-y-6 max-w-lg mx-auto">
+<!-- Period Selector -->
+<section class="flex justify-center">
+<div class="bg-surface-container-low p-1 rounded-lg flex gap-1 w-full">
+<button class="flex-1 py-2 text-xs font-bold uppercase tracking-widest bg-surface-container-highest text-primary rounded-lg transition-all shadow-[0_0_8px_rgba(105,218,255,0.15)]">7D</button>
+<button class="flex-1 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant hover:bg-surface-bright rounded-lg transition-colors">30D</button>
+<button class="flex-1 py-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant hover:bg-surface-bright rounded-lg transition-colors">All</button>
+</div>
+</section>
+<!-- Summary Stats Bento Grid -->
+<section class="grid grid-cols-2 gap-3">
+<!-- Main P&L Card -->
+<div class="col-span-2 bg-surface-container p-5 rounded-lg border-l-4 border-tertiary-fixed-dim">
+<p class="text-on-surface-variant text-[10px] uppercase font-bold tracking-widest mb-1">Net P&amp;L Growth</p>
+<div class="flex items-end gap-2">
+<h2 class="font-headline text-4xl font-bold tabular text-tertiary-fixed-dim">+42.5%</h2>
+<span class="material-symbols-outlined text-tertiary-fixed-dim mb-1" style="font-variation-settings: 'FILL' 1;">trending_up</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded-lg">
+<p class="text-on-surface-variant text-[10px] uppercase font-bold tracking-widest mb-1">Win Rate</p>
+<p class="font-headline text-2xl font-bold tabular">68%</p>
+</div>
+<div class="bg-surface-container p-4 rounded-lg">
+<p class="text-on-surface-variant text-[10px] uppercase font-bold tracking-widest mb-1">Avg R:R</p>
+<p class="font-headline text-2xl font-bold tabular">1.9</p>
+</div>
+<div class="bg-surface-container p-4 rounded-lg col-span-2 flex justify-between items-center">
+<div>
+<p class="text-on-surface-variant text-[10px] uppercase font-bold tracking-widest mb-1">Signal Count</p>
+<p class="font-headline text-2xl font-bold tabular">142</p>
+</div>
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full bg-surface-bright border border-outline-variant flex items-center justify-center text-[10px] font-bold">BTC</div>
+<div class="w-8 h-8 rounded-full bg-surface-bright border border-outline-variant flex items-center justify-center text-[10px] font-bold">ETH</div>
+<div class="w-8 h-8 rounded-full bg-surface-bright border border-outline-variant flex items-center justify-center text-[10px] font-bold">WIF</div>
+</div>
+</div>
+</section>
+<!-- Equity Curve Chart Area -->
+<section class="bg-surface-container-low rounded-lg p-4 overflow-hidden">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Equity Curve</h3>
+<span class="text-[10px] text-on-surface-variant font-mono">Live Analytics</span>
+</div>
+<div class="relative h-40 w-full flex items-end gap-1">
+<!-- Mock Equity Curve using stylized SVG for precision -->
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 400 100">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#56ef9f" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#56ef9f" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,80 Q50,75 80,60 T150,55 T220,40 T300,45 T400,10 L400,100 L0,100 Z" fill="url(#chartGradient)"></path>
+<path d="M0,80 Q50,75 80,60 T150,55 T220,40 T300,45 T400,10" fill="none" stroke="#56ef9f" stroke-width="2"></path>
+<!-- Current Point Glow -->
+<circle cx="400" cy="10" fill="#56ef9f" r="3"></circle>
+</svg>
+</div>
+<div class="flex justify-between mt-2">
+<span class="text-[9px] text-outline uppercase font-bold tabular tracking-tighter">Mon 01</span>
+<span class="text-[9px] text-outline uppercase font-bold tabular tracking-tighter">Wed 03</span>
+<span class="text-[9px] text-outline uppercase font-bold tabular tracking-tighter">Fri 05</span>
+<span class="text-[9px] text-outline uppercase font-bold tabular tracking-tighter">Sun 07</span>
+</div>
+</section>
+<!-- Per-Pair Breakdown -->
+<section class="space-y-3">
+<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface px-1">Pair Performance</h3>
+<!-- BTC Card -->
+<div class="bg-surface-container rounded-lg p-4 flex justify-between items-center transition-colors hover:bg-surface-container-high cursor-pointer">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-surface-container-lowest flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">currency_bitcoin</span>
+</div>
+<div>
+<p class="font-headline font-bold text-sm">BTC-PERP</p>
+<p class="text-[10px] text-on-surface-variant font-medium">Win Rate: 72%</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-tertiary-fixed-dim tabular">+12%</p>
+<p class="text-[10px] text-on-surface-variant font-medium">32 Signals</p>
+</div>
+</div>
+<!-- ETH Card -->
+<div class="bg-surface-container rounded-lg p-4 flex justify-between items-center transition-colors hover:bg-surface-container-high cursor-pointer">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-surface-container-lowest flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">token</span>
+</div>
+<div>
+<p class="font-headline font-bold text-sm">ETH-PERP</p>
+<p class="text-[10px] text-on-surface-variant font-medium">Win Rate: 61%</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-tertiary-fixed-dim tabular">+8%</p>
+<p class="text-[10px] text-on-surface-variant font-medium">48 Signals</p>
+</div>
+</div>
+<!-- WIF Card -->
+<div class="bg-surface-container rounded-lg p-4 flex justify-between items-center transition-colors hover:bg-surface-container-high cursor-pointer">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-surface-container-lowest flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">poker_chip</span>
+</div>
+<div>
+<p class="font-headline font-bold text-sm">WIF-PERP</p>
+<p class="text-[10px] text-on-surface-variant font-medium">Win Rate: 45%</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-error tabular">-2%</p>
+<p class="text-[10px] text-on-surface-variant font-medium">62 Signals</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center pt-2 pb-6 px-2 bg-[#1f262f]/60 backdrop-blur-xl z-50 border-t border-[#43484f]/15 shadow-[0_-12px_32px_rgba(0,0,0,0.2)]">
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all" href="#">
+<span class="material-symbols-outlined mb-1">show_chart</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Chart</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#00cffc] shadow-[0_0_8px_rgba(105,218,255,0.15)] transition-all" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">sensors</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">Signals</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all" href="#">
+<span class="material-symbols-outlined mb-1">newspaper</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">News</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all" href="#">
+<span class="material-symbols-outlined mb-1">more_horiz</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-wider">More</span>
+</a>
+</nav>
+</body></html>

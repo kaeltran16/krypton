@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krypton AI | System Status</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #0a0f14;
+            color: #e7ebf3;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular { font-feature-settings: "tnum"; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "secondary-container": "#44474b",
+                "secondary": "#e1e2e7",
+                "on-secondary": "#4f5256",
+                "on-error": "#490006",
+                "error-container": "#9f0519",
+                "background": "#0a0f14",
+                "inverse-surface": "#f7f9ff",
+                "tertiary-dim": "#56ef9f",
+                "on-tertiary": "#00683d",
+                "on-surface-variant": "#a7abb3",
+                "on-error-container": "#ffa8a3",
+                "tertiary-container": "#66fdac",
+                "surface-container-high": "#1a2028",
+                "secondary-dim": "#d3d4d9",
+                "primary": "#69daff",
+                "surface-dim": "#0a0f14",
+                "tertiary-fixed": "#66fdac",
+                "on-tertiary-container": "#005e37",
+                "tertiary-fixed-dim": "#56ef9f",
+                "on-primary-fixed": "#002a35",
+                "secondary-fixed": "#e1e2e7",
+                "inverse-on-surface": "#50555c",
+                "surface-bright": "#252d36",
+                "primary-dim": "#00c0ea",
+                "primary-fixed": "#00cffc",
+                "on-tertiary-fixed": "#004a2a",
+                "primary-container": "#00cffc",
+                "surface-container": "#141a21",
+                "error": "#ff716c",
+                "outline": "#71767d",
+                "surface-container-low": "#0e141a",
+                "surface-tint": "#69daff",
+                "surface-container-highest": "#1f262f",
+                "on-primary": "#004a5d",
+                "on-surface": "#e7ebf3",
+                "tertiary": "#c1ffd4",
+                "surface-container-lowest": "#000000",
+                "error-dim": "#d7383b",
+                "outline-variant": "#43484f",
+                "primary-fixed-dim": "#00c0ea",
+                "secondary-fixed-dim": "#d3d4d9",
+                "on-background": "#e7ebf3",
+                "on-secondary-container": "#cfd0d4",
+                "on-primary-fixed-variant": "#004a5c",
+                "on-primary-container": "#004050",
+                "surface-variant": "#1f262f",
+                "on-secondary-fixed-variant": "#595c5f",
+                "surface": "#0a0f14",
+                "inverse-primary": "#006880",
+                "on-secondary-fixed": "#3d4043",
+                "on-tertiary-fixed-variant": "#00693e"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background selection:bg-primary/30">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex items-center justify-between px-4 h-14 bg-[#0a0f14]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#00D1FF]" data-icon="terminal">terminal</span>
+<h1 class="font-['Space_Grotesk'] font-bold tracking-tight uppercase text-lg text-[#00D1FF] tracking-widest">SYSTEM STATUS</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex gap-6 items-center">
+<a class="text-[#00D1FF] font-headline text-xs tracking-widest font-bold" href="#">TERMINAL</a>
+<a class="text-[#a7abb3] font-headline text-xs tracking-widest font-bold hover:text-[#e7ebf3] transition-colors" href="#">ASSETS</a>
+<a class="text-[#a7abb3] font-headline text-xs tracking-widest font-bold hover:text-[#e7ebf3] transition-colors" href="#">HEALTH</a>
+<a class="text-[#a7abb3] font-headline text-xs tracking-widest font-bold hover:text-[#e7ebf3] transition-colors" href="#">NETWORK</a>
+</div>
+<button class="hover:bg-[#1f262f] p-2 rounded transition-colors active:scale-95 duration-100 text-[#00D1FF]">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+</button>
+</div>
+</header>
+<main class="pt-20 pb-24 px-4 max-w-7xl mx-auto space-y-6">
+<!-- Section 1: System Health Summary -->
+<section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+<div class="bg-surface-container p-4 border-l-2 border-tertiary-dim">
+<p class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-1">Connectivity</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-dim animate-pulse"></span>
+<span class="text-sm font-bold tabular">OPTIMAL</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 border-l-2 border-tertiary-dim">
+<p class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-1">Database</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-dim"></span>
+<span class="text-sm font-bold tabular">ACTIVE</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 border-l-2 border-primary">
+<p class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-1">Cache</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="text-sm font-bold tabular">WARM</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 border-l-2 border-tertiary-dim">
+<p class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-1">ML Pipeline</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-dim"></span>
+<span class="text-sm font-bold tabular">SCORING</span>
+</div>
+</div>
+</section>
+<!-- Bento Grid Layout for Main Content -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- WebSocket Streams & Lag Monitor -->
+<div class="md:col-span-8 space-y-6">
+<!-- Section 2: WebSocket Streams -->
+<div class="bg-surface-container-low overflow-hidden">
+<div class="p-4 bg-surface-container flex justify-between items-center">
+<h2 class="font-headline font-bold text-xs tracking-tighter uppercase text-primary">WebSocket Streams</h2>
+<span class="text-[10px] tabular bg-primary/10 text-primary px-2 py-0.5 rounded-full">3 ACTIVE NODES</span>
+</div>
+<div class="overflow-x-auto no-scrollbar">
+<table class="w-full text-left text-sm">
+<thead class="bg-surface-container-highest/30 text-[10px] uppercase font-headline font-bold text-on-surface-variant tracking-widest">
+<tr>
+<th class="px-4 py-3">Stream ID</th>
+<th class="px-4 py-3">Status</th>
+<th class="px-4 py-3 text-right">Latency</th>
+<th class="px-4 py-3 text-right">Last Tick</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<tr class="hover:bg-surface-container-highest/20 transition-colors">
+<td class="px-4 py-4 font-mono font-medium text-on-surface">BTC-USDT-SWAP</td>
+<td class="px-4 py-4">
+<span class="inline-flex items-center text-[10px] font-bold text-tertiary-dim bg-tertiary-dim/10 px-2 py-0.5 rounded">CONNECTED</span>
+</td>
+<td class="px-4 py-4 text-right font-mono tabular text-primary">45ms</td>
+<td class="px-4 py-4 text-right font-mono tabular text-on-surface-variant">200ms ago</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/20 transition-colors">
+<td class="px-4 py-4 font-mono font-medium text-on-surface">ETH-USDT-SWAP</td>
+<td class="px-4 py-4">
+<span class="inline-flex items-center text-[10px] font-bold text-tertiary-dim bg-tertiary-dim/10 px-2 py-0.5 rounded">CONNECTED</span>
+</td>
+<td class="px-4 py-4 text-right font-mono tabular text-primary">52ms</td>
+<td class="px-4 py-4 text-right font-mono tabular text-on-surface-variant">450ms ago</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/20 transition-colors">
+<td class="px-4 py-4 font-mono font-medium text-on-surface">WIF-USDT-SWAP</td>
+<td class="px-4 py-4">
+<span class="inline-flex items-center text-[10px] font-bold text-tertiary-dim bg-tertiary-dim/10 px-2 py-0.5 rounded">CONNECTED</span>
+</td>
+<td class="px-4 py-4 text-right font-mono tabular text-error">68ms</td>
+<td class="px-4 py-4 text-right font-mono tabular text-on-surface-variant">1.2s ago</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Section 6: Collector Lag Monitor (Visual) -->
+<div class="bg-surface-container-low p-5">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h2 class="font-headline font-bold text-xs tracking-tighter uppercase text-primary mb-1">Ingestion Lag</h2>
+<p class="text-[10px] text-on-surface-variant">Rolling 10m network overhead</p>
+</div>
+<div class="text-right">
+<span class="text-xl font-headline font-bold tabular text-on-surface">12.4ms</span>
+<span class="block text-[10px] text-tertiary-dim">Avg. Deviation</span>
+</div>
+</div>
+<!-- Abstract Sparkline Pattern -->
+<div class="h-16 w-full flex items-end gap-[2px]">
+<div class="flex-1 bg-surface-container-highest h-[40%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[45%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[35%]"></div>
+<div class="flex-1 bg-primary/40 h-[60%]"></div>
+<div class="flex-1 bg-primary/40 h-[55%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[42%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[38%]"></div>
+<div class="flex-1 bg-primary/60 h-[75%] shadow-[0_0_8px_rgba(105,218,255,0.4)]"></div>
+<div class="flex-1 bg-primary/40 h-[50%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[30%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[45%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[40%]"></div>
+<div class="flex-1 bg-error/40 h-[85%]"></div>
+<div class="flex-1 bg-primary/40 h-[60%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[45%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[42%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[38%]"></div>
+<div class="flex-1 bg-primary/40 h-[50%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[30%]"></div>
+<div class="flex-1 bg-surface-container-highest h-[45%]"></div>
+</div>
+</div>
+</div>
+<!-- Side Rail -->
+<div class="md:col-span-4 space-y-6">
+<!-- Section 4: Backend Infrastructure -->
+<div class="bg-surface-container p-5 border border-outline-variant/10 rounded-lg">
+<h2 class="font-headline font-bold text-xs tracking-tighter uppercase text-primary mb-5 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="dns">dns</span>
+                        Infrastructure
+                    </h2>
+<div class="space-y-4">
+<div class="flex items-start justify-between">
+<div>
+<p class="text-[11px] font-bold text-on-surface">Redis (Cache)</p>
+<p class="text-[10px] text-on-surface-variant tabular">0.2ms latency</p>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold tabular block">12.4 MB</span>
+<span class="text-[9px] text-tertiary-dim uppercase font-bold">ACTIVE</span>
+</div>
+</div>
+<div class="w-full h-1 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 14%"></div>
+</div>
+<div class="flex items-start justify-between">
+<div>
+<p class="text-[11px] font-bold text-on-surface">TimescaleDB</p>
+<p class="text-[10px] text-on-surface-variant tabular">12ms query avg</p>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold tabular block">842 GB</span>
+<span class="text-[9px] text-tertiary-dim uppercase font-bold">ACTIVE</span>
+</div>
+</div>
+<div class="w-full h-1 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 82%"></div>
+</div>
+<div class="flex items-start justify-between">
+<div>
+<p class="text-[11px] font-bold text-on-surface">Collector Service</p>
+<p class="text-[10px] text-on-surface-variant tabular">0.1% drop rate</p>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold tabular block">142 ev/s</span>
+<span class="text-[9px] text-tertiary-dim uppercase font-bold">RUNNING</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 3: Data Freshness -->
+<div class="bg-surface-container p-5 border border-outline-variant/10 rounded-lg">
+<h2 class="font-headline font-bold text-xs tracking-tighter uppercase text-primary mb-5 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="database">database</span>
+                        Data Freshness
+                    </h2>
+<div class="space-y-5">
+<div class="group">
+<div class="flex justify-between text-[10px] font-bold uppercase mb-1">
+<span class="text-on-surface-variant">Technicals</span>
+<span class="text-tertiary-dim">5s Lag</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-tertiary-dim" style="width: 95%"></div>
+</div>
+</div>
+<div class="group">
+<div class="flex justify-between text-[10px] font-bold uppercase mb-1">
+<span class="text-on-surface-variant">Order Flow</span>
+<span class="text-tertiary-dim">2s Lag</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-tertiary-dim" style="width: 98%"></div>
+</div>
+</div>
+<div class="group">
+<div class="flex justify-between text-[10px] font-bold uppercase mb-1">
+<span class="text-on-surface-variant">On-Chain</span>
+<span class="text-primary">2m Lag</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-primary" style="width: 70%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 5: Pipeline Last-Run Timestamps -->
+<section class="bg-surface-container-low p-6">
+<h2 class="font-headline font-bold text-xs tracking-tighter uppercase text-primary mb-6">Pipeline Execution Logs</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+<div class="bg-surface-container-lowest p-3 flex justify-between items-center border border-outline-variant/10">
+<div>
+<p class="text-[10px] font-headline font-bold text-on-surface tracking-wide uppercase">BTC-USDT / 1m</p>
+<p class="text-[9px] text-on-surface-variant tabular">Process ID: #99212</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] tabular font-bold text-tertiary-dim">14:02:44.22</p>
+<p class="text-[9px] text-on-surface-variant">SUCCESS</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 flex justify-between items-center border border-outline-variant/10">
+<div>
+<p class="text-[10px] font-headline font-bold text-on-surface tracking-wide uppercase">ETH-USDT / 1m</p>
+<p class="text-[9px] text-on-surface-variant tabular">Process ID: #99213</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] tabular font-bold text-tertiary-dim">14:02:44.18</p>
+<p class="text-[9px] text-on-surface-variant">SUCCESS</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 flex justify-between items-center border border-outline-variant/10">
+<div>
+<p class="text-[10px] font-headline font-bold text-on-surface tracking-wide uppercase">WIF-USDT / 5m</p>
+<p class="text-[9px] text-on-surface-variant tabular">Process ID: #99214</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] tabular font-bold text-primary">14:02:38.92</p>
+<p class="text-[9px] text-on-surface-variant">SCORING...</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 flex justify-between items-center border border-outline-variant/10">
+<div>
+<p class="text-[10px] font-headline font-bold text-on-surface tracking-wide uppercase">BTC-USDT / 15m</p>
+<p class="text-[9px] text-on-surface-variant tabular">Process ID: #99209</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] tabular font-bold text-tertiary-dim">14:00:00.05</p>
+<p class="text-[9px] text-on-surface-variant">SUCCESS</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 flex justify-between items-center border border-outline-variant/10">
+<div>
+<p class="text-[10px] font-headline font-bold text-on-surface tracking-wide uppercase">SOL-USDT / 1m</p>
+<p class="text-[9px] text-on-surface-variant tabular">Process ID: #99215</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] tabular font-bold text-tertiary-dim">14:02:44.89</p>
+<p class="text-[9px] text-on-surface-variant">SUCCESS</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 flex justify-between items-center border border-outline-variant/10">
+<div>
+<p class="text-[10px] font-headline font-bold text-on-surface tracking-wide uppercase">PEPE-USDT / 1m</p>
+<p class="text-[9px] text-on-surface-variant tabular">Process ID: #99216</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] tabular font-bold text-tertiary-dim">14:02:44.02</p>
+<p class="text-[9px] text-on-surface-variant">SUCCESS</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 px-2 pb-safe bg-[#1f262f]/60 backdrop-blur-xl border-t border-[#43484f]/15 shadow-[0_-4px_12px_rgba(0,0,0,0.4)]">
+<a class="flex flex-col items-center justify-center text-[#00D1FF] drop-shadow-[0_0_8px_rgba(0,209,255,0.3)] hover:text-[#e7ebf3] transition-all active:translate-y-0.5 duration-75" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="monitoring">monitoring</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-tighter">TERMINAL</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all active:translate-y-0.5 duration-75" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-tighter">ASSETS</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all active:translate-y-0.5 duration-75" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="health_and_safety">health_and_safety</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-tighter">HEALTH</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#a7abb3] hover:text-[#e7ebf3] transition-all active:translate-y-0.5 duration-75" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="hub">hub</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-tighter">NETWORK</span>
+</a>
+</nav>
+<!-- Visual Polish: Noise Overlay -->
+<div class="fixed inset-0 pointer-events-none opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+</body></html>
