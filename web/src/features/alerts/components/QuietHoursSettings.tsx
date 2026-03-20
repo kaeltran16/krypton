@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAlertStore } from "../store";
+import { Toggle } from "../../../shared/components/Toggle";
 import { api } from "../../../shared/lib/api";
 
 export function QuietHoursSettings() {
@@ -31,45 +32,39 @@ export function QuietHoursSettings() {
 
   return (
     <div className="space-y-3">
-      <label className="flex items-center justify-between min-h-[44px]">
-        <span className="text-sm">Quiet Hours</span>
-        <input
-          type="checkbox"
-          checked={settings.quiet_hours_enabled}
-          onChange={(e) => update({ quiet_hours_enabled: e.target.checked })}
-          className="w-5 h-5"
-          disabled={saving}
-        />
-      </label>
+      <div className="flex items-center justify-between min-h-[44px]">
+        <span className="text-sm text-on-surface">Quiet Hours</span>
+        <Toggle checked={settings.quiet_hours_enabled} onChange={(v) => update({ quiet_hours_enabled: v })} disabled={saving} />
+      </div>
 
       {settings.quiet_hours_enabled && (
         <>
           <div className="flex gap-3">
             <label className="flex-1">
-              <span className="text-xs text-muted">Start</span>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Start</span>
               <input
                 type="time"
                 value={settings.quiet_hours_start}
                 onChange={(e) => update({ quiet_hours_start: e.target.value })}
-                className="w-full bg-card border border-border rounded-lg p-2 text-sm min-h-[44px]"
+                className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
               />
             </label>
             <label className="flex-1">
-              <span className="text-xs text-muted">End</span>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">End</span>
               <input
                 type="time"
                 value={settings.quiet_hours_end}
                 onChange={(e) => update({ quiet_hours_end: e.target.value })}
-                className="w-full bg-card border border-border rounded-lg p-2 text-sm min-h-[44px]"
+                className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
               />
             </label>
           </div>
           <label>
-            <span className="text-xs text-muted">Timezone</span>
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Timezone</span>
             <select
               value={settings.quiet_hours_tz}
               onChange={(e) => update({ quiet_hours_tz: e.target.value })}
-              className="w-full bg-card border border-border rounded-lg p-2 text-sm min-h-[44px]"
+              className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
             >
               {timezones.map((tz) => (
                 <option key={tz} value={tz}>{tz}</option>

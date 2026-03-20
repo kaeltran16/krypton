@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { formatDuration } from "../../../shared/lib/format";
 import {
   createChart,
   LineSeries,
@@ -15,9 +16,9 @@ export function BacktestResults() {
 
   if (runLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-muted">
-        <div className="w-48 h-2 bg-card-hover rounded-full overflow-hidden mb-3">
-          <div className="h-full bg-accent rounded-full animate-pulse" style={{ width: "60%" }} />
+      <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
+        <div className="w-48 h-2 bg-surface-container-lowest rounded-full overflow-hidden mb-3">
+          <div className="h-full bg-primary rounded-full animate-pulse motion-reduce:animate-none" style={{ width: "60%" }} />
         </div>
         <p className="text-sm">Running backtest...</p>
       </div>
@@ -27,10 +28,10 @@ export function BacktestResults() {
   if (runError) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-sm text-short mb-3">{runError}</p>
+        <p className="text-sm text-error mb-3">{runError}</p>
         <button
           onClick={() => setTab("setup")}
-          className="px-4 py-2 rounded-lg text-sm bg-card-hover text-foreground border border-border"
+          className="px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           Back to Setup
         </button>
@@ -40,11 +41,11 @@ export function BacktestResults() {
 
   if (!activeRun) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-muted">
+      <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
         <p className="text-sm">No backtest results yet.</p>
         <button
           onClick={() => setTab("setup")}
-          className="mt-3 px-4 py-2 rounded-lg text-sm bg-card-hover text-foreground border border-border"
+          className="mt-3 px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           Run a Backtest
         </button>
@@ -54,14 +55,14 @@ export function BacktestResults() {
 
   if (activeRun.status === "cancelled") {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-muted">
+      <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
         <p className="text-sm mb-3">Run cancelled.</p>
         {activeRun.results && activeRun.results.trades.length > 0 ? (
           <ResultsContent run={activeRun} />
         ) : (
           <button
             onClick={() => setTab("setup")}
-            className="px-4 py-2 rounded-lg text-sm bg-card-hover text-foreground border border-border"
+            className="px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             Back to Setup
           </button>
@@ -73,10 +74,10 @@ export function BacktestResults() {
   if (activeRun.status === "failed") {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-sm text-short mb-3">Backtest failed.</p>
+        <p className="text-sm text-error mb-3">Backtest failed.</p>
         <button
           onClick={() => setTab("setup")}
-          className="px-4 py-2 rounded-lg text-sm bg-card-hover text-foreground border border-border"
+          className="px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           Retry
         </button>
@@ -86,12 +87,12 @@ export function BacktestResults() {
 
   if (!activeRun.results || activeRun.results.trades.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-muted">
+      <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
         <p className="text-sm">No trades generated.</p>
-        <p className="text-xs text-dim mt-1">Try lowering the signal threshold or adjusting weights.</p>
+        <p className="text-xs text-on-surface-variant mt-1">Try lowering the signal threshold or adjusting weights.</p>
         <button
           onClick={() => setTab("setup")}
-          className="mt-3 px-4 py-2 rounded-lg text-sm bg-card-hover text-foreground border border-border"
+          className="mt-3 px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           Adjust Settings
         </button>
@@ -118,22 +119,22 @@ function ResultsContent({ run }: { run: BacktestRun }) {
 
 function StatsStrip({ stats }: { stats: BacktestStats }) {
   const items = [
-    { label: "Trades", value: String(stats.total_trades) },
-    { label: "Win Rate", value: `${stats.win_rate.toFixed(1)}%`, color: stats.win_rate >= 50 ? "text-long" : "text-short" },
-    { label: "Net P&L", value: `${stats.net_pnl >= 0 ? "+" : ""}${stats.net_pnl.toFixed(2)}%`, color: stats.net_pnl >= 0 ? "text-long" : "text-short" },
-    { label: "Max DD", value: `${stats.max_drawdown.toFixed(2)}%`, color: "text-short" },
-    { label: "Sharpe", value: stats.sharpe_ratio != null ? stats.sharpe_ratio.toFixed(2) : "—" },
-    { label: "PF", value: stats.profit_factor != null ? stats.profit_factor.toFixed(2) : "—" },
+    { label: "Trades", value: String(stats.total_trades), border: "border-primary" },
+    { label: "Win Rate", value: `${stats.win_rate.toFixed(1)}%`, color: stats.win_rate >= 50 ? "text-tertiary-dim" : "text-error", border: "border-tertiary-dim" },
+    { label: "Net P&L", value: `${stats.net_pnl >= 0 ? "+" : ""}${stats.net_pnl.toFixed(2)}%`, color: stats.net_pnl >= 0 ? "text-tertiary-dim" : "text-error", border: "border-tertiary-dim" },
+    { label: "Max DD", value: `${stats.max_drawdown.toFixed(2)}%`, color: "text-error", border: "border-error" },
+    { label: "Sharpe", value: stats.sharpe_ratio != null ? stats.sharpe_ratio.toFixed(2) : "—", border: "border-primary" },
+    { label: "PF", value: stats.profit_factor != null ? stats.profit_factor.toFixed(2) : "—", border: "border-outline-variant/30" },
   ];
 
   return (
     <div>
-      <h3 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Summary</h3>
-      <div className="grid grid-cols-3 gap-2">
+      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Summary</h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {items.map((item) => (
-          <div key={item.label} className="bg-card rounded-lg border border-border p-2.5 text-center">
-            <div className="text-[10px] text-dim uppercase tracking-wider">{item.label}</div>
-            <div className={`text-sm font-mono font-semibold mt-0.5 ${item.color || "text-foreground"}`}>
+          <div key={item.label} className={`bg-surface-container p-4 rounded border-l-2 ${item.border}`}>
+            <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{item.label}</div>
+            <div className={`text-2xl font-headline font-bold tabular-nums mt-0.5 ${item.color || "text-on-surface"}`}>
               {item.value}
             </div>
           </div>
@@ -203,8 +204,8 @@ function EquityCurve({ data }: { data: { time: string; cumulative_pnl: number }[
 
   return (
     <div>
-      <h3 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Equity Curve</h3>
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Equity Curve</h3>
+      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden">
         <div ref={containerRef} />
       </div>
     </div>
@@ -217,17 +218,17 @@ function MonthlyPnl({ data }: { data: Record<string, number> }) {
 
   return (
     <div>
-      <h3 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">Monthly P&L</h3>
-      <div className="bg-card rounded-lg border border-border p-3">
+      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Monthly P&L</h3>
+      <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
         <div className="grid grid-cols-4 gap-1.5">
           {months.map(([month, pnl]) => (
             <div
               key={month}
-              className={`rounded-lg p-2 text-center text-xs font-mono ${
-                pnl >= 0 ? "bg-long/10 text-long" : "bg-short/10 text-short"
+              className={`rounded-lg p-2 text-center text-xs font-mono tabular-nums ${
+                pnl >= 0 ? "bg-tertiary-dim/10 text-tertiary-dim" : "bg-error/10 text-error"
               }`}
             >
-              <div className="text-[10px] text-dim">{month}</div>
+              <div className="text-[10px] text-on-surface-variant">{month}</div>
               <div className="font-medium">{pnl >= 0 ? "+" : ""}{pnl.toFixed(1)}%</div>
             </div>
           ))}
@@ -242,31 +243,31 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
 
   return (
     <div>
-      <h3 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">
+      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">
         Trades ({trades.length})
       </h3>
-      <div className="bg-card rounded-lg border border-border overflow-hidden divide-y divide-border">
+      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden divide-y divide-outline-variant/10">
         {trades.map((trade, i) => (
           <div key={i}>
             <button
               onClick={() => setExpanded(expanded === i ? null : i)}
-              className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-card-hover transition-colors"
+              className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-surface-container-high transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                    trade.direction === "LONG" ? "bg-long/15 text-long" : "bg-short/15 text-short"
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    trade.direction === "LONG" ? "bg-tertiary-dim/15 text-tertiary-dim" : "bg-error/15 text-error"
                   }`}
                 >
                   {trade.direction}
                 </span>
-                <span className="text-sm">{trade.pair.replace("-USDT-SWAP", "")}</span>
+                <span className="text-sm text-on-surface">{trade.pair.replace("-USDT-SWAP", "")}</span>
               </div>
               <div className="flex items-center gap-3">
                 <OutcomeBadge outcome={trade.outcome} />
                 <span
-                  className={`text-sm font-mono ${
-                    trade.pnl_pct >= 0 ? "text-long" : "text-short"
+                  className={`text-sm font-mono tabular-nums ${
+                    trade.pnl_pct >= 0 ? "text-tertiary-dim" : "text-error"
                   }`}
                 >
                   {trade.pnl_pct >= 0 ? "+" : ""}{trade.pnl_pct.toFixed(2)}%
@@ -284,15 +285,15 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
 function TradeDetail({ trade }: { trade: BacktestTrade }) {
   return (
     <div className="px-3 pb-3 space-y-1.5 text-xs">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted">
-        <div>Entry: <span className="text-foreground font-mono">{new Date(trade.entry_time).toLocaleString()}</span></div>
-        <div>Exit: <span className="text-foreground font-mono">{trade.exit_time ? new Date(trade.exit_time).toLocaleString() : "—"}</span></div>
-        <div>Entry Price: <span className="text-foreground font-mono">{trade.entry_price.toLocaleString()}</span></div>
-        <div>Exit Price: <span className="text-foreground font-mono">{trade.exit_price?.toLocaleString() ?? "—"}</span></div>
-        <div>Score: <span className="text-accent font-mono">{trade.score}</span></div>
-        <div>Duration: <span className="text-foreground font-mono">{formatDuration(trade.duration_minutes)}</span></div>
-        <div>SL: <span className="text-short font-mono">{trade.sl.toLocaleString()}</span></div>
-        <div>TP1: <span className="text-long font-mono">{trade.tp1.toLocaleString()}</span> / TP2: <span className="text-long font-mono">{trade.tp2.toLocaleString()}</span></div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-on-surface-variant">
+        <div>Entry: <span className="text-on-surface font-mono tabular-nums">{new Date(trade.entry_time).toLocaleString()}</span></div>
+        <div>Exit: <span className="text-on-surface font-mono tabular-nums">{trade.exit_time ? new Date(trade.exit_time).toLocaleString() : "—"}</span></div>
+        <div>Entry Price: <span className="text-on-surface font-mono tabular-nums">{trade.entry_price.toLocaleString()}</span></div>
+        <div>Exit Price: <span className="text-on-surface font-mono tabular-nums">{trade.exit_price?.toLocaleString() ?? "—"}</span></div>
+        <div>Score: <span className="text-primary font-mono tabular-nums">{trade.score}</span></div>
+        <div>Duration: <span className="text-on-surface font-mono tabular-nums">{formatDuration(trade.duration_minutes)}</span></div>
+        <div>SL: <span className="text-error font-mono tabular-nums">{trade.sl.toLocaleString()}</span></div>
+        <div>TP1: <span className="text-tertiary-dim font-mono tabular-nums">{trade.tp1.toLocaleString()}</span> / TP2: <span className="text-tertiary-dim font-mono tabular-nums">{trade.tp2.toLocaleString()}</span></div>
       </div>
       {trade.detected_patterns.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
@@ -300,7 +301,7 @@ function TradeDetail({ trade }: { trade: BacktestTrade }) {
             <span
               key={p}
               className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                trade.direction === "LONG" ? "bg-long/10 text-long" : "bg-short/10 text-short"
+                trade.direction === "LONG" ? "bg-tertiary-dim/10 text-tertiary-dim" : "bg-error/10 text-error"
               }`}
             >
               {p}
@@ -316,8 +317,8 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   const isWin = outcome.includes("TP") || outcome === "WIN";
   return (
     <span
-      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-        isWin ? "bg-long/10 text-long" : "bg-short/10 text-short"
+      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+        isWin ? "bg-tertiary-dim/10 text-tertiary-dim" : "bg-error/10 text-error"
       }`}
     >
       {outcome.replace("_", " ")}
@@ -325,11 +326,3 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   );
 }
 
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours < 24) return `${hours}h ${mins}m`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
-}

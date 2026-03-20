@@ -113,7 +113,7 @@ function MetricCell({ label, value, color, tooltip }: {
 }) {
   return (
     <div title={tooltip}>
-      <div className={`text-base font-headline font-bold tabular ${color}`}>{value}</div>
+      <div className={`text-base font-headline font-bold tabular-nums ${color}`}>{value}</div>
       <div className="text-[10px] text-on-surface-variant">{label}</div>
     </div>
   );
@@ -225,17 +225,18 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
             />
           );
         })}
-        {data.some(d => d.bucket < 0) && data.some(d => d.bucket >= 0) && (
-          <line
-            x1={pad.left + (data.findIndex(d => d.bucket >= 0) / data.length) * w}
-            y1={pad.top}
-            x2={pad.left + (data.findIndex(d => d.bucket >= 0) / data.length) * w}
-            y2={pad.top + h}
-            stroke={theme.colors["outline-variant"]}
-            strokeWidth="0.5"
-            strokeDasharray="3"
-          />
-        )}
+        {(() => {
+          const zeroIdx = data.findIndex(d => d.bucket >= 0);
+          if (zeroIdx < 0 || !data.some(d => d.bucket < 0)) return null;
+          const x = pad.left + (zeroIdx / data.length) * w;
+          return (
+            <line x1={x} y1={pad.top} x2={x} y2={pad.top + h}
+              stroke={theme.colors["outline-variant"]}
+              strokeWidth="0.5"
+              strokeDasharray="3"
+            />
+          );
+        })()}
       </svg>
     </div>
   );

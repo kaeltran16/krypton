@@ -30,6 +30,16 @@ export function formatPair(pair: string): string {
   return pair.replace("-USDT-SWAP", "");
 }
 
+export function formatDuration(minutes: number | null | undefined): string {
+  if (minutes == null) return "—";
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h < 24) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
 export function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);

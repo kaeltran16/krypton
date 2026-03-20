@@ -7,7 +7,7 @@ import type { Alert } from "../types";
 
 type Tab = "active" | "create" | "history";
 
-export function AlertsPage({ onBack }: { onBack?: () => void }) {
+export function AlertsPage() {
   const [tab, setTab] = useState<Tab>("active");
   const [editingAlert, setEditingAlert] = useState<Alert | null>(null);
   const { fetchAlerts } = useAlertStore();
@@ -17,26 +17,16 @@ export function AlertsPage({ onBack }: { onBack?: () => void }) {
   }, [fetchAlerts]);
 
   return (
-    <div className="p-3 space-y-4">
-      {onBack && (
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="text-muted text-sm p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
-          >
-            Back
-          </button>
-          <h2 className="text-lg font-semibold flex-1">Alerts</h2>
-        </div>
-      )}
-
-      <div className="flex gap-1 bg-card rounded-lg p-1 border border-border">
+    <div className="space-y-4">
+      <div className="flex gap-1 bg-surface-container-lowest rounded-lg p-1">
         {(["active", "create", "history"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-2 text-xs font-medium rounded-md min-h-[44px] ${
-              tab === t ? "bg-surface text-foreground" : "text-muted"
+            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded min-h-[44px] transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+              tab === t
+                ? "bg-surface-container-highest text-on-surface"
+                : "text-on-surface-variant hover:text-on-surface"
             }`}
           >
             {t === "active" ? "Active" : t === "create" ? "Create" : "History"}
@@ -49,7 +39,7 @@ export function AlertsPage({ onBack }: { onBack?: () => void }) {
       )}
       {tab === "create" && (
         <AlertForm
-          onClose={() => { setEditingAlert(null); setTab("active"); fetchAlerts(); }}
+          onClose={(saved?: boolean) => { setEditingAlert(null); setTab("active"); if (saved) fetchAlerts(); }}
           alert={editingAlert}
         />
       )}

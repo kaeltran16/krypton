@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { useAlertStore } from "../store";
 import { api } from "../../../shared/lib/api";
+import { Pencil, Trash2 } from "lucide-react";
+import { Toggle } from "../../../shared/components/Toggle";
 import type { Alert } from "../types";
 
-const URGENCY_BADGE: Record<string, string> = {
-  critical: "bg-short/20 text-short",
-  normal: "bg-accent/20 text-accent",
-  silent: "bg-border text-dim",
+const URGENCY_BORDER: Record<string, string> = {
+  critical: "border-tertiary-dim",
+  normal: "border-primary",
+  silent: "border-outline-variant/30",
+};
+
+const URGENCY_TEXT: Record<string, string> = {
+  critical: "text-tertiary-dim",
+  normal: "text-primary",
+  silent: "text-outline",
 };
 
 export function AlertList({ onEdit }: { onEdit: (alert: Alert) => void }) {
@@ -37,7 +45,7 @@ export function AlertList({ onEdit }: { onEdit: (alert: Alert) => void }) {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-20 bg-card rounded-lg animate-pulse border border-border" />
+          <div key={i} className="h-20 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
         ))}
       </div>
     );
@@ -45,7 +53,7 @@ export function AlertList({ onEdit }: { onEdit: (alert: Alert) => void }) {
 
   if (alerts.length === 0) {
     return (
-      <div className="text-center py-12 text-muted">
+      <div className="text-center py-12 text-on-surface-variant">
         <p className="text-lg mb-2">No alerts configured</p>
         <p className="text-sm">Create your first alert to get started</p>
       </div>
@@ -53,7 +61,7 @@ export function AlertList({ onEdit }: { onEdit: (alert: Alert) => void }) {
   }
 
   const errorBanner = error ? (
-    <p className="text-short text-xs bg-short/10 rounded-lg p-2 mb-2">{error}</p>
+    <p className="text-error text-xs bg-error/10 rounded-lg p-2 mb-2">{error}</p>
   ) : null;
 
   return (
@@ -62,42 +70,37 @@ export function AlertList({ onEdit }: { onEdit: (alert: Alert) => void }) {
       {alerts.map((alert) => (
         <div
           key={alert.id}
-          className="bg-card border border-border rounded-lg p-3 flex items-center justify-between gap-3"
+          className={`bg-surface-container-lowest p-3 flex items-center justify-between gap-4 border-l-2 rounded-r-lg ${URGENCY_BORDER[alert.urgency] ?? "border-outline-variant/30"}`}
         >
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium uppercase text-dim">{alert.type}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${URGENCY_BADGE[alert.urgency]}`}>
-                {alert.urgency}
-              </span>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 rounded bg-surface-container-highest flex flex-col items-center justify-center flex-shrink-0">
+              <span className="text-[10px] font-bold uppercase text-on-surface-variant">{alert.type}</span>
+              <span className={`text-[10px] font-bold ${URGENCY_TEXT[alert.urgency] ?? "text-outline"}`}>{alert.urgency}</span>
             </div>
-            <p className="text-sm font-medium truncate">{alert.label}</p>
-            {alert.last_triggered_at && (
-              <p className="text-[11px] text-dim mt-0.5">
-                Last: {new Date(alert.last_triggered_at).toLocaleString()}
-              </p>
-            )}
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-on-surface truncate">{alert.label}</p>
+              {alert.last_triggered_at && (
+                <p className="text-[10px] text-on-surface-variant mt-0.5">
+                  Last: {new Date(alert.last_triggered_at).toLocaleString()}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Toggle checked={alert.is_active} onChange={() => handleToggle(alert)} />
             <button
               onClick={() => onEdit(alert)}
-              className="text-xs text-muted hover:text-foreground p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
+              aria-label="Edit alert"
             >
-              Edit
-            </button>
-            <button
-              onClick={() => handleToggle(alert)}
-              className={`text-xs p-2 min-w-[44px] min-h-[44px] flex items-center justify-center ${
-                alert.is_active ? "text-long" : "text-dim"
-              }`}
-            >
-              {alert.is_active ? "On" : "Off"}
+              <Pencil size={16} />
             </button>
             <button
               onClick={() => handleDelete(alert.id)}
-              className="text-xs text-short/70 hover:text-short p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-error/70 hover:text-error transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
+              aria-label="Delete alert"
             >
-              Del
+              <Trash2 size={16} />
             </button>
           </div>
         </div>

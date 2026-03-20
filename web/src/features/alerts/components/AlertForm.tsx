@@ -35,7 +35,9 @@ const PORTFOLIO_CONDITIONS = [
 
 const URGENCIES: AlertUrgency[] = ["critical", "normal", "silent"];
 
-export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; alert?: Alert | null }) {
+const inputCls = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none";
+
+export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boolean) => void; alert?: Alert | null }) {
   const [type, setType] = useState<AlertType>(editAlert?.type as AlertType ?? "price");
   const [pair, setPair] = useState<string>(editAlert?.pair ?? "");
   const [condition, setCondition] = useState(editAlert?.condition ?? "");
@@ -46,7 +48,6 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Signal filter fields
   const [filterDirection, setFilterDirection] = useState(editAlert?.filters?.direction ?? "");
   const [filterMinScore, setFilterMinScore] = useState(editAlert?.filters?.min_score?.toString() ?? "");
   const [filterTimeframe, setFilterTimeframe] = useState(editAlert?.filters?.timeframe ?? "");
@@ -63,7 +64,6 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
 
     try {
       if (editAlert) {
-        // Update existing alert
         const updated = await api.updateAlert(editAlert.id, {
           threshold: threshold ? parseFloat(threshold) : undefined,
           secondary_threshold: secondaryThreshold ? parseInt(secondaryThreshold) : undefined,
@@ -78,7 +78,6 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
         });
         useAlertStore.getState().updateAlertInList(updated);
       } else {
-        // Create new alert
         const body: AlertCreateRequest = {
           type,
           pair: pair || null,
@@ -104,7 +103,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
         const alert = await api.createAlert(body);
         useAlertStore.getState().addAlert(alert);
       }
-      onClose();
+      onClose(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save alert");
     } finally {
@@ -115,16 +114,16 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {!editAlert && (
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {ALERT_TYPES.map((t) => (
             <button
               key={t.value}
               type="button"
               onClick={() => { setType(t.value); setCondition(""); }}
-              className={`flex-1 py-2 text-xs font-medium rounded-lg border min-h-[44px] ${
+              className={`py-3 text-xs font-bold uppercase tracking-wider rounded-lg border min-h-[44px] transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 type === t.value
-                  ? "bg-accent/20 border-accent text-accent"
-                  : "bg-card border-border text-muted"
+                  ? "bg-surface-container-highest text-primary border-primary/40"
+                  : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/20"
               }`}
             >
               {t.label}
@@ -137,7 +136,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
         <select
           value={pair}
           onChange={(e) => setPair(e.target.value)}
-          className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+          className={inputCls}
         >
           <option value="">All pairs</option>
           {AVAILABLE_PAIRS.map((p) => (
@@ -150,7 +149,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
         <select
           value={condition}
           onChange={(e) => setCondition(e.target.value)}
-          className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+          className={inputCls}
           required
         >
           <option value="">Select condition</option>
@@ -166,7 +165,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
           placeholder="Threshold"
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
-          className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+          className={inputCls}
           required
           step="any"
         />
@@ -178,7 +177,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
           placeholder="Window (minutes, 5-60)"
           value={secondaryThreshold}
           onChange={(e) => setSecondaryThreshold(e.target.value)}
-          className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+          className={inputCls}
           min={5}
           max={60}
           required
@@ -190,7 +189,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
           <select
             value={filterDirection}
             onChange={(e) => setFilterDirection(e.target.value)}
-            className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+            className={inputCls}
           >
             <option value="">Any direction</option>
             <option value="LONG">LONG</option>
@@ -201,14 +200,14 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
             placeholder="Min score (0-100)"
             value={filterMinScore}
             onChange={(e) => setFilterMinScore(e.target.value)}
-            className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+            className={inputCls}
             min={0}
             max={100}
           />
           <select
             value={filterTimeframe}
             onChange={(e) => setFilterTimeframe(e.target.value)}
-            className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+            className={inputCls}
           >
             <option value="">Any timeframe</option>
             <option value="15m">15m</option>
@@ -218,23 +217,24 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
         </div>
       )}
 
-      <div className="flex gap-2">
-        {URGENCIES.map((u) => (
-          <button
-            key={u}
-            type="button"
-            onClick={() => setUrgency(u)}
-            className={`flex-1 py-2 text-xs font-medium rounded-lg border min-h-[44px] ${
-              urgency === u
-                ? u === "critical" ? "bg-short/20 border-short text-short"
-                : u === "normal" ? "bg-accent/20 border-accent text-accent"
-                : "bg-card border-dim text-dim"
-                : "bg-card border-border text-muted"
-            }`}
-          >
-            {u}
-          </button>
-        ))}
+      <div>
+        <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">Urgency</div>
+        <div className="bg-surface-container-lowest rounded p-1 flex gap-1">
+          {URGENCIES.map((u) => (
+            <button
+              key={u}
+              type="button"
+              onClick={() => setUrgency(u)}
+              className={`flex-1 py-2 text-xs font-bold uppercase rounded min-h-[44px] transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+                urgency === u
+                  ? "bg-surface-container-highest text-on-surface rounded"
+                  : "text-on-surface-variant"
+              }`}
+            >
+              {u}
+            </button>
+          ))}
+        </div>
       </div>
 
       <input
@@ -242,27 +242,27 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: () => void; 
         placeholder="Cooldown (minutes)"
         value={cooldown}
         onChange={(e) => setCooldown(e.target.value)}
-        className="w-full bg-card border border-border rounded-lg p-3 text-sm min-h-[44px]"
+        className={inputCls}
         min={1}
         max={1440}
       />
 
       {error && (
-        <p className="text-short text-xs">{error}</p>
+        <p className="text-error text-xs">{error}</p>
       )}
 
       <div className="flex gap-2">
         <button
           type="button"
           onClick={onClose}
-          className="flex-1 py-3 text-sm bg-card border border-border rounded-lg min-h-[44px]"
+          className="flex-1 py-3 text-sm bg-surface-container border border-outline-variant/20 rounded-lg min-h-[44px] text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={submitting}
-          className="flex-1 py-3 text-sm bg-accent text-surface font-medium rounded-lg min-h-[44px] disabled:opacity-50"
+          className="flex-1 bg-primary-container text-on-primary-fixed py-3 rounded-lg font-headline font-bold uppercase tracking-widest text-xs min-h-[44px] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           {submitting ? "Saving..." : editAlert ? "Update Alert" : "Create Alert"}
         </button>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight } from "lucide-react";
+import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity } from "lucide-react";
 import { SubPageShell } from "../../../shared/components/SubPageShell";
 import SettingsPage from "../../settings/components/SettingsPage";
 import RiskPage from "../../settings/components/RiskPage";
@@ -7,115 +7,139 @@ import EnginePage from "../../engine/components/EnginePage";
 import { BacktestView } from "../../backtest/components/BacktestView";
 import { MLTrainingView } from "../../ml/components/MLTrainingView";
 import { AlertsPage } from "../../alerts/components/AlertsPage";
+import { JournalView } from "../../signals/components/JournalView";
+import { EngineDashboard } from "../../engine/components/EngineDashboard";
+import { SystemDiagnostics } from "../../system/components/SystemDiagnostics";
 import { hapticTap } from "../../../shared/lib/haptics";
 
-type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | null;
+type SubPage = "engine" | "engine-dashboard" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | null;
 
-interface NavItem {
-  id: SubPage;
-  icon: typeof Cpu;
-  iconColor: string;
-  iconBg: string;
-  label: string;
-  description: string;
-  chevronHover: string;
-}
-
-const CLUSTERS: { label: string; items: NavItem[] }[] = [
+const CLUSTERS = [
   {
     label: "Execution Layer",
     items: [
-      { id: "engine", icon: Cpu, iconColor: "text-primary", iconBg: "bg-primary/10", label: "Engine", description: "Active Instances & Latency", chevronHover: "group-hover:text-primary" },
-      { id: "backtest", icon: LineChart, iconColor: "text-long", iconBg: "bg-long/10", label: "Backtest", description: "Historical Simulation Hub", chevronHover: "group-hover:text-long" },
+      { key: "engine" as SubPage, icon: Cpu, label: "Engine", desc: "Pipeline parameters & weights", color: "text-primary" },
+      { key: "engine-dashboard" as SubPage, icon: Activity, label: "Engine Dashboard", desc: "Live parameter monitoring", color: "text-primary" },
+      { key: "backtest" as SubPage, icon: LineChart, label: "Backtest", desc: "Historical simulation hub", color: "text-tertiary-dim" },
     ],
   },
   {
     label: "Intelligence Hub",
     items: [
-      { id: "ml", icon: Brain, iconColor: "text-primary", iconBg: "bg-primary/10", label: "ML Training", description: "Neural Net Performance", chevronHover: "group-hover:text-primary" },
-      { id: "alerts", icon: BellRing, iconColor: "text-short", iconBg: "bg-short/10", label: "Alerts", description: "Critical Signal Configurations", chevronHover: "group-hover:text-short" },
+      { key: "ml" as SubPage, icon: Brain, label: "ML Training", desc: "Neural net optimization", color: "text-primary" },
+      { key: "alerts" as SubPage, icon: BellRing, label: "Alerts", desc: "Critical signal configurations", color: "text-error" },
+      { key: "journal" as SubPage, icon: LineChart, label: "Journal", desc: "Trading analytics & calendar", color: "text-primary" },
     ],
   },
   {
     label: "Safety & Security",
     items: [
-      { id: "risk", icon: Shield, iconColor: "text-primary", iconBg: "bg-primary/10", label: "Risk", description: "Exposure Limits & Kill Switches", chevronHover: "group-hover:text-primary" },
-      { id: "settings", icon: Settings, iconColor: "text-outline", iconBg: "bg-outline/10", label: "Settings", description: "Global System Preferences", chevronHover: "group-hover:text-on-surface" },
+      { key: "risk" as SubPage, icon: Shield, label: "Risk", desc: "Exposure limits & controls", color: "text-primary" },
+      { key: "system" as SubPage, icon: Activity, label: "System", desc: "Health & diagnostics", color: "text-tertiary-dim" },
+      { key: "settings" as SubPage, icon: Settings, label: "Settings", desc: "Global system preferences", color: "text-outline" },
     ],
   },
 ];
 
-const SUB_PAGE_TITLES: Record<string, string> = {
-  engine: "Engine Dashboard",
+const PAGE_TITLES: Record<string, string> = {
+  engine: "Engine Parameters",
+  "engine-dashboard": "Engine Dashboard",
   backtest: "Backtest",
   ml: "ML Training",
   alerts: "Alerts",
   risk: "Risk Management",
   settings: "Settings",
+  journal: "Journal & Analytics",
+  system: "System Diagnostics",
 };
 
 export function MorePage() {
-  const [active, setActive] = useState<SubPage>(null);
+  const [activePage, setActivePage] = useState<SubPage>(null);
 
-  if (active) {
+  if (activePage) {
     return (
-      <SubPageShell title={SUB_PAGE_TITLES[active] ?? ""} onBack={() => setActive(null)}>
-        {active === "settings" && <SettingsPage />}
-        {active === "risk" && <RiskPage />}
-        {active === "engine" && <EnginePage />}
-        {active === "backtest" && <BacktestView />}
-        {active === "ml" && <MLTrainingView />}
-        {active === "alerts" && <AlertsPage />}
+      <SubPageShell title={PAGE_TITLES[activePage] ?? ""} onBack={() => setActivePage(null)}>
+        {activePage === "engine" && <EnginePage />}
+        {activePage === "engine-dashboard" && <EngineDashboard />}
+        {activePage === "backtest" && <BacktestView />}
+        {activePage === "ml" && <MLTrainingView />}
+        {activePage === "alerts" && <AlertsPage />}
+        {activePage === "risk" && <RiskPage />}
+        {activePage === "settings" && <SettingsPage />}
+        {activePage === "journal" && <JournalView />}
+        {activePage === "system" && <SystemDiagnostics />}
       </SubPageShell>
     );
   }
 
   return (
-    <div className="min-h-full terminal-grid relative overflow-hidden">
-      {/* Header */}
-      <header className="px-6 py-8">
-        <h1 className="font-headline text-3xl font-bold tracking-tight">System Hub</h1>
-        <p className="text-on-surface-variant text-sm mt-1 uppercase tracking-widest opacity-70">
-          Core Protocol v4.0
-        </p>
-      </header>
+    <div className="min-h-full relative">
+      {/* Terminal grid background */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{
+        backgroundSize: "40px 40px",
+        backgroundImage: "linear-gradient(to right, rgba(0,207,252,0.5) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,207,252,0.5) 1px, transparent 1px)",
+      }} />
 
-      {/* Navigation Clusters */}
-      <div className="px-4 space-y-6 relative z-10">
-        {CLUSTERS.map((cluster) => (
-          <section key={cluster.label}>
-            <div className="px-2 mb-2">
-              <span className="text-[10px] font-bold text-primary tracking-widest uppercase opacity-80">{cluster.label}</span>
-            </div>
-            <div className="bg-surface-container rounded-lg overflow-hidden border border-outline-variant/10">
-              {cluster.items.map((item, i) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => { hapticTap(); setActive(item.id); }}
-                    className={`w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
-                      i < cluster.items.length - 1 ? "border-b border-outline-variant/5" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded flex items-center justify-center ${item.iconBg}`}>
-                        <Icon size={20} className={item.iconColor} />
-                      </div>
-                      <div className="text-left">
-                        <span className="block text-on-surface font-semibold">{item.label}</span>
-                        <span className="block text-xs text-on-surface-variant">{item.description}</span>
-                      </div>
-                    </div>
-                    <ChevronRight size={20} className={`text-outline transition-colors ${item.chevronHover}`} />
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+      <div className="relative z-10 px-4 pb-8">
+        {/* Header */}
+        <header className="py-8">
+          <h1 className="font-headline text-3xl font-bold text-on-surface tracking-tight">System Hub</h1>
+          <p className="text-on-surface-variant text-sm mt-1 uppercase tracking-widest opacity-70">v1.0.0</p>
+        </header>
 
-        <div className="pb-8" />
+        {/* Navigation Clusters */}
+        <div className="space-y-6">
+          {CLUSTERS.map((cluster) => (
+            <section key={cluster.label}>
+              <div className="px-2 mb-2">
+                <span className="text-[10px] font-bold text-primary tracking-widest uppercase opacity-80">{cluster.label}</span>
+              </div>
+              <div className="bg-surface-container rounded-lg overflow-hidden border border-outline-variant/10">
+                {cluster.items.map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => { hapticTap(); setActivePage(item.key); }}
+                      className={`w-full flex items-center justify-between p-4 hover:bg-surface-container-highest transition-colors group focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+                        i < cluster.items.length - 1 ? "border-b border-outline-variant/5" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center ${item.color}`}>
+                          <Icon size={20} />
+                        </div>
+                        <div className="text-left">
+                          <span className="block text-on-surface font-semibold text-sm">{item.label}</span>
+                          <span className="block text-xs text-on-surface-variant">{item.desc}</span>
+                        </div>
+                      </div>
+                      <ChevronRight size={20} className="text-outline group-hover:text-primary transition-colors" />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {/* Connection Status Card */}
+        <section className="mt-8">
+          <button
+            onClick={() => { hapticTap(); setActivePage("system"); }}
+            className="w-full bg-surface-container-lowest p-5 border-l-4 border-primary rounded-r-lg text-left hover:bg-surface-container-low transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="font-headline font-bold text-on-surface uppercase text-sm tracking-widest">Connection Secure</h3>
+                <p className="text-xs text-on-surface-variant mt-1 font-mono">ENCRYPTED_NODE: LOCAL</p>
+              </div>
+              <div className="bg-primary/20 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-primary uppercase">System Status</span>
+              </div>
+            </div>
+          </button>
+        </section>
       </div>
     </div>
   );

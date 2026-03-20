@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useBacktestStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 import ParameterOverridePanel from "./ParameterOverridePanel";
+import { Toggle } from "../../../shared/components/Toggle";
 
 const TIMEFRAMES = ["15m", "1h", "4h"] as const;
 
@@ -29,7 +30,7 @@ export function BacktestSetup() {
     <div className="space-y-4">
       {/* Pairs */}
       <Section title="Pairs">
-        <div className="flex gap-1.5">
+        <div className="space-y-2">
           {AVAILABLE_PAIRS.map((pair) => (
             <button
               key={pair}
@@ -39,13 +40,16 @@ export function BacktestSetup() {
                   : [...config.pairs, pair];
                 if (next.length > 0) updateConfig({ pairs: next });
               }}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`w-full flex items-center justify-between p-3 rounded border transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 config.pairs.includes(pair)
-                  ? "bg-accent/15 text-accent border border-accent/30"
-                  : "bg-card-hover text-muted"
+                  ? "bg-surface-container-lowest border-primary/30"
+                  : "bg-surface-container-lowest border-outline-variant/20"
               }`}
             >
-              {pair.replace("-USDT-SWAP", "")}
+              <span className="text-sm font-medium text-on-surface">{pair.replace("-USDT-SWAP", "")}/USDT</span>
+              {config.pairs.includes(pair) && (
+                <span className="text-primary text-xs font-bold">&#10003;</span>
+              )}
             </button>
           ))}
         </div>
@@ -53,15 +57,15 @@ export function BacktestSetup() {
 
       {/* Timeframe */}
       <Section title="Timeframe">
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf}
               onClick={() => updateConfig({ timeframe: tf })}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 config.timeframe === tf
-                  ? "bg-accent/15 text-accent border border-accent/30"
-                  : "bg-card-hover text-muted"
+                  ? "bg-primary-container text-on-primary-container"
+                  : "bg-surface-container-lowest text-on-surface-variant"
               }`}
             >
               {tf}
@@ -74,21 +78,21 @@ export function BacktestSetup() {
       <Section title="Date Range">
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className="text-[10px] text-dim uppercase tracking-wider">From</label>
+            <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">From</label>
             <input
               type="date"
               value={config.date_from}
               onChange={(e) => updateConfig({ date_from: e.target.value })}
-              className="w-full mt-1 p-2 bg-card-hover rounded-lg border border-border text-sm font-mono focus:border-accent/50 focus:outline-none text-foreground"
+              className="w-full mt-1 p-2 bg-surface-container-lowest rounded border border-outline-variant/20 text-sm font-mono focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-on-surface"
             />
           </div>
           <div className="flex-1">
-            <label className="text-[10px] text-dim uppercase tracking-wider">To</label>
+            <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">To</label>
             <input
               type="date"
               value={config.date_to}
               onChange={(e) => updateConfig({ date_to: e.target.value })}
-              className="w-full mt-1 p-2 bg-card-hover rounded-lg border border-border text-sm font-mono focus:border-accent/50 focus:outline-none text-foreground"
+              className="w-full mt-1 p-2 bg-surface-container-lowest rounded border border-outline-variant/20 text-sm font-mono focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-on-surface"
             />
           </div>
         </div>
@@ -108,20 +112,20 @@ export function BacktestSetup() {
         />
         <div className="mt-2 space-y-2 opacity-40 pointer-events-none">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted">Order Flow</span>
+            <span className="text-sm text-on-surface-variant">Order Flow</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-dim font-mono">N/A</span>
-              <span className="text-[10px] text-dim" title="Historical data unavailable">
-                ⓘ
+              <span className="text-xs text-on-surface-variant font-mono">N/A</span>
+              <span className="text-[10px] text-on-surface-variant" title="Historical data unavailable">
+                &#9432;
               </span>
             </div>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted">On-Chain</span>
+            <span className="text-sm text-on-surface-variant">On-Chain</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-dim font-mono">N/A</span>
-              <span className="text-[10px] text-dim" title="Historical data unavailable">
-                ⓘ
+              <span className="text-xs text-on-surface-variant font-mono">N/A</span>
+              <span className="text-[10px] text-on-surface-variant" title="Historical data unavailable">
+                &#9432;
               </span>
             </div>
           </div>
@@ -131,8 +135,8 @@ export function BacktestSetup() {
       {/* Thresholds */}
       <Section title="Thresholds">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm">Signal Threshold</span>
-          <span className="text-sm font-mono text-accent">{config.signal_threshold}</span>
+          <span className="text-sm text-on-surface">Signal Threshold</span>
+          <span className="text-sm font-mono text-primary font-bold">{config.signal_threshold}</span>
         </div>
         <input
           type="range"
@@ -140,9 +144,9 @@ export function BacktestSetup() {
           max={100}
           value={config.signal_threshold}
           onChange={(e) => updateConfig({ signal_threshold: Number(e.target.value) })}
-          className="w-full accent-accent"
+          className="w-full accent-primary"
         />
-        <div className="flex justify-between text-[10px] text-dim mt-0.5">
+        <div className="flex justify-between text-[10px] font-mono text-outline mt-0.5">
           <span>More signals</span>
           <span>Strong only</span>
         </div>
@@ -151,23 +155,14 @@ export function BacktestSetup() {
       {/* ML Blending */}
       <Section title="ML Blending">
         <div className="flex items-center justify-between">
-          <span className="text-sm">Blend ML predictions</span>
-          <button
-            onClick={() => updateConfig({ ml_enabled: !config.ml_enabled })}
-            className={`w-10 h-5 rounded-full transition-colors relative ${
-              config.ml_enabled ? "bg-accent" : "bg-card-hover border border-border"
-            }`}
-          >
-            <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform ${
-              config.ml_enabled ? "translate-x-5 bg-surface" : "translate-x-0.5 bg-muted"
-            }`} />
-          </button>
+          <span className="text-sm text-on-surface">Blend ML predictions</span>
+          <Toggle checked={config.ml_enabled} onChange={() => updateConfig({ ml_enabled: !config.ml_enabled })} />
         </div>
         {config.ml_enabled && (
           <div className="mt-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm">ML Confidence</span>
-              <span className="text-sm font-mono text-accent">{config.ml_confidence_threshold}%</span>
+              <span className="text-sm text-on-surface">ML Confidence</span>
+              <span className="text-sm font-mono text-primary font-bold">{config.ml_confidence_threshold}%</span>
             </div>
             <input
               type="range"
@@ -175,13 +170,13 @@ export function BacktestSetup() {
               max={95}
               value={config.ml_confidence_threshold}
               onChange={(e) => updateConfig({ ml_confidence_threshold: Number(e.target.value) })}
-              className="w-full accent-accent"
+              className="w-full accent-primary"
             />
-            <div className="flex justify-between text-[10px] text-dim mt-0.5">
+            <div className="flex justify-between text-[10px] font-mono text-outline mt-0.5">
               <span>More signals</span>
               <span>High confidence only</span>
             </div>
-            <p className="text-[10px] text-dim mt-2">
+            <p className="text-[10px] text-on-surface-variant mt-2">
               Blends trained LSTM predictions with rule-based scores. Train a model first via Settings.
             </p>
           </div>
@@ -194,17 +189,17 @@ export function BacktestSetup() {
           {INDICATORS.map(({ key, label }) => (
             <button
               key={key}
-              className="px-3 py-1.5 rounded-full text-xs font-medium bg-accent/15 text-accent border border-accent/30"
+              className="px-3 py-1.5 rounded-full text-xs font-bold bg-primary/15 text-primary border border-primary/30"
             >
               {label}
             </button>
           ))}
           <button
             onClick={() => updateConfig({ enable_patterns: !config.enable_patterns })}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               config.enable_patterns
-                ? "bg-accent/15 text-accent border border-accent/30"
-                : "bg-card-hover text-muted border border-transparent"
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "bg-surface-container-lowest text-on-surface-variant border border-transparent"
             }`}
           >
             Candlestick Patterns
@@ -215,7 +210,7 @@ export function BacktestSetup() {
       {/* Risk / Levels */}
       <Section title="Risk & Levels">
         <NumberInput
-          label="SL (ATR ×)"
+          label="SL (ATR x)"
           value={config.sl_atr_multiplier}
           step={0.1}
           min={0.5}
@@ -223,7 +218,7 @@ export function BacktestSetup() {
           onChange={(v) => updateConfig({ sl_atr_multiplier: v })}
         />
         <NumberInput
-          label="TP1 (ATR ×)"
+          label="TP1 (ATR x)"
           value={config.tp1_atr_multiplier}
           step={0.1}
           min={0.5}
@@ -231,7 +226,7 @@ export function BacktestSetup() {
           onChange={(v) => updateConfig({ tp1_atr_multiplier: v })}
         />
         <NumberInput
-          label="TP2 (ATR ×)"
+          label="TP2 (ATR x)"
           value={config.tp2_atr_multiplier}
           step={0.1}
           min={0.5}
@@ -252,23 +247,23 @@ export function BacktestSetup() {
       <Section title="Historical Data">
         <button
           onClick={() => setShowImport(!showImport)}
-          className="text-sm text-accent underline underline-offset-2"
+          className="text-sm text-primary underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
         >
           {showImport ? "Hide import" : "Import historical candles"}
         </button>
         {showImport && (
           <div className="mt-2 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted">Lookback</span>
+              <span className="text-sm text-on-surface-variant">Lookback</span>
               <div className="flex gap-1.5">
                 {[30, 90, 180, 365].map((d) => (
                   <button
                     key={d}
                     onClick={() => setImportDays(d)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                       importDays === d
-                        ? "bg-accent/15 text-accent border border-accent/30"
-                        : "bg-card-hover text-muted"
+                        ? "bg-primary/15 text-primary border border-primary/30"
+                        : "bg-surface-container-lowest text-on-surface-variant"
                     }`}
                   >
                     {d}d
@@ -279,12 +274,12 @@ export function BacktestSetup() {
             <button
               onClick={() => startImport(importDays)}
               disabled={importLoading}
-              className="w-full py-2 rounded-lg text-sm font-medium bg-card-hover text-foreground border border-border hover:border-accent/30 transition-colors disabled:opacity-50"
+              className="w-full py-2 rounded-lg text-sm font-medium bg-surface-container-lowest text-on-surface border border-outline-variant/20 hover:border-primary/30 transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               {importLoading ? "Importing..." : `Import ${importDays} days of candles`}
             </button>
             {importStatus && (
-              <p className="text-xs text-muted">
+              <p className="text-xs text-on-surface-variant">
                 Status: {importStatus.status} — {importStatus.total_imported} candles imported
               </p>
             )}
@@ -301,16 +296,16 @@ export function BacktestSetup() {
       {/* Run Button */}
       <div className="pt-2">
         {runError && (
-          <p className="text-xs text-short mb-2">{runError}</p>
+          <p className="text-xs text-error mb-2">{runError}</p>
         )}
         {isRunning ? (
           <div className="space-y-2">
-            <div className="w-full h-2 bg-card-hover rounded-full overflow-hidden">
-              <div className="h-full bg-accent rounded-full animate-pulse" style={{ width: "60%" }} />
+            <div className="w-full h-2 bg-surface-container-lowest rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full animate-pulse motion-reduce:animate-none" style={{ width: "60%" }} />
             </div>
             <button
               onClick={cancelRun}
-              className="w-full py-3 rounded-lg text-sm font-medium bg-short/15 text-short border border-short/30 transition-colors"
+              className="w-full py-3 rounded-lg text-sm font-medium bg-error/15 text-error border border-error/30 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               Cancel
             </button>
@@ -318,7 +313,7 @@ export function BacktestSetup() {
         ) : (
           <button
             onClick={startRun}
-            className="w-full py-3 rounded-lg text-sm font-semibold bg-accent text-surface transition-colors hover:bg-accent/90"
+            className="w-full bg-primary-container text-on-primary-fixed py-4 rounded-lg font-headline font-bold text-xs tracking-widest uppercase active:scale-[0.98] transition-transform focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             Run Backtest
           </button>
@@ -331,8 +326,8 @@ export function BacktestSetup() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="text-[10px] text-dim font-medium uppercase tracking-wider mb-1.5 px-1">{title}</h3>
-      <div className="bg-card rounded-lg border border-border p-3">{children}</div>
+      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">{title}</h3>
+      <div className="bg-surface-container p-5 rounded">{children}</div>
     </div>
   );
 }
@@ -349,17 +344,25 @@ function WeightSlider({
   return (
     <div className="mb-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm">{label}</span>
-        <span className="text-sm font-mono text-accent">{value}%</span>
+        <span className="text-[10px] font-bold text-on-surface uppercase">{label}</span>
+        <span className="text-[10px] font-mono text-primary font-bold">{value}%</span>
       </div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-accent"
-      />
+      <div className="relative">
+        <div className="h-2 w-full bg-surface-container-lowest rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full shadow-[0_0_8px_rgba(105,218,255,0.4)]"
+            style={{ width: `${value}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full accent-primary opacity-0 absolute top-0 left-0 h-2 cursor-pointer"
+        />
+      </div>
     </div>
   );
 }
@@ -380,8 +383,8 @@ function NumberInput({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-      <span className="text-sm">{label}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-outline-variant/10 last:border-0">
+      <span className="text-sm text-on-surface">{label}</span>
       <input
         type="number"
         value={value}
@@ -389,7 +392,7 @@ function NumberInput({
         min={min}
         max={max}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-20 p-1.5 bg-card-hover rounded-lg border border-border text-sm font-mono text-right focus:border-accent/50 focus:outline-none text-foreground"
+        className="w-20 p-1.5 bg-surface-container-lowest rounded border border-outline-variant/20 text-sm font-mono text-right focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-on-surface"
       />
     </div>
   );

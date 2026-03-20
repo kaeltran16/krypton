@@ -42,7 +42,7 @@ describe("MLTrainingView", () => {
   async function renderAndSettle(props = {}) {
     let result: ReturnType<typeof render>;
     await act(async () => {
-      result = render(<MLTrainingView onBack={() => {}} {...props} />);
+      result = render(<MLTrainingView {...props} />);
     });
     return result!;
   }
@@ -63,15 +63,9 @@ describe("MLTrainingView", () => {
       expect(api.getMLStatus).toHaveBeenCalledOnce();
     });
 
-    it("should call onBack when back button is clicked", async () => {
-      const onBack = vi.fn();
-      await act(async () => {
-        render(<MLTrainingView onBack={onBack} />);
-      });
-
-      fireEvent.click(screen.getByText("Back"));
-
-      expect(onBack).toHaveBeenCalledOnce();
+    it("should render without onBack (SubPageShell handles navigation)", async () => {
+      await renderAndSettle();
+      expect(screen.queryByText("Back")).not.toBeInTheDocument();
     });
   });
 
