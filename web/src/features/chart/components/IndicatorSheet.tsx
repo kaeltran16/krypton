@@ -63,17 +63,6 @@ for (const group of INDICATOR_GROUPS) {
   }
 }
 
-const OSCILLATOR_IDS = new Set(
-  INDICATOR_GROUPS.find((g) => g.label === "Oscillators")!.items.map((i) => i.id)
-);
-
-export function hasOscillator(enabledIds: Set<string>): boolean {
-  for (const id of enabledIds) {
-    if (OSCILLATOR_IDS.has(id)) return true;
-  }
-  return false;
-}
-
 const STORAGE_KEY = "krypton:indicators";
 
 export function getStoredIndicators(): Set<string> {
@@ -123,7 +112,7 @@ export function IndicatorSheet({ open, onClose, enabled, onToggle }: Props) {
       onClick={(e) => {
         if (e.target === dialogRef.current) onClose();
       }}
-      className="fixed inset-x-0 bottom-0 top-auto m-0 w-full max-h-[70dvh] overflow-y-auto rounded-t-xl bg-surface-container text-on-surface p-0 backdrop:bg-black/60"
+      className="bottom-sheet"
     >
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">

@@ -15,10 +15,12 @@ import type {
   UTCTimestamp,
   DeepPartial,
   ChartOptions,
+  MouseEventParams,
 } from "lightweight-charts";
 import type { CandleData } from "../../../shared/lib/api";
 import type { TickCallback } from "../hooks/useChartData";
 import { theme } from "../../../shared/theme";
+import { formatPricePrecision } from "../../../shared/lib/format";
 import { INDICATOR_MAP } from "./IndicatorSheet";
 import {
   calcEMA,
@@ -40,11 +42,22 @@ import {
   detectSupportResistance,
 } from "../lib/indicators";
 
+export interface CrosshairCandle {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  time: number;
+}
+
 interface Props {
   candles: CandleData[];
   enabledIndicators: Set<string>;
   loading?: boolean;
   onTickRef?: MutableRefObject<TickCallback | null>;
+  pair: string;
+  onCrosshairMove?: (candle: CrosshairCandle | null) => void;
 }
 
 interface SeriesEntry {
@@ -57,7 +70,7 @@ const CHART_OPTIONS: DeepPartial<ChartOptions> = {
     background: { type: ColorType.Solid, color: theme.chart.background },
     textColor: theme.chart.text,
     fontFamily: "Inter, system-ui, sans-serif",
-    fontSize: 11,
+    fontSize: 12,
   },
   grid: {
     vertLines: { color: theme.chart.grid },
@@ -71,9 +84,10 @@ const CHART_OPTIONS: DeepPartial<ChartOptions> = {
     borderColor: theme.chart.scaleBorder,
     timeVisible: true,
     secondsVisible: false,
+    minBarSpacing: 7,
   },
   handleScale: { pinch: true, mouseWheel: true, axisPressedMouseMove: true },
-  handleScroll: { pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+  handleScroll: { pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
 };
 
 const COMPOUND_INDICATORS: Record<string, string[]> = {
@@ -86,7 +100,11 @@ function toTime(ts: number): UTCTimestamp {
   return (ts / 1000) as UTCTimestamp;
 }
 
-export function CandlestickChart({ candles, enabledIndicators, loading, onTickRef }: Props) {
+function makePriceFormatter(pair: string) {
+  return (price: number) => formatPricePrecision(price, pair);
+}
+
+export function CandlestickChart({ candles, enabledIndicators, loading, onTickRef, pair, onCrosshairMove }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -182,6 +200,54 @@ export function CandlestickChart({ candles, enabledIndicators, loading, onTickRe
       if (onTickRef) onTickRef.current = null;
     };
   }, [onTickRef]);
+
+  // ── Effect 1.6: Auto-precision price format ([pair]) ──
+  useEffect(() => {
+    const candleSeries = candleSeriesRef.current;
+    if (!candleSeries) return;
+    candleSeries.applyOptions({
+      priceFormat: {
+        type: "custom",
+        formatter: makePriceFormatter(pair),
+      },
+    });
+  }, [pair]);
+
+  // ── Effect 1.7: Crosshair ↔ OHLC callback ([onCrosshairMove]) ──
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candleSeries = candleSeriesRef.current;
+    const volSeries = volSeriesRef.current;
+    if (!chart || !candleSeries || !volSeries || !onCrosshairMove) return;
+
+    const handler = (params: MouseEventParams) => {
+      if (!params.point || params.point.x < 0 || params.point.y < 0) {
+        onCrosshairMove(null);
+        return;
+      }
+      const ohlc = params.seriesData.get(candleSeries) as
+        | { open: number; high: number; low: number; close: number; time: number }
+        | undefined;
+      const vol = params.seriesData.get(volSeries) as
+        | { value: number }
+        | undefined;
+      if (ohlc) {
+        onCrosshairMove({
+          open: ohlc.open,
+          high: ohlc.high,
+          low: ohlc.low,
+          close: ohlc.close,
+          volume: vol?.value ?? 0,
+          time: typeof ohlc.time === "number" ? ohlc.time : 0,
+        });
+      } else {
+        onCrosshairMove(null);
+      }
+    };
+
+    chart.subscribeCrosshairMove(handler);
+    return () => chart.unsubscribeCrosshairMove(handler);
+  }, [onCrosshairMove]);
 
   // ── Effect 2: Candle data ([candles] only) ──
   // Runs BEFORE Effect 3 (indicators) — do not reorder
@@ -508,10 +574,10 @@ export function CandlestickChart({ candles, enabledIndicators, loading, onTickRe
       <div
         ref={containerRef}
         className="w-full h-full"
-        style={{ touchAction: "pan-y", overscrollBehavior: "none" }}
+        style={{ touchAction: "none", overscrollBehavior: "none" }}
       />
       {loading && (
-        <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-card/80 backdrop-blur-sm">
+        <div className="absolute top-8 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-card/80 backdrop-blur-sm">
           <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           <span className="text-[10px] text-muted font-medium">Loading</span>
         </div>

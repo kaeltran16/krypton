@@ -40,6 +40,18 @@ export function formatDuration(minutes: number | null | undefined): string {
   return `${d}d ${h % 24}h`;
 }
 
+export function getPairDecimals(pair: string): number {
+  return pair.startsWith("BTC") ? 1 : pair.startsWith("ETH") ? 2 : 4;
+}
+
+export function formatPricePrecision(price: number, pair: string): string {
+  const decimals = getPairDecimals(pair);
+  return price.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 export function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);
