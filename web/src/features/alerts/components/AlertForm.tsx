@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../../shared/lib/api";
 import { useAlertStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
+import { Dropdown } from "../../../shared/components/Dropdown";
 import type { Alert, AlertType, AlertUrgency, AlertCreateRequest } from "../types";
 
 const ALERT_TYPES: { value: AlertType; label: string }[] = [
@@ -133,30 +134,29 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       )}
 
       {type !== "portfolio" && (
-        <select
+        <Dropdown
           value={pair}
-          onChange={(e) => setPair(e.target.value)}
-          className={inputCls}
-        >
-          <option value="">All pairs</option>
-          {AVAILABLE_PAIRS.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
+          onChange={setPair}
+          placeholder="All pairs"
+          options={[
+            { value: "", label: "All pairs" },
+            ...AVAILABLE_PAIRS.map((p) => ({ value: p, label: p })),
+          ]}
+          ariaLabel="Select trading pair"
+        />
       )}
 
       {type !== "signal" && conditions.length > 0 && !editAlert && (
-        <select
+        <Dropdown
           value={condition}
-          onChange={(e) => setCondition(e.target.value)}
-          className={inputCls}
-          required
-        >
-          <option value="">Select condition</option>
-          {conditions.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </select>
+          onChange={setCondition}
+          placeholder="Select condition"
+          options={[
+            { value: "", label: "Select condition" },
+            ...conditions,
+          ]}
+          ariaLabel="Select condition"
+        />
       )}
 
       {type !== "signal" && (
@@ -186,15 +186,17 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
 
       {type === "signal" && (
         <div className="space-y-3">
-          <select
+          <Dropdown
             value={filterDirection}
-            onChange={(e) => setFilterDirection(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">Any direction</option>
-            <option value="LONG">LONG</option>
-            <option value="SHORT">SHORT</option>
-          </select>
+            onChange={setFilterDirection}
+            placeholder="Any direction"
+            options={[
+              { value: "", label: "Any direction" },
+              { value: "LONG", label: "LONG" },
+              { value: "SHORT", label: "SHORT" },
+            ]}
+            ariaLabel="Filter direction"
+          />
           <input
             type="number"
             placeholder="Min score (0-100)"
@@ -204,16 +206,18 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
             min={0}
             max={100}
           />
-          <select
+          <Dropdown
             value={filterTimeframe}
-            onChange={(e) => setFilterTimeframe(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">Any timeframe</option>
-            <option value="15m">15m</option>
-            <option value="1h">1H</option>
-            <option value="4h">4H</option>
-          </select>
+            onChange={setFilterTimeframe}
+            placeholder="Any timeframe"
+            options={[
+              { value: "", label: "Any timeframe" },
+              { value: "15m", label: "15m" },
+              { value: "1h", label: "1H" },
+              { value: "4h", label: "4H" },
+            ]}
+            ariaLabel="Filter timeframe"
+          />
         </div>
       )}
 

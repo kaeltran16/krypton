@@ -5,6 +5,7 @@ interface SegmentedControlProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   fullWidth?: boolean;
+  variant?: "pill" | "underline";
 }
 
 export function SegmentedControl<T extends string>({
@@ -12,32 +13,38 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   fullWidth = false,
+  variant = "pill",
 }: SegmentedControlProps<T>) {
+  const isUnderline = variant === "underline";
+
   return (
     <div
-      className={`flex gap-1 bg-surface-container-lowest p-1 rounded-lg ${fullWidth ? "w-full" : "w-fit"}`}
+      className={`flex ${isUnderline ? "gap-4" : "gap-1 bg-surface-container p-1 rounded-lg"} ${fullWidth ? "w-full" : "w-fit"}`}
     >
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          aria-pressed={value === opt.value}
-          onClick={() => {
-            if (value !== opt.value) {
-              hapticTap();
-              onChange(opt.value);
-            }
-          }}
-          className={`min-h-[44px] px-4 text-xs font-semibold rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-            fullWidth ? "flex-1" : ""
-          } ${
-            value === opt.value
-              ? "bg-surface-container-highest text-primary"
-              : "text-on-surface-variant hover:bg-surface-container-highest"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            aria-pressed={active}
+            onClick={() => {
+              if (!active) {
+                hapticTap();
+                onChange(opt.value);
+              }
+            }}
+            className={`min-h-[44px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              fullWidth ? "flex-1 text-center" : ""
+            } ${
+              isUnderline
+                ? `pb-1 text-sm font-semibold border-b-2 ${active ? "text-on-surface border-primary" : "text-on-surface-variant border-transparent"}`
+                : `px-4 text-xs font-semibold rounded ${active ? "bg-primary/15 text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

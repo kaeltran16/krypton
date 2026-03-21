@@ -4,6 +4,7 @@ import ParameterCategory from "./ParameterCategory";
 import ParameterRow from "./ParameterRow";
 import WeightBar from "./WeightBar";
 import RegimeGrid from "./RegimeGrid";
+import { Dropdown } from "../../../shared/components/Dropdown";
 
 export default function EnginePage() {
   const { params, loading, error, fetch, refresh } = useEngineStore();
@@ -89,24 +90,26 @@ export default function EnginePage() {
       {allPairs.length > 0 && (
         <>
           <div className="flex gap-2 pt-2">
-            <select
+            <Dropdown
               value={selectedPair}
-              onChange={(e) => {
-                setSelectedPair(e.target.value);
-                const tfs = Object.keys(params.regime_weights?.[e.target.value] || {});
+              onChange={(v) => {
+                setSelectedPair(v);
+                const tfs = Object.keys(params.regime_weights?.[v] || {});
                 if (tfs.length > 0) setSelectedTf(tfs[0]);
               }}
-              className="bg-surface border border-border rounded px-2 py-1 text-xs text-foreground"
-            >
-              {allPairs.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <select
+              options={allPairs.map((p) => ({ value: p, label: p }))}
+              size="sm"
+              fullWidth={false}
+              ariaLabel="Select pair"
+            />
+            <Dropdown
               value={selectedTf}
-              onChange={(e) => setSelectedTf(e.target.value)}
-              className="bg-surface border border-border rounded px-2 py-1 text-xs text-foreground"
-            >
-              {allTfs.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
-            </select>
+              onChange={setSelectedTf}
+              options={allTfs.map((tf) => ({ value: tf, label: tf }))}
+              size="sm"
+              fullWidth={false}
+              ariaLabel="Select timeframe"
+            />
           </div>
 
           {regimeData && (

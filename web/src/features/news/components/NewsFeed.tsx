@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { useNews } from "../hooks/useNews";
 import { NewsCard } from "./NewsCard";
+import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import type { NewsCategory, NewsImpact } from "../types";
 
 type CategoryFilter = "all" | NewsCategory;
 type ImpactFilter = "all" | NewsImpact;
+
+const CATEGORIES: { value: CategoryFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "crypto", label: "Crypto" },
+  { value: "macro", label: "Macro" },
+];
 
 export function NewsFeed() {
   const [category, setCategory] = useState<CategoryFilter>("all");
@@ -20,21 +27,7 @@ export function NewsFeed() {
     <div className="flex flex-col gap-4 p-4">
       {/* Category filter pills */}
       <div className="flex flex-wrap gap-3">
-        <div className="bg-surface-container-low p-1 rounded-lg flex gap-1">
-          {(["all", "crypto", "macro"] as CategoryFilter[]).map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={`px-3 py-1.5 text-xs uppercase tracking-widest rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                category === c
-                  ? "bg-surface-container-highest text-primary shadow-[0_0_8px_rgba(105,218,255,0.15)]"
-                  : "text-on-surface-variant hover:text-on-surface"
-              }`}
-            >
-              {c === "all" ? "All" : c.charAt(0).toUpperCase() + c.slice(1)}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} />
       </div>
 
       {/* Impact level toggles */}

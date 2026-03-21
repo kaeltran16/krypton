@@ -3,6 +3,7 @@ import { api } from "../../../shared/lib/api";
 import ApplyModal from "./ApplyModal";
 import type { AtrOptimizationResult } from "../../engine/types";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
+import { Dropdown } from "../../../shared/components/Dropdown";
 
 const TIMEFRAMES = ["15m", "1h", "4h", "1D"];
 
@@ -41,14 +42,22 @@ export default function OptimizeTab() {
   return (
     <div className="p-3 space-y-4">
       <div className="flex gap-2">
-        <select value={pair} onChange={(e) => setPair(e.target.value)}
-          className="bg-surface border border-border rounded px-2 py-1.5 text-xs text-foreground">
-          {AVAILABLE_PAIRS.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)}
-          className="bg-surface border border-border rounded px-2 py-1.5 text-xs text-foreground">
-          {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
-        </select>
+        <Dropdown
+          value={pair}
+          onChange={setPair}
+          options={AVAILABLE_PAIRS.map((p) => ({ value: p, label: p }))}
+          size="sm"
+          fullWidth={false}
+          ariaLabel="Select pair"
+        />
+        <Dropdown
+          value={timeframe}
+          onChange={setTimeframe}
+          options={TIMEFRAMES.map((tf) => ({ value: tf, label: tf }))}
+          size="sm"
+          fullWidth={false}
+          ariaLabel="Select timeframe"
+        />
       </div>
 
       <div className="border border-border/50 rounded-lg p-3">

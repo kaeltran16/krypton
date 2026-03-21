@@ -70,12 +70,17 @@ def parse_positions_response(raw: dict) -> list[dict]:
     return positions
 
 
+def _parse_error(data: dict) -> str:
+    """Extract the most descriptive error message from an OKX response."""
+    msg = data.get("msg", "Unknown error")
+    if data.get("data") and data["data"][0].get("sMsg"):
+        msg = data["data"][0]["sMsg"]
+    return msg
+
+
 def parse_order_response(raw: dict) -> dict:
     if raw.get("code") != "0":
-        msg = raw.get("msg", "Unknown error")
-        if raw.get("data") and raw["data"][0].get("sMsg"):
-            msg = raw["data"][0]["sMsg"]
-        return {"success": False, "error": msg}
+        return {"success": False, "error": _parse_error(raw)}
     order = raw["data"][0]
     return {
         "success": True,
@@ -160,6 +165,22 @@ class OKXClient:
             resp.raise_for_status()
             return parse_instruments_response(resp.json())
 
+    async def get_last_price(self, pair: str) -> float | None:
+        """Fetch last traded price for an instrument."""
+        path = f"/api/v5/market/ticker?instId={pair}"
+        try:
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=5) as client:
+                resp = await client.get(path)
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("code") == "0" and data.get("data"):
+                    last = data["data"][0].get("last")
+                    if last not in (None, ""):
+                        return float(last)
+        except Exception:
+            logger.debug("Failed to fetch last price for %s", pair, exc_info=True)
+        return None
+
     async def get_fills_today(self) -> list[dict]:
         """Fetch today's (UTC) fills from OKX."""
         now = datetime.now(timezone.utc)
@@ -184,6 +205,7 @@ class OKXClient:
             "instId": pair,
             "tdMode": "cross",
             "side": side,
+            "posSide": "long" if side == "buy" else "short",
             "ordType": order_type,
             "sz": size,
         }
@@ -215,6 +237,7 @@ class OKXClient:
             "instId": pair,
             "tdMode": "cross",
             "side": close_side,
+            "posSide": "long" if side == "buy" else "short",
             "ordType": "conditional",
             "sz": size,
         }
@@ -234,9 +257,27 @@ class OKXClient:
             resp.raise_for_status()
             data = resp.json()
             if data.get("code") != "0":
-                msg = data.get("msg", "Unknown error")
-                if data.get("data") and data["data"][0].get("sMsg"):
-                    msg = data["data"][0]["sMsg"]
-                return {"success": False, "error": msg}
+                return {"success": False, "error": _parse_error(data)}
             algo = data["data"][0]
             return {"success": True, "algo_id": algo.get("algoId")}
+
+    async def close_position(self, pair: str, pos_side: str) -> dict:
+        """Market-close a position. pos_side is 'long' or 'short'."""
+        path = "/api/v5/trade/close-position"
+        body_dict = {
+            "instId": pair,
+            "mgnMode": "cross",
+            "posSide": pos_side,
+        }
+        body = json.dumps(body_dict)
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.post(
+                path,
+                content=body,
+                headers=self._headers("POST", path, body),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != "0":
+                return {"success": False, "error": _parse_error(data)}
+            return {"success": True}

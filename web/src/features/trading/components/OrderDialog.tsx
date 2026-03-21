@@ -29,7 +29,7 @@ export function OrderDialog({ signal, onClose }: Props) {
       setOverrideText("");
       setShowOverride(false);
 
-      if (signal.risk_metrics) {
+      if (signal.risk_metrics?.position_size_base != null) {
         setSize(String(signal.risk_metrics.position_size_base));
       } else {
         setSize("1");
@@ -84,7 +84,7 @@ export function OrderDialog({ signal, onClose }: Props) {
   }
 
   return (
-    <dialog ref={ref} onClose={onClose} onClick={(e) => { if (e.target === ref.current) onClose(); }} className="bg-surface-container text-on-surface rounded-xl w-[calc(100%-2rem)] max-w-md max-h-[85dvh] overflow-y-auto p-0 m-auto backdrop:bg-black/60">
+    <dialog ref={ref} onClose={onClose} onClick={(e) => { if (e.target === ref.current) onClose(); }}>
       <div className="p-4 border-b border-outline-variant/10">
         <div className="flex items-center justify-between">
           <span className="text-lg font-headline font-bold">Confirm Order</span>
@@ -155,7 +155,7 @@ export function OrderDialog({ signal, onClose }: Props) {
           {signal.risk_metrics && (
             <>
               <div className="text-on-surface-variant">Risk</div>
-              <div className="font-mono text-short tabular">${signal.risk_metrics.risk_amount_usd.toFixed(0)} ({signal.risk_metrics.risk_pct}%)</div>
+              <div className="font-mono text-short tabular">${signal.risk_metrics.risk_amount_usd?.toFixed(0) ?? "—"} ({signal.risk_metrics.risk_pct ?? "—"}%)</div>
               <div className="text-on-surface-variant">R:R</div>
               <div className="font-mono text-long tabular">
                 {signal.risk_metrics.tp1_rr != null ? `1:${signal.risk_metrics.tp1_rr}` : "—"}
@@ -167,7 +167,7 @@ export function OrderDialog({ signal, onClose }: Props) {
 
         <div>
           <label className="text-sm text-on-surface-variant block mb-1">
-            Size {signal.risk_metrics ? `(recommended: ${signal.risk_metrics.position_size_base})` : "(contracts)"}
+            Size {signal.risk_metrics?.position_size_base != null ? `(recommended: ${signal.risk_metrics.position_size_base})` : "(contracts)"}
           </label>
           <input
             type="text"

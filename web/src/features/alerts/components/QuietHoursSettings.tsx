@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAlertStore } from "../store";
 import { Toggle } from "../../../shared/components/Toggle";
+import { Dropdown } from "../../../shared/components/Dropdown";
 import { api } from "../../../shared/lib/api";
 
 export function QuietHoursSettings() {
@@ -12,10 +13,10 @@ export function QuietHoursSettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const timezones = useMemo(
-    () => Intl.supportedValuesOf("timeZone").filter(tz =>
-      ["America/", "Europe/", "Asia/", "Pacific/", "UTC"].some(p => tz.startsWith(p))
-    ),
+  const timezoneOptions = useMemo(
+    () => Intl.supportedValuesOf("timeZone")
+      .filter(tz => ["America/", "Europe/", "Asia/", "Pacific/", "UTC"].some(p => tz.startsWith(p)))
+      .map(tz => ({ value: tz, label: tz })),
     [],
   );
 
@@ -59,18 +60,15 @@ export function QuietHoursSettings() {
               />
             </label>
           </div>
-          <label>
+          <div>
             <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Timezone</span>
-            <select
+            <Dropdown
               value={settings.quiet_hours_tz}
-              onChange={(e) => update({ quiet_hours_tz: e.target.value })}
-              className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
-            >
-              {timezones.map((tz) => (
-                <option key={tz} value={tz}>{tz}</option>
-              ))}
-            </select>
-          </label>
+              onChange={(v) => update({ quiet_hours_tz: v })}
+              options={timezoneOptions}
+              ariaLabel="Select timezone"
+            />
+          </div>
         </>
       )}
     </div>

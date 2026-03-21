@@ -8,7 +8,7 @@ import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { SignalDetail } from "../../signals/components/SignalDetail";
 import { useSignalStore } from "../../signals/store";
-import type { Portfolio, Position } from "../../../shared/lib/api";
+import { api, type Portfolio, type Position } from "../../../shared/lib/api";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
 
@@ -46,7 +46,7 @@ export function HomeView() {
         <div className="flex flex-col gap-3 p-4">
           <AccountHeader portfolio={portfolio} loading={accountLoading} equityCurve={equityCurve} />
           <PortfolioStrip portfolio={portfolio} positions={positions} loading={accountLoading} />
-          <OpenPositions positions={positions} loading={accountLoading} />
+          <OpenPositions positions={positions} loading={accountLoading} onRefresh={refresh} />
           <RecentSignals />
           <LatestNewsCard news={recentNews} loading={newsLoading} />
           <PerformanceCard stats={stats} loading={statsLoading} />
@@ -119,8 +119,9 @@ function PortfolioStrip({ portfolio, positions, loading }: { portfolio: Portfoli
   );
 }
 
-function OpenPositions({ positions, loading }: { positions: Position[]; loading: boolean }) {
+function OpenPositions({ positions, loading, onRefresh }: { positions: Position[]; loading: boolean; onRefresh: () => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [closing, setClosing] = useState<string | null>(null);
 
   if (loading) return <div className="h-20 bg-surface-container rounded-lg animate-pulse" />;
 
@@ -197,6 +198,27 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
                         <span className="text-xs text-on-surface-variant block uppercase">Margin</span>
                         <span className="text-xs font-medium tabular">${formatPrice(pos.margin)}</span>
                       </div>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setClosing(key);
+                          try {
+                            await api.closePosition(pos.pair, pos.side);
+                            onRefresh();
+                          } catch {
+                            // error already visible via refresh
+                          } finally {
+                            setClosing(null);
+                            setExpanded(null);
+                          }
+                        }}
+                        disabled={closing === key}
+                        className="w-full py-2.5 rounded-lg bg-short/15 text-short text-sm font-medium hover:bg-short/25 active:bg-short/35 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-short"
+                      >
+                        {closing === key ? "Closing..." : "Close Position"}
+                      </button>
                     </div>
                   </div>
                 </div>

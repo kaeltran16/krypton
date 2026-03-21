@@ -19,7 +19,7 @@ export function UpdateModal({ onUpdate, onDismiss }: UpdateModalProps) {
       onClick={(e) => {
         if (e.target === ref.current) onDismiss();
       }}
-      className="w-full max-w-sm rounded-2xl p-6 bg-card border border-white/[0.06] text-white"
+      className="p-6"
     >
       <h2 className="text-foreground text-lg font-semibold mb-2">
         Update Available

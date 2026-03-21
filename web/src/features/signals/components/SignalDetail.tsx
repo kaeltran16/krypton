@@ -43,7 +43,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
   return (
     <dialog ref={ref} onClose={onClose} onClick={(e) => {
       if (e.target === ref.current) onClose();
-    }} className="bg-surface-container text-on-surface rounded-xl w-[calc(100%-2rem)] max-w-lg max-h-[90dvh] overflow-y-auto p-0 m-auto backdrop:bg-black/60">
+    }}>
       <div className="sticky top-0 z-10 flex justify-end p-2">
         <button
           onClick={onClose}
@@ -95,7 +95,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
                 <span className={f.direction === "bullish" ? "text-long" : "text-short"}>
                   {f.direction === "bullish" ? "+" : "-"}
                 </span>
-                <span className="text-on-surface-variant">{f.type.replace(/_/g, " ")}</span>
+                <span className="text-on-surface-variant">{(f.type ?? "unknown").replace(/_/g, " ")}</span>
                 <span className="font-mono">{"*".repeat(f.strength)}</span>
               </div>
             ))}

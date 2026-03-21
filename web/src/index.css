@@ -12,7 +12,7 @@
   --color-primary-container: #00cffc;
   --glass-nav: rgba(31, 38, 47, 0.60);
   --glass-card: rgba(20, 26, 33, 0.65);
-  --glass-dialog: rgba(10, 15, 20, 0.9);
+  --glass-dialog: rgba(10, 15, 20, 0.97);
   --glass-border: rgba(67, 72, 79, 0.15);
   --glass-backdrop: rgba(0, 0, 0, 0.7);
   --glass-blur-card: 12px;
@@ -65,23 +65,73 @@ dialog::backdrop {
   background: var(--glass-backdrop);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+
+dialog[open]::backdrop {
+  opacity: 1;
 }
 
 dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
   margin: 0;
-  margin-top: auto;
   padding: 0;
   border: none;
-  max-height: 85vh;
-  width: 100%;
-  max-width: 32rem;
-  border-radius: 0.5rem 0.5rem 0 0;
+  max-height: 85dvh;
+  width: calc(100% - 2rem);
+  max-width: 28rem;
+  border-radius: 0.75rem;
   overflow-y: auto;
   background: var(--glass-dialog);
   backdrop-filter: blur(var(--glass-blur-dialog));
   -webkit-backdrop-filter: blur(var(--glass-blur-dialog));
   color: var(--color-foreground);
+  border: 1px solid var(--glass-border);
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out, overlay 0.2s ease-out allow-discrete, display 0.2s ease-out allow-discrete;
+}
+
+dialog[open] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* Bottom sheet variant */
+dialog.bottom-sheet {
+  margin: auto 0 0 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 70dvh;
+  border-radius: 0.75rem 0.75rem 0 0;
+  border: none;
   border-top: 1px solid var(--glass-border);
+  transform: translateY(100%);
+}
+
+dialog[open].bottom-sheet {
+  transform: translateY(0);
+}
+
+@starting-style {
+  dialog[open].bottom-sheet {
+    opacity: 0;
+    transform: translateY(100%);
+  }
 }
 
 .safe-top {

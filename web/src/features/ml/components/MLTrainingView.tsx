@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api, type MLTrainRequest, type MLTrainJob, type MLStatus, type MLBackfillJob, type MLTrainProgress } from "../../../shared/lib/api";
+import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 
 type Tab = "configure" | "training" | "history" | "backfill";
 
@@ -143,12 +144,17 @@ export function MLTrainingView() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-surface-container rounded-lg border border-outline-variant/10 p-1">
-        <TabButton active={tab === "configure"} onClick={() => setTab("configure")}>Configure</TabButton>
-        <TabButton active={tab === "training"} onClick={() => setTab("training")}>Training</TabButton>
-        <TabButton active={tab === "history"} onClick={() => setTab("history")}>History</TabButton>
-        <TabButton active={tab === "backfill"} onClick={() => setTab("backfill")}>Backfill</TabButton>
-      </div>
+      <SegmentedControl
+        options={[
+          { value: "configure", label: "Configure" },
+          { value: "training", label: "Training" },
+          { value: "history", label: "History" },
+          { value: "backfill", label: "Backfill" },
+        ]}
+        value={tab}
+        onChange={setTab}
+        fullWidth
+      />
 
       {/* Tab Content */}
       {tab === "configure" && (
@@ -201,19 +207,6 @@ export function MLTrainingView() {
         />
       )}
     </div>
-  );
-}
-
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-        active ? "bg-primary/15 text-primary" : "text-on-surface-variant hover:text-on-surface"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

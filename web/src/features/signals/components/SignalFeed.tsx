@@ -3,10 +3,9 @@ import { Radio } from "lucide-react";
 import { useSignalStore } from "../store";
 import { SignalCard } from "./SignalCard";
 import { SignalDetail } from "./SignalDetail";
-import { ConnectionStatus } from "./ConnectionStatus";
 import { OrderDialog } from "../../trading/components/OrderDialog";
-import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { EmptyState } from "../../../shared/components/EmptyState";
+import { hapticTap } from "../../../shared/lib/haptics";
 import type { Signal, UserStatus } from "../types";
 
 type StatusFilter = "ALL" | "ACTIVE" | UserStatus;
@@ -41,13 +40,26 @@ export function SignalFeed() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <SegmentedControl
-          options={FILTERS}
-          value={statusFilter}
-          onChange={setStatusFilter}
-        />
-        <ConnectionStatus />
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            aria-pressed={statusFilter === f.value}
+            onClick={() => {
+              if (statusFilter !== f.value) {
+                hapticTap();
+                setStatusFilter(f.value);
+              }
+            }}
+            className={`min-h-[32px] px-3 text-xs font-medium rounded-full whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              statusFilter === f.value
+                ? "bg-primary/15 text-primary"
+                : "bg-surface-container text-on-surface-variant"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {filtered.length === 0 ? (

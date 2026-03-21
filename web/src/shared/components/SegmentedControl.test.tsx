@@ -28,4 +28,11 @@ describe("SegmentedControl", () => {
     fireEvent.click(screen.getByText("Charlie"));
     expect(onChange).toHaveBeenCalledWith("c");
   });
+
+  it("renders underline variant with border-b-2", () => {
+    render(<SegmentedControl options={OPTIONS} value="a" onChange={() => {}} variant="underline" />);
+    const active = screen.getByText("Alpha");
+    expect(active.className).toContain("border-b-2");
+    expect(active.className).toContain("border-primary");
+  });
 });
