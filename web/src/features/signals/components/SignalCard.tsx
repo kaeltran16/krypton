@@ -26,7 +26,7 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
         <div>
           <div className="flex items-center gap-2">
             <span className="font-headline text-lg font-bold tracking-tight">{formatPair(signal.pair)}</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+            <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
               isLong
                 ? "bg-long/20 text-long border-long/30"
                 : "bg-short/20 text-short border-short/30"
@@ -34,7 +34,7 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
               {signal.direction} {signal.timeframe}
             </span>
           </div>
-          <span className="text-on-surface-variant text-[10px] uppercase tracking-widest mt-1 block">
+          <span className="text-on-surface-variant text-xs uppercase tracking-widest mt-1 block">
             {formatRelativeTime(signal.created_at)}
           </span>
         </div>
@@ -57,7 +57,7 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
         <div className="px-4 py-3 flex items-center gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
           <PatternBadges patterns={signal.detected_patterns} />
           {signal.correlated_news_ids && signal.correlated_news_ids.length > 0 && (
-            <Newspaper size={16} className="text-primary ml-auto flex-shrink-0" />
+            <Newspaper size={16} className="text-primary ml-auto flex-shrink-0" aria-label="Has correlated news" />
           )}
         </div>
       )}
@@ -65,19 +65,19 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
       {/* Price grid */}
       <div className="px-4 py-3 grid grid-cols-2 gap-y-3 gap-x-6 bg-surface-container-low/50">
         <div>
-          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Entry Price</span>
+          <span className="text-xs uppercase tracking-widest text-on-surface-variant mb-1 block">Entry Price</span>
           <span className="font-headline font-bold text-sm tabular">{formatPrice(signal.levels.entry)}</span>
         </div>
         <div>
-          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Stop Loss</span>
+          <span className="text-xs uppercase tracking-widest text-on-surface-variant mb-1 block">Stop Loss</span>
           <span className="font-headline font-bold text-sm text-short tabular">{formatPrice(signal.levels.stop_loss)}</span>
         </div>
         <div>
-          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Take Profit 1</span>
+          <span className="text-xs uppercase tracking-widest text-on-surface-variant mb-1 block">Take Profit 1</span>
           <span className="font-headline font-bold text-sm text-long tabular">{formatPrice(signal.levels.take_profit_1)}</span>
         </div>
         <div>
-          <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Take Profit 2</span>
+          <span className="text-xs uppercase tracking-widest text-on-surface-variant mb-1 block">Take Profit 2</span>
           <span className="font-headline font-bold text-sm text-long tabular">{formatPrice(signal.levels.take_profit_2)}</span>
         </div>
       </div>
@@ -88,13 +88,13 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
           {signal.risk_metrics ? (
             <>
               <div className="flex flex-col">
-                <span className="text-[10px] uppercase text-on-surface-variant">Risk</span>
-                <span className="text-[11px] font-bold tabular">{signal.risk_metrics.risk_pct}%</span>
+                <span className="text-xs uppercase text-on-surface-variant">Risk</span>
+                <span className="text-xs font-bold tabular">{signal.risk_metrics.risk_pct}%</span>
               </div>
               {signal.risk_metrics.tp1_rr != null && (
                 <div className="flex flex-col">
-                  <span className="text-[10px] uppercase text-on-surface-variant">R:R</span>
-                  <span className="text-[11px] font-bold tabular">
+                  <span className="text-xs uppercase text-on-surface-variant">R:R</span>
+                  <span className="text-xs font-bold tabular">
                     {signal.risk_metrics.tp1_rr}{signal.risk_metrics.tp2_rr != null ? ` / ${signal.risk_metrics.tp2_rr}` : ""}
                   </span>
                 </div>
@@ -104,8 +104,8 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
             <RRFallback levels={signal.levels} />
           )}
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase text-on-surface-variant">Status</span>
-            <span className={`text-[11px] font-bold uppercase flex items-center gap-1 ${isPending ? "text-long" : "text-on-surface-variant"}`}>
+            <span className="text-xs uppercase text-on-surface-variant">Status</span>
+            <span className={`text-xs font-bold uppercase flex items-center gap-1 ${isPending ? "text-long" : "text-on-surface-variant"}`}>
               {isPending && <span className="w-1 h-1 rounded-full bg-long motion-safe:animate-pulse" />}
               {isPending ? "Active" : signal.user_status ?? signal.outcome}
             </span>
@@ -131,8 +131,8 @@ function RRFallback({ levels }: { levels: Signal["levels"] }) {
   const tp2rr = (Math.abs(levels.take_profit_2 - levels.entry) / slDist).toFixed(1);
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase text-on-surface-variant">R:R</span>
-      <span className="text-[11px] font-bold tabular">1:{tp1rr} / 1:{tp2rr}</span>
+      <span className="text-xs uppercase text-on-surface-variant">R:R</span>
+      <span className="text-xs font-bold tabular">1:{tp1rr} / 1:{tp2rr}</span>
     </div>
   );
 }
@@ -152,7 +152,7 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   };
 
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium mt-1 inline-block ${styles[outcome] ?? ""}`}>
+    <span className={`text-xs px-1.5 py-0.5 rounded font-medium mt-1 inline-block ${styles[outcome] ?? ""}`}>
       {labels[outcome] ?? outcome}
     </span>
   );

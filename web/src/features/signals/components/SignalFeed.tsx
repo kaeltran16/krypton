@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { Radio } from "lucide-react";
 import { useSignalStore } from "../store";
 import { SignalCard } from "./SignalCard";
 import { SignalDetail } from "./SignalDetail";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { OrderDialog } from "../../trading/components/OrderDialog";
+import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import type { Signal, UserStatus } from "../types";
 
 type StatusFilter = "ALL" | "ACTIVE" | UserStatus;
@@ -39,28 +41,22 @@ export function SignalFeed() {
   return (
     <div className="p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex gap-1 bg-surface-container-lowest p-1 rounded-lg">
-          {FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                statusFilter === value
-                  ? "bg-surface-container-highest text-primary"
-                  : "text-on-surface-variant hover:bg-surface-container-highest"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={FILTERS}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
         <ConnectionStatus />
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-on-surface-variant text-center text-sm mt-8">
-          {statusFilter === "ALL" ? "No signals in the last 24 hours" : `No ${statusFilter.toLowerCase()} signals`}
-        </p>
+        <div className="flex flex-col items-center gap-3 mt-12 text-center">
+          <Radio size={32} className="text-outline" />
+          <p className="text-on-surface-variant text-sm">
+            {statusFilter === "ALL" ? "No signals in the last 24 hours" : `No ${statusFilter.toLowerCase()} signals`}
+          </p>
+          <p className="text-outline text-xs">Signals appear as the engine detects opportunities</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {filtered.map((signal, i) => (

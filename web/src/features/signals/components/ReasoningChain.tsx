@@ -99,7 +99,7 @@ export function ReasoningChain({ signal }: ReasoningChainProps) {
 
   return (
     <div className="p-5 border-b border-outline-variant/10">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-4">
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-4">
         Engine Reasoning Chain
       </h3>
       {steps.map((step, i) => (
@@ -118,8 +118,13 @@ export function ReasoningChain({ signal }: ReasoningChainProps) {
                 {step.phase}
               </span>
               {step.value && (
-                <span className="text-[10px] font-mono tabular-nums text-primary">
+                <span className="text-xs font-mono tabular-nums text-primary">
                   {step.value}
+                </span>
+              )}
+              {step.sentiment && step.sentiment !== "neutral" && (
+                <span className={`text-xs font-medium ${step.sentiment === "bullish" ? "text-long" : "text-short"}`}>
+                  {step.sentiment === "bullish" ? "\u25B2" : "\u25BC"}
                 </span>
               )}
             </div>

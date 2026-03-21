@@ -103,9 +103,9 @@ export function CalendarView() {
 
       {/* Month navigation */}
       <div className="flex items-center justify-between">
-        <button onClick={prevMonth} className="text-on-surface-variant hover:text-on-surface px-2 py-1 text-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">&larr;</button>
+        <button onClick={prevMonth} aria-label="Previous month" className="text-on-surface-variant hover:text-on-surface px-2 py-1 text-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">&larr;</button>
         <span className="text-sm font-headline font-bold">{getMonthName(year, month)}</span>
-        <button onClick={nextMonth} className="text-on-surface-variant hover:text-on-surface px-2 py-1 text-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">&rarr;</button>
+        <button onClick={nextMonth} aria-label="Next month" className="text-on-surface-variant hover:text-on-surface px-2 py-1 text-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">&rarr;</button>
       </div>
 
       {loading ? (
@@ -122,7 +122,7 @@ export function CalendarView() {
             {/* Weekday headers */}
             <div className="grid grid-cols-7 gap-0.5 mb-1">
               {WEEKDAYS.map((d) => (
-                <div key={d} className="text-center text-[10px] text-on-surface-variant font-bold uppercase py-1">{d}</div>
+                <div key={d} className="text-center text-xs text-on-surface-variant font-bold uppercase py-1">{d}</div>
               ))}
             </div>
 
@@ -158,8 +158,8 @@ export function CalendarView() {
                     </span>
                     {dayData && (
                       <>
-                        <span className="text-[10px] text-on-surface-variant">{dayData.signal_count}s</span>
-                        <span className={`text-[10px] font-mono tabular-nums ${dayData.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
+                        <span className="text-xs text-on-surface-variant">{dayData.signal_count}s</span>
+                        <span className={`text-xs font-mono tabular-nums ${dayData.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
                           {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(1)}
                         </span>
                       </>

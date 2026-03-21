@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { Activity } from "lucide-react";
 import { useSignalStats } from "../../home/hooks/useSignalStats";
 import { theme } from "../../../shared/theme";
 import { formatPair } from "../../../shared/lib/format";
+import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import type { SignalStats, PerformanceMetrics } from "../types";
 
 type Period = "7" | "30" | "365";
@@ -20,7 +22,7 @@ export function DeepDiveView() {
     return (
       <div className="p-3 space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 bg-surface-container rounded-lg animate-pulse" />
+          <div key={i} className="h-24 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none" />
         ))}
       </div>
     );
@@ -29,9 +31,11 @@ export function DeepDiveView() {
   if (!stats || stats.total_resolved < 5) {
     return (
       <div className="p-3">
-        <p className="text-on-surface-variant text-center text-sm mt-12">
-          Need more resolved trades to show metrics
-        </p>
+        <div className="flex flex-col items-center gap-3 mt-12 text-center">
+          <Activity size={32} className="text-outline" />
+          <p className="text-on-surface-variant text-sm">Need at least 5 resolved trades</p>
+          <p className="text-outline text-xs">Deep dive metrics require more data</p>
+        </div>
       </div>
     );
   }
@@ -39,21 +43,11 @@ export function DeepDiveView() {
   return (
     <div className="p-3 space-y-3 overflow-y-auto">
       {/* Period selector */}
-      <div className="flex gap-1 bg-surface-container-lowest p-1 rounded-lg w-fit">
-        {PERIODS.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => setPeriod(value)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-              period === value
-                ? "bg-surface-container-highest text-primary"
-                : "text-on-surface-variant hover:bg-surface-container-highest"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        options={PERIODS}
+        value={period}
+        onChange={setPeriod}
+      />
 
       <MetricsGrid perf={stats.performance} totalResolved={stats.total_resolved} />
       <BestWorstTrades perf={stats.performance} />
@@ -66,7 +60,7 @@ export function DeepDiveView() {
 function MetricsGrid({ perf, totalResolved }: { perf: PerformanceMetrics; totalResolved: number }) {
   return (
     <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">Performance Metrics</h3>
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">Performance Metrics</h3>
       <div className="grid grid-cols-3 gap-3 text-center">
         <MetricCell
           label="Sharpe"
@@ -114,7 +108,7 @@ function MetricCell({ label, value, color, tooltip }: {
   return (
     <div title={tooltip}>
       <div className={`text-base font-headline font-bold tabular-nums ${color}`}>{value}</div>
-      <div className="text-[10px] text-on-surface-variant">{label}</div>
+      <div className="text-xs text-on-surface-variant">{label}</div>
     </div>
   );
 }
@@ -124,12 +118,12 @@ function BestWorstTrades({ perf }: { perf: PerformanceMetrics }) {
 
   return (
     <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">Notable Trades</h3>
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">Notable Trades</h3>
       <div className="space-y-1.5">
         {perf.best_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
+              <span className="text-xs text-long bg-long/10 px-1.5 py-0.5 rounded">BEST</span>
               <span className="text-on-surface-variant">
                 {formatPair(perf.best_trade.pair)} {perf.best_trade.timeframe} {perf.best_trade.direction}
               </span>
@@ -140,7 +134,7 @@ function BestWorstTrades({ perf }: { perf: PerformanceMetrics }) {
         {perf.worst_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
+              <span className="text-xs text-short bg-short/10 px-1.5 py-0.5 rounded">WORST</span>
               <span className="text-on-surface-variant">
                 {formatPair(perf.worst_trade.pair)} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
               </span>
@@ -180,8 +174,8 @@ function DrawdownChart({ data }: { data: SignalStats["drawdown_series"] }) {
 
   return (
     <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Drawdown</h3>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-2">Drawdown</h3>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={`Drawdown chart, max drawdown ${minVal.toFixed(1)}%`}>
         <polygon fill={theme.colors.short + "15"} points={fillPoints} />
         <polyline fill="none" stroke={theme.colors.short} strokeWidth="1.5" strokeLinejoin="round" points={points} />
         <text x={width - pad.right} y={height - 2} textAnchor="end" fontSize="8" fill={theme.colors.outline}>
@@ -205,8 +199,8 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
 
   return (
     <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">P&L Distribution</h3>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-2">P&L Distribution</h3>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={`P&L distribution across ${data.length} buckets`}>
         {data.map((d, i) => {
           const barH = (d.count / maxCount) * h;
           const x = pad.left + (i / data.length) * w;

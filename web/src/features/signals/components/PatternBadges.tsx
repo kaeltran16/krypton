@@ -12,7 +12,7 @@ export function PatternBadges({ patterns }: PatternBadgesProps) {
       {patterns.map((p) => (
         <span
           key={p.name}
-          className={`flex items-center gap-1 whitespace-nowrap bg-surface-container-highest px-2 py-1 rounded text-[10px] font-medium ${
+          className={`flex items-center gap-1 whitespace-nowrap bg-surface-container-highest px-2 py-1 rounded text-xs font-medium ${
             p.bias === "bullish"
               ? "text-long"
               : p.bias === "bearish"
@@ -36,13 +36,13 @@ export function PatternDetailRow({ patterns }: PatternDetailRowProps) {
 
   return (
     <div className="p-4 border-b border-outline-variant/10">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">Detected Patterns</h3>
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">Detected Patterns</h3>
       <div className="space-y-1.5">
         {patterns.map((p) => (
           <div key={p.name} className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
               <span
-                className={`text-[10px] px-2 py-0.5 rounded ${
+                className={`text-xs px-2 py-0.5 rounded ${
                   p.bias === "bullish"
                     ? "bg-long/10 text-long"
                     : p.bias === "bearish"

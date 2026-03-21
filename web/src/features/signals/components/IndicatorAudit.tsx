@@ -74,7 +74,7 @@ export function IndicatorAudit({ indicators }: IndicatorAuditProps) {
 
   return (
     <div className="p-5 border-b border-outline-variant/10 space-y-4">
-      <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant">
+      <h3 className="text-xs uppercase tracking-widest text-on-surface-variant">
         Indicator Breakdown
       </h3>
 
@@ -140,7 +140,7 @@ function RegimeBar({ regime }: { regime: { trending: number; ranging: number; vo
           <div className="h-full bg-error" style={{ width: `${pcts.volatile}%` }} />
         )}
       </div>
-      <div className="flex gap-3 text-[10px] text-on-surface-variant">
+      <div className="flex gap-3 text-xs text-on-surface-variant">
         <span>Trend {pcts.trending.toFixed(0)}%</span>
         <span>Range {pcts.ranging.toFixed(0)}%</span>
         <span>Vol {pcts.volatile.toFixed(0)}%</span>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { X } from "lucide-react";
 import type { Signal, UserStatus } from "../types";
 import { formatPrice, formatScore } from "../../../shared/lib/format";
 import { api } from "../../../shared/lib/api";
@@ -37,10 +38,19 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
     <dialog ref={ref} onClose={onClose} onClick={(e) => {
       if (e.target === ref.current) onClose();
     }} className="bg-surface-container text-on-surface rounded-xl w-[calc(100%-2rem)] max-w-lg max-h-[90dvh] overflow-y-auto p-0 m-auto backdrop:bg-black/60">
+      <div className="sticky top-0 z-10 flex justify-end p-2">
+        <button
+          onClick={onClose}
+          aria-label="Close signal detail"
+          className="p-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <X size={20} />
+        </button>
+      </div>
       {/* Hero Score Section */}
-      <div className="p-5 border-b border-outline-variant/10 flex justify-between items-center relative overflow-hidden">
+      <div className="px-5 pb-5 border-b border-outline-variant/10 flex justify-between items-center relative overflow-hidden">
         <div className="relative z-10">
-          <p className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Overall Signal Score</p>
+          <p className="text-xs uppercase tracking-widest text-on-surface-variant mb-1">Overall Signal Score</p>
           <div className="flex items-baseline gap-2">
             <span className="font-headline font-bold text-5xl text-primary tabular">{formatScore(signal.final_score)}</span>
             <span className="text-on-surface-variant font-headline font-medium text-lg">/100</span>
@@ -67,7 +77,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
 
       {/* Score Breakdown */}
       <div className="p-5 border-b border-outline-variant/10 space-y-4">
-        <h2 className="text-[10px] uppercase tracking-widest text-on-surface-variant">Intelligence Components</h2>
+        <h2 className="text-xs uppercase tracking-widest text-on-surface-variant">Intelligence Components</h2>
         <ScoreBar label="Technical Analysis" value={Math.abs(signal.traditional_score)} />
         {signal.llm_contribution != null && (
           <ScoreBar label="LLM Consensus" value={Math.min(Math.abs(signal.llm_contribution), 100)} />
@@ -99,29 +109,29 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
 
       {signal.explanation && (
         <div className="p-5 border-b border-outline-variant/10">
-          <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">AI Analysis</h3>
+          <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">AI Analysis</h3>
           <p className="text-sm text-on-surface leading-relaxed">{signal.explanation}</p>
         </div>
       )}
 
       {/* Execution Matrix */}
       <div className="p-5 border-b border-outline-variant/10">
-        <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-4">Execution Matrix</h3>
+        <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-4">Execution Matrix</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-primary">
-            <p className="text-[10px] font-medium text-primary uppercase mb-1">Entry Range</p>
+            <p className="text-xs font-medium text-primary uppercase mb-1">Entry Range</p>
             <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.entry)}</p>
           </div>
           <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-short">
-            <p className="text-[10px] font-medium text-short uppercase mb-1">Stop Loss</p>
+            <p className="text-xs font-medium text-short uppercase mb-1">Stop Loss</p>
             <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.stop_loss)}</p>
           </div>
           <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-long">
-            <p className="text-[10px] font-medium text-long uppercase mb-1">Take Profit 1</p>
+            <p className="text-xs font-medium text-long uppercase mb-1">Take Profit 1</p>
             <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.take_profit_1)}</p>
           </div>
           <div className="p-3 rounded bg-surface-container-lowest border-l-2 border-long/60">
-            <p className="text-[10px] font-medium text-long uppercase mb-1">Take Profit 2</p>
+            <p className="text-xs font-medium text-long uppercase mb-1">Take Profit 2</p>
             <p className="font-headline font-bold text-lg tabular">{formatPrice(signal.levels.take_profit_2)}</p>
           </div>
         </div>
@@ -129,7 +139,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
 
       {signal.outcome && signal.outcome !== "PENDING" && (
         <div className="p-5 border-b border-outline-variant/10">
-          <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Outcome</h3>
+          <h3 className="text-xs uppercase tracking-widest text-on-surface-variant mb-2">Outcome</h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>Result: <span className={`font-mono font-bold ${signal.outcome.includes("TP") ? "text-long" : "text-short"}`}>{signal.outcome.replace("_", " ")}</span></div>
             {signal.outcome_pnl_pct != null && (
@@ -156,7 +166,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="space-y-1.5">
-      <div className="flex justify-between text-xs font-medium uppercase tracking-tighter">
+      <div className="flex justify-between text-xs font-medium uppercase tracking-wide">
         <span className="text-on-surface">{label}</span>
         <span className="text-primary tabular">{Math.round(value)}%</span>
       </div>
@@ -233,7 +243,10 @@ function JournalSection({ signal }: { signal: Signal }) {
     [signal.id, updateSignal],
   );
 
+  const [savingStatus, setSavingStatus] = useState<UserStatus | null>(null);
+
   const handleStatusChange = async (status: UserStatus) => {
+    setSavingStatus(status);
     setSaveState("saving");
     try {
       await api.patchSignalJournal(signal.id, { status });
@@ -243,6 +256,8 @@ function JournalSection({ signal }: { signal: Signal }) {
       savedTimerRef.current = setTimeout(() => setSaveState("idle"), 2000);
     } catch {
       setSaveState("idle");
+    } finally {
+      setSavingStatus(null);
     }
   };
 
@@ -255,7 +270,7 @@ function JournalSection({ signal }: { signal: Signal }) {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[10px] uppercase tracking-widest text-on-surface-variant">Your Notes</h3>
+        <h3 className="text-xs uppercase tracking-widest text-on-surface-variant">Your Notes</h3>
         {saveState === "saving" && <span className="text-xs text-on-surface-variant">Saving...</span>}
         {saveState === "saved" && <span className="text-xs text-long">Saved</span>}
       </div>
@@ -265,7 +280,10 @@ function JournalSection({ signal }: { signal: Signal }) {
           <button
             key={value}
             onClick={() => handleStatusChange(value)}
-            className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            disabled={savingStatus !== null}
+            className={`flex-1 min-h-[44px] text-xs font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              savingStatus === value ? "opacity-60" : ""
+            } ${
               signal.user_status === value
                 ? value === "TRADED"
                   ? "bg-long/20 text-long border border-long/40"
@@ -273,7 +291,7 @@ function JournalSection({ signal }: { signal: Signal }) {
                 : "text-on-surface-variant border border-outline-variant/10"
             }`}
           >
-            {label}
+            {savingStatus === value ? "..." : label}
           </button>
         ))}
       </div>
