@@ -6,8 +6,6 @@ import { RecentSignals } from "./RecentSignals";
 import { MiniSparkline } from "./MiniSparkline";
 import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { SignalDetail } from "../../signals/components/SignalDetail";
-import { useSignalStore } from "../../signals/store";
 import { api, type Portfolio, type Position } from "../../../shared/lib/api";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
@@ -16,9 +14,6 @@ export function HomeView() {
   const { portfolio, positions, loading: accountLoading, error, refresh } = useAccount();
   const { stats, loading: statsLoading } = useSignalStats();
   const { news: recentNews, loading: newsLoading } = useRecentNews(5);
-
-  const selectedSignal = useSignalStore((s) => s.selectedSignal);
-  const clearSelection = useSignalStore((s) => s.clearSelection);
 
   const equityCurve = useMemo(
     () => stats?.equity_curve.map((d) => d.cumulative_pnl) ?? [],
@@ -52,7 +47,6 @@ export function HomeView() {
           <PerformanceCard stats={stats} loading={statsLoading} />
         </div>
       )}
-      <SignalDetail signal={selectedSignal} onClose={clearSelection} />
     </>
   );
 }

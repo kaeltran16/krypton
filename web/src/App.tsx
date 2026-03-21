@@ -13,6 +13,8 @@ import { AVAILABLE_PAIRS } from "./shared/lib/constants";
 import { useSettingsStore } from "./features/settings/store";
 import { useServiceWorker } from "./shared/hooks/useServiceWorker";
 import { UpdateModal } from "./shared/components/UpdateModal";
+import { SignalDetail } from "./features/signals/components/SignalDetail";
+import { useSignalStore } from "./features/signals/store";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { LoginScreen } from "./features/auth/components/LoginScreen";
 
@@ -36,6 +38,8 @@ export default function App() {
 
 function AuthenticatedApp() {
   const [selectedPair, setSelectedPair] = useState<string>(AVAILABLE_PAIRS[0]);
+  const selectedSignal = useSignalStore((s) => s.selectedSignal);
+  const clearSelection = useSignalStore((s) => s.clearSelection);
   useSignalWebSocket();
 
   useEffect(() => {
@@ -60,6 +64,7 @@ function AuthenticatedApp() {
         selectedPair={selectedPair}
         onPairChange={setSelectedPair}
       />
+      <SignalDetail signal={selectedSignal} onClose={clearSelection} />
     </>
   );
 }

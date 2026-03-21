@@ -15,17 +15,16 @@ export default defineConfig({
       name: "Krypton",
       short_name: "Krypton",
       description: "AI-enhanced crypto signal copilot",
-      theme_color: "#0B0E11",
-      background_color: "#0B0E11",
+      theme_color: "#0a0f14",
+      background_color: "#0a0f14",
       display: "standalone",
       icons: [
-        { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-        { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
-        { src: "/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        { src: "/web-app-manifest-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: "/web-app-manifest-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
       ],
     },
     injectManifest: {
-      globPatterns: ["**/*.{js,css,html,ico,svg}", "icon-*.png", "apple-touch-icon-*.png"],
+      globPatterns: ["**/*.{js,css,html,ico,svg}", "web-app-manifest-*.png", "apple-touch-icon.png", "favicon-96x96.png"],
     },
   }), cloudflare()],
   server: {

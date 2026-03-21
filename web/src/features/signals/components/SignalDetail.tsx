@@ -27,9 +27,9 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
     const dialog = ref.current;
     if (!dialog) return;
 
-    if (signal) {
+    if (signal && !dialog.open) {
       dialog.showModal();
-    } else {
+    } else if (!signal && dialog.open) {
       dialog.close();
     }
   }, [signal]);
@@ -40,13 +40,17 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
   const scoreNum = Math.abs(signal.final_score);
   const sentimentLabel = isLong ? "Long Sentiment" : "Short Sentiment";
 
+  const handleClose = () => {
+    ref.current?.close();
+  };
+
   return (
     <dialog ref={ref} onClose={onClose} onClick={(e) => {
-      if (e.target === ref.current) onClose();
+      if (e.target === ref.current) handleClose();
     }}>
       <div className="sticky top-0 z-10 flex justify-end p-2">
         <button
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close signal detail"
           className="p-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >

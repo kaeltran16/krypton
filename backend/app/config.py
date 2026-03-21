@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     jwt_secret: str = "change-me-in-production"
     allowed_emails: str = ""  # comma-separated
+    cors_origin: str = ""  # comma-separated origins
 
     # secrets (from .env)
     openrouter_api_key: str

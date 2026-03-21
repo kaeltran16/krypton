@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Radio } from "lucide-react";
 import { useSignalStore } from "../store";
 import { SignalCard } from "./SignalCard";
-import { SignalDetail } from "./SignalDetail";
 import { OrderDialog } from "../../trading/components/OrderDialog";
 import { EmptyState } from "../../../shared/components/EmptyState";
 import { hapticTap } from "../../../shared/lib/haptics";
@@ -18,7 +17,7 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
 ];
 
 export function SignalFeed() {
-  const { signals, selectedSignal, selectSignal, clearSelection } = useSignalStore();
+  const { signals, selectSignal } = useSignalStore();
   const [tradingSignal, setTradingSignal] = useState<Signal | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [, setTick] = useState(0);
@@ -82,7 +81,6 @@ export function SignalFeed() {
         </div>
       )}
 
-      <SignalDetail signal={selectedSignal} onClose={clearSelection} />
       <OrderDialog signal={tradingSignal} onClose={() => setTradingSignal(null)} />
     </div>
   );

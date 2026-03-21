@@ -1229,9 +1229,11 @@ def create_app(lifespan_override=None) -> FastAPI:
         "http://localhost:5173",
         "http://localhost:4173",
     ]
-    prod_origin = os.environ.get("CORS_ORIGIN")
-    if prod_origin:
-        allowed_origins.append(prod_origin)
+    cors_origin = os.environ.get("CORS_ORIGIN", "")
+    for origin in cors_origin.split(","):
+        origin = origin.strip()
+        if origin:
+            allowed_origins.append(origin)
 
     app.add_middleware(
         CORSMiddleware,
