@@ -5,11 +5,12 @@ interface PatternBadgesProps {
 }
 
 export function PatternBadges({ patterns }: PatternBadgesProps) {
-  if (!patterns.length) return null;
+  const visible = patterns.filter((p) => p.name?.trim());
+  if (!visible.length) return null;
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      {patterns.map((p) => (
+      {visible.map((p) => (
         <span
           key={p.name}
           className={`flex items-center gap-1 whitespace-nowrap bg-surface-container-highest px-2 py-1 rounded text-xs font-medium ${
