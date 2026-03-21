@@ -4,15 +4,16 @@ import asyncio
 import pytest
 from httpx import ASGITransport, AsyncClient
 from unittest.mock import MagicMock, AsyncMock
+from tests.conftest import make_test_jwt
 
-HEADERS = {"X-API-Key": "test-key"}
+COOKIES = {"krypton_token": make_test_jwt()}
 
 
 @pytest.mark.asyncio
 async def test_preview_returns_diff(client):
     resp = await client.post(
         "/api/engine/apply",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={
             "changes": {"blending.thresholds.signal": 35},
             "confirm": False,
@@ -31,7 +32,7 @@ async def test_preview_returns_diff(client):
 async def test_preview_is_default(client):
     resp = await client.post(
         "/api/engine/apply",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={"changes": {"blending.thresholds.signal": 35}},
     )
     assert resp.status_code == 200
@@ -42,7 +43,7 @@ async def test_preview_is_default(client):
 async def test_empty_changes_rejected(client):
     resp = await client.post(
         "/api/engine/apply",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={"changes": {}},
     )
     assert resp.status_code == 400
@@ -53,7 +54,7 @@ async def test_unknown_dot_path_returns_unknown_source(client):
     """Unknown dot-paths are included in diff with source 'unknown'."""
     resp = await client.post(
         "/api/engine/apply",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={
             "changes": {"nonexistent.path": 42},
             "confirm": False,

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.routes import create_router
+from tests.conftest import make_test_jwt
 
 
 def _make_signal(**overrides):
@@ -63,7 +64,7 @@ def _mock_db(scalars_all=None, scalar_one=None):
 def _make_app(db_mock, redis_mock=None):
     app = FastAPI()
     mock_settings = MagicMock()
-    mock_settings.krypton_api_key = "test-key"
+    mock_settings.jwt_secret = "test-jwt-secret"
     app.state.settings = mock_settings
     app.state.db = db_mock
     app.state.redis = redis_mock or _make_redis()
@@ -81,7 +82,7 @@ def _make_redis(cached=None):
     return mock
 
 
-HEADERS = {"X-API-Key": "test-key"}
+COOKIES = {"krypton_token": make_test_jwt()}
 
 
 # ---------- PATCH /api/signals/{id}/journal ----------
@@ -97,7 +98,7 @@ async def test_journal_patch_valid_update():
         resp = await client.patch(
             "/api/signals/1/journal",
             json={"status": "TRADED", "note": "Good entry"},
-            headers=HEADERS,
+            cookies=COOKIES,
         )
 
     assert resp.status_code == 200
@@ -116,7 +117,7 @@ async def test_journal_patch_invalid_status():
         resp = await client.patch(
             "/api/signals/1/journal",
             json={"status": "INVALID"},
-            headers=HEADERS,
+            cookies=COOKIES,
         )
 
     assert resp.status_code == 400
@@ -133,7 +134,7 @@ async def test_journal_patch_note_too_long():
         resp = await client.patch(
             "/api/signals/1/journal",
             json={"note": "x" * 501},
-            headers=HEADERS,
+            cookies=COOKIES,
         )
 
     assert resp.status_code == 422  # pydantic validation
@@ -148,7 +149,7 @@ async def test_journal_patch_not_found():
         resp = await client.patch(
             "/api/signals/999/journal",
             json={"status": "TRADED"},
-            headers=HEADERS,
+            cookies=COOKIES,
         )
 
     assert resp.status_code == 404
@@ -166,7 +167,7 @@ async def test_journal_patch_invalidates_stats_cache():
         await client.patch(
             "/api/signals/1/journal",
             json={"status": "TRADED"},
-            headers=HEADERS,
+            cookies=COOKIES,
         )
 
     redis.delete.assert_awaited_once_with("signal_stats:7d", "signal_stats:30d")
@@ -182,7 +183,7 @@ async def test_stats_equity_curve_empty():
     app = _make_app(db, redis)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/stats?days=7", headers=HEADERS)
+        resp = await client.get("/api/signals/stats?days=7", cookies=COOKIES)
 
     data = resp.json()
     assert data["equity_curve"] == []
@@ -204,7 +205,7 @@ async def test_stats_streaks_mixed():
     app = _make_app(db, redis)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/stats?days=7", headers=HEADERS)
+        resp = await client.get("/api/signals/stats?days=7", cookies=COOKIES)
 
     data = resp.json()
     assert data["streaks"]["best_win"] == 2
@@ -227,7 +228,7 @@ async def test_stats_hourly_performance_bucketing():
     app = _make_app(db, redis)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/stats?days=7", headers=HEADERS)
+        resp = await client.get("/api/signals/stats?days=7", cookies=COOKIES)
 
     data = resp.json()
     hourly = {h["hour"]: h for h in data["hourly_performance"]}
@@ -246,11 +247,11 @@ async def test_stats_all_period_capped_365():
     app = _make_app(db, redis)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/stats?days=365", headers=HEADERS)
+        resp = await client.get("/api/signals/stats?days=365", cookies=COOKIES)
     assert resp.status_code == 200
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/stats?days=366", headers=HEADERS)
+        resp = await client.get("/api/signals/stats?days=366", cookies=COOKIES)
     assert resp.status_code == 422  # exceeds max
 
 
@@ -269,7 +270,7 @@ async def test_calendar_day_aggregation():
     app = _make_app(db)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/calendar?month=2026-03", headers=HEADERS)
+        resp = await client.get("/api/signals/calendar?month=2026-03", cookies=COOKIES)
 
     data = resp.json()
     assert len(data["days"]) == 2
@@ -291,7 +292,7 @@ async def test_calendar_empty_month():
     app = _make_app(db)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/calendar?month=2026-01", headers=HEADERS)
+        resp = await client.get("/api/signals/calendar?month=2026-01", cookies=COOKIES)
 
     data = resp.json()
     assert data["days"] == []
@@ -310,7 +311,7 @@ async def test_calendar_month_boundary():
     app = _make_app(db)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/signals/calendar?month=2026-03", headers=HEADERS)
+        resp = await client.get("/api/signals/calendar?month=2026-03", cookies=COOKIES)
 
     data = resp.json()
     assert len(data["days"]) == 1

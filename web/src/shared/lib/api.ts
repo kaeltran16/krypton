@@ -1,4 +1,4 @@
-import { API_BASE_URL, API_KEY } from "./constants";
+import { API_BASE_URL } from "./constants";
 import type { Signal, SignalStats, CalendarResponse, UserStatus } from "../../features/signals/types";
 import type { NewsEvent } from "../../features/news/types";
 import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../features/backtest/types";
@@ -67,11 +67,24 @@ export interface MLBackfillJob {
 
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
-  ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
 };
 
+let _unauthorizedFired = false;
+export function resetUnauthorizedFlag() { _unauthorizedFired = false; }
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, { headers: jsonHeaders, ...init });
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: jsonHeaders,
+    credentials: "include",
+    ...init,
+  });
+  if (res.status === 401) {
+    if (!_unauthorizedFired) {
+      _unauthorizedFired = true;
+      window.dispatchEvent(new Event("auth:unauthorized"));
+    }
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`);
   }
@@ -169,7 +182,26 @@ export interface OrderResult {
   warning?: string;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  picture: string | null;
+}
+
+interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
 export const api = {
+  authMe: () => request<AuthResponse>("/api/auth/me"),
+  authGoogle: (idToken: string) => request<AuthResponse>("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ id_token: idToken }),
+  }),
+  authLogout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
   getSignals: (params?: {
     pair?: string;
     timeframe?: string;
@@ -226,6 +258,12 @@ export const api = {
     request<OrderResult>("/api/account/order", {
       method: "POST",
       body: JSON.stringify(order),
+    }),
+
+  closePosition: (pair: string, posSide: "long" | "short") =>
+    request<{ success: boolean }>("/api/account/close-position", {
+      method: "POST",
+      body: JSON.stringify({ pair, pos_side: posSide }),
     }),
 
   getNews: (params?: {

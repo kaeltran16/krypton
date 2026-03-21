@@ -2,13 +2,11 @@ from app.config import Settings, load_yaml_config
 
 
 def test_default_settings(monkeypatch):
-    monkeypatch.setenv("KRYPTON_API_KEY", "test-key")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-or-key")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/krypton")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 
     settings = Settings()
-    assert settings.krypton_api_key == "test-key"
     assert settings.openrouter_api_key == "test-or-key"
     assert len(settings.pairs) > 0
     assert len(settings.timeframes) > 0
@@ -61,7 +59,6 @@ collector:
     yaml_file = tmp_path / "config.yaml"
     yaml_file.write_text(yaml_content)
 
-    monkeypatch.setenv("KRYPTON_API_KEY", "test-key")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-or-key")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/krypton")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")

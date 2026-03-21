@@ -4,11 +4,11 @@ from fastapi import APIRouter, Query, Request
 from sqlalchemy import select, cast, literal
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import NewsEvent
 
 router = APIRouter(prefix="/api")
-auth = require_settings_api_key()
+auth = require_auth()
 
 
 def _news_to_dict(n: NewsEvent) -> dict:

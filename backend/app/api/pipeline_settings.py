@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import PipelineSettings
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def _row_to_dict(ps: PipelineSettings) -> dict:
 
 @router.get("/settings")
 async def get_pipeline_settings(
-    request: Request, _key: str = require_settings_api_key()
+    request: Request, _key: str = require_auth()
 ):
     db = request.app.state.db
     async with db.session_factory() as session:
@@ -89,7 +89,7 @@ async def get_pipeline_settings(
 async def update_pipeline_settings(
     request: Request,
     body: PipelineSettingsUpdate,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     app = request.app
     db = app.state.db

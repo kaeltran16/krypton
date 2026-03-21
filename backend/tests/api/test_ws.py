@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.api.connections import ConnectionManager
+from tests.conftest import make_test_jwt
 
 
 @pytest.mark.asyncio
@@ -70,7 +71,7 @@ def test_websocket_connects_and_receives_subscription(app):
     from starlette.testclient import TestClient
 
     with TestClient(app) as client:
-        with client.websocket_connect("/ws/signals?api_key=test-key") as ws:
+        with client.websocket_connect(f"/ws/signals?token={make_test_jwt()}") as ws:
             ws.send_text('{"type": "subscribe", "pairs": ["BTC-USDT-SWAP"], "timeframes": ["1h"]}')
 
 
@@ -78,15 +79,7 @@ def test_websocket_handles_malformed_json(app):
     from starlette.testclient import TestClient
 
     with TestClient(app) as client:
-        with client.websocket_connect("/ws/signals?api_key=test-key") as ws:
+        with client.websocket_connect(f"/ws/signals?token={make_test_jwt()}") as ws:
             ws.send_text("not-json")
-            ws.send_text('{"type": "subscribe", "pairs": ["BTC-USDT-SWAP"], "timeframes": ["1h"]}')
-
-
-def test_websocket_accepts_header_api_key(app):
-    from starlette.testclient import TestClient
-
-    with TestClient(app) as client:
-        with client.websocket_connect("/ws/signals", headers={"X-API-Key": "test-key"}) as ws:
             ws.send_text('{"type": "subscribe", "pairs": ["BTC-USDT-SWAP"], "timeframes": ["1h"]}')
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import RiskSettings, Signal
 from app.engine.risk import RiskGuard
 
@@ -43,7 +43,7 @@ def _settings_to_dict(rs: RiskSettings) -> dict:
 
 
 @router.get("/settings")
-async def get_risk_settings(request: Request, _key: str = require_settings_api_key()):
+async def get_risk_settings(request: Request, _key: str = require_auth()):
     db = request.app.state.db
     async with db.session_factory() as session:
         result = await session.execute(select(RiskSettings).where(RiskSettings.id == 1))
@@ -57,7 +57,7 @@ async def get_risk_settings(request: Request, _key: str = require_settings_api_k
 async def update_risk_settings(
     request: Request,
     body: RiskSettingsUpdate,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     db = request.app.state.db
     async with db.session_factory() as session:
@@ -78,7 +78,7 @@ async def update_risk_settings(
 async def check_risk(
     request: Request,
     body: RiskCheckRequest,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     okx = request.app.state.okx_client
     if not okx:

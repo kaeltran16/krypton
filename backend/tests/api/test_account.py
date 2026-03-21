@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 
+from tests.conftest import make_test_jwt
+
 
 @pytest.fixture
 def mock_okx_client():
@@ -28,7 +30,7 @@ def app_with_okx(mock_okx_client):
     app = create_app()
     app.state.okx_client = mock_okx_client
     app.state.settings = MagicMock()
-    app.state.settings.krypton_api_key = "test-key"
+    app.state.settings.jwt_secret = "test-jwt-secret"
     return app
 
 
@@ -38,26 +40,26 @@ def app_without_okx():
     app = create_app()
     app.state.okx_client = None
     app.state.settings = MagicMock()
-    app.state.settings.krypton_api_key = "test-key"
+    app.state.settings.jwt_secret = "test-jwt-secret"
     return app
 
 
 def test_get_balance(app_with_okx):
     client = TestClient(app_with_okx)
-    resp = client.get("/api/account/balance", headers={"X-API-Key": "test-key"})
+    resp = client.get("/api/account/balance", cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 200
     assert resp.json()["total_equity"] == 10000.50
 
 
 def test_get_balance_no_okx(app_without_okx):
     client = TestClient(app_without_okx)
-    resp = client.get("/api/account/balance", headers={"X-API-Key": "test-key"})
+    resp = client.get("/api/account/balance", cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 503
 
 
 def test_get_positions(app_with_okx):
     client = TestClient(app_with_okx)
-    resp = client.get("/api/account/positions", headers={"X-API-Key": "test-key"})
+    resp = client.get("/api/account/positions", cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 200
     assert len(resp.json()) == 1
     assert resp.json()[0]["pair"] == "BTC-USDT-SWAP"
@@ -67,7 +69,7 @@ def test_place_order_success(app_with_okx):
     client = TestClient(app_with_okx)
     resp = client.post("/api/account/order", json={
         "pair": "BTC-USDT-SWAP", "side": "buy", "size": "1",
-    }, headers={"X-API-Key": "test-key"})
+    }, cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 200
     assert resp.json()["success"] is True
 
@@ -76,7 +78,7 @@ def test_place_order_invalid_side(app_with_okx):
     client = TestClient(app_with_okx)
     resp = client.post("/api/account/order", json={
         "pair": "BTC-USDT-SWAP", "side": "invalid", "size": "1",
-    }, headers={"X-API-Key": "test-key"})
+    }, cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 422
 
 
@@ -84,7 +86,7 @@ def test_place_order_invalid_size(app_with_okx):
     client = TestClient(app_with_okx)
     resp = client.post("/api/account/order", json={
         "pair": "BTC-USDT-SWAP", "side": "buy", "size": "abc",
-    }, headers={"X-API-Key": "test-key"})
+    }, cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 422
 
 
@@ -92,7 +94,7 @@ def test_place_order_negative_size(app_with_okx):
     client = TestClient(app_with_okx)
     resp = client.post("/api/account/order", json={
         "pair": "BTC-USDT-SWAP", "side": "buy", "size": "-1",
-    }, headers={"X-API-Key": "test-key"})
+    }, cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 422
 
 
@@ -100,5 +102,5 @@ def test_place_order_no_okx(app_without_okx):
     client = TestClient(app_without_okx)
     resp = client.post("/api/account/order", json={
         "pair": "BTC-USDT-SWAP", "side": "buy", "size": "1",
-    }, headers={"X-API-Key": "test-key"})
+    }, cookies={"krypton_token": make_test_jwt()})
     assert resp.status_code == 503

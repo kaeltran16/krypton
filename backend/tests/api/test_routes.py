@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.routes import create_router
+from tests.conftest import make_test_jwt
 
 
 def _mock_db(scalars_all=None, scalar_one=None):
@@ -30,7 +31,7 @@ def app_with_routes():
     app = FastAPI()
 
     mock_settings = MagicMock()
-    mock_settings.krypton_api_key = "test-key"
+    mock_settings.jwt_secret = "test-jwt-secret"
     app.state.settings = mock_settings
     app.state.db = _mock_db()
 
@@ -55,7 +56,7 @@ async def test_get_signals_empty(app_with_routes):
     ) as client:
         resp = await client.get(
             "/api/signals",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
     assert resp.json() == []
@@ -68,6 +69,6 @@ async def test_get_signal_not_found(app_with_routes):
     ) as client:
         resp = await client.get(
             "/api/signals/999",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 404

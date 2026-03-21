@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.news import router
+from tests.conftest import make_test_jwt
 
 
 def _mock_db(scalars_all=None):
@@ -53,7 +54,7 @@ def _make_news_event(**overrides):
 def app_with_news():
     app = FastAPI()
     mock_settings = MagicMock()
-    mock_settings.krypton_api_key = "test-key"
+    mock_settings.jwt_secret = "test-jwt-secret"
     app.state.settings = mock_settings
     app.state.db = _mock_db()
     app.include_router(router)
@@ -75,7 +76,7 @@ async def test_get_news_empty(app_with_news):
         transport=ASGITransport(app=app_with_news), base_url="http://test"
     ) as client:
         resp = await client.get(
-            "/api/news", headers={"X-API-Key": "test-key"},
+            "/api/news", cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
     assert resp.json() == []
@@ -85,7 +86,7 @@ async def test_get_news_empty(app_with_news):
 async def test_get_news_returns_events():
     news = [_make_news_event(id=1), _make_news_event(id=2, impact="medium")]
     app = FastAPI()
-    app.state.settings = MagicMock(krypton_api_key="test-key")
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
     app.state.db = _mock_db(scalars_all=news)
     app.include_router(router)
 
@@ -93,7 +94,7 @@ async def test_get_news_returns_events():
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            "/api/news", headers={"X-API-Key": "test-key"},
+            "/api/news", cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -106,7 +107,7 @@ async def test_get_news_returns_events():
 async def test_get_news_filter_category():
     """Category filter parameter is accepted."""
     app = FastAPI()
-    app.state.settings = MagicMock(krypton_api_key="test-key")
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
     app.state.db = _mock_db()
     app.include_router(router)
 
@@ -115,7 +116,7 @@ async def test_get_news_filter_category():
     ) as client:
         resp = await client.get(
             "/api/news?category=crypto",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
 
@@ -124,7 +125,7 @@ async def test_get_news_filter_category():
 async def test_get_news_filter_impact():
     """Impact filter parameter is accepted."""
     app = FastAPI()
-    app.state.settings = MagicMock(krypton_api_key="test-key")
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
     app.state.db = _mock_db()
     app.include_router(router)
 
@@ -133,7 +134,7 @@ async def test_get_news_filter_impact():
     ) as client:
         resp = await client.get(
             "/api/news?impact=high",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
 
@@ -142,7 +143,7 @@ async def test_get_news_filter_impact():
 async def test_get_news_invalid_category():
     """Invalid category returns 422."""
     app = FastAPI()
-    app.state.settings = MagicMock(krypton_api_key="test-key")
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
     app.state.db = _mock_db()
     app.include_router(router)
 
@@ -151,7 +152,7 @@ async def test_get_news_invalid_category():
     ) as client:
         resp = await client.get(
             "/api/news?category=invalid",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 422
 
@@ -173,7 +174,7 @@ async def test_get_recent_news_returns_high_medium():
         _make_news_event(id=2, impact="medium"),
     ]
     app = FastAPI()
-    app.state.settings = MagicMock(krypton_api_key="test-key")
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
     app.state.db = _mock_db(scalars_all=news)
     app.include_router(router)
 
@@ -181,7 +182,7 @@ async def test_get_recent_news_returns_high_medium():
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            "/api/news/recent", headers={"X-API-Key": "test-key"},
+            "/api/news/recent", cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -195,7 +196,7 @@ async def test_news_router_registered():
 
     @asynccontextmanager
     async def noop_lifespan(app):
-        app.state.settings = MagicMock(krypton_api_key="test-key")
+        app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
         yield
 
     app = create_app(lifespan_override=noop_lifespan)

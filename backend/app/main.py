@@ -1225,9 +1225,17 @@ async def lifespan(app: FastAPI):
 def create_app(lifespan_override=None) -> FastAPI:
     app = FastAPI(title="Krypton", version="0.1.0", lifespan=lifespan_override or lifespan)
 
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ]
+    prod_origin = os.environ.get("CORS_ORIGIN")
+    if prod_origin:
+        allowed_origins.append(prod_origin)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -1236,6 +1244,9 @@ def create_app(lifespan_override=None) -> FastAPI:
     @app.get("/health")
     async def health():
         return {"status": "ok"}
+
+    from app.api.auth import router as auth_router
+    app.include_router(auth_router)
 
     router = create_router()
     app.include_router(router)

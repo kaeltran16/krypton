@@ -34,8 +34,12 @@ def _flatten_yaml(config: dict) -> dict:
 
 
 class Settings(BaseSettings):
+    # auth
+    google_client_id: str = ""
+    jwt_secret: str = "change-me-in-production"
+    allowed_emails: str = ""  # comma-separated
+
     # secrets (from .env)
-    krypton_api_key: str
     openrouter_api_key: str
     openrouter_model: str = "anthropic/claude-3.5-sonnet"
     database_url: str = "postgresql+asyncpg://krypton:krypton@localhost:5432/krypton"

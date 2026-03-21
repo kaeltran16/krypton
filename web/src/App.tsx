@@ -13,12 +13,31 @@ import { AVAILABLE_PAIRS } from "./shared/lib/constants";
 import { useSettingsStore } from "./features/settings/store";
 import { useServiceWorker } from "./shared/hooks/useServiceWorker";
 import { UpdateModal } from "./shared/components/UpdateModal";
+import { useAuth } from "./features/auth/hooks/useAuth";
+import { LoginScreen } from "./features/auth/components/LoginScreen";
 
 export default function App() {
+  const { isLoading, isAuthenticated, login } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-[#0a0f14]">
+        <div className="w-8 h-8 border-2 border-[#69daff] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={login} />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function AuthenticatedApp() {
   const [selectedPair, setSelectedPair] = useState<string>(AVAILABLE_PAIRS[0]);
   useSignalWebSocket();
 
-  // Hydrate pipeline settings from server on app init
   useEffect(() => {
     useSettingsStore.getState().fetchFromServer();
   }, []);

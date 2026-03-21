@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import BacktestRun, Candle, RegimeWeights
 from app.engine.backtester import run_backtest, BacktestConfig
 from app.engine.confluence import TIMEFRAME_PARENT, TIMEFRAME_PERIOD_HOURS
@@ -104,7 +104,7 @@ class OptimizeRegimeRequest(BaseModel):
 
 # ---- Import endpoints ----
 
-@router.post("/import", dependencies=[require_settings_api_key()])
+@router.post("/import", dependencies=[require_auth()])
 async def trigger_import(body: ImportRequest, request: Request):
     """Trigger historical candle import from OKX."""
     db = request.app.state.db
@@ -140,7 +140,7 @@ async def trigger_import(body: ImportRequest, request: Request):
     return {"job_id": job_id, "status": "running"}
 
 
-@router.get("/import/{job_id}", dependencies=[require_settings_api_key()])
+@router.get("/import/{job_id}", dependencies=[require_auth()])
 async def get_import_status(job_id: str, request: Request):
     """Check import job progress."""
     import_jobs = _get_import_jobs(request.app)
@@ -152,7 +152,7 @@ async def get_import_status(job_id: str, request: Request):
 
 # ---- Run endpoints ----
 
-@router.post("/run", dependencies=[require_settings_api_key()])
+@router.post("/run", dependencies=[require_auth()])
 async def start_backtest(body: RunRequest, request: Request):
     """Start a backtest run."""
     db = request.app.state.db
@@ -313,7 +313,7 @@ async def start_backtest(body: RunRequest, request: Request):
     return {"run_id": run_id, "status": "running"}
 
 
-@router.get("/run/{run_id}", dependencies=[require_settings_api_key()])
+@router.get("/run/{run_id}", dependencies=[require_auth()])
 async def get_run_status(run_id: str, request: Request):
     """Poll backtest run status and results."""
     db = request.app.state.db
@@ -327,7 +327,7 @@ async def get_run_status(run_id: str, request: Request):
         return _run_to_dict(run)
 
 
-@router.post("/run/{run_id}/cancel", dependencies=[require_settings_api_key()])
+@router.post("/run/{run_id}/cancel", dependencies=[require_auth()])
 async def cancel_run(run_id: str, request: Request):
     """Cancel a running backtest."""
     cancel_flags = _get_cancel_flags(request.app)
@@ -340,7 +340,7 @@ async def cancel_run(run_id: str, request: Request):
 
 # ---- Results / comparison endpoints ----
 
-@router.get("/runs", dependencies=[require_settings_api_key()])
+@router.get("/runs", dependencies=[require_auth()])
 async def list_runs(request: Request):
     """List all saved backtest runs with summary stats."""
     db = request.app.state.db
@@ -352,7 +352,7 @@ async def list_runs(request: Request):
         return [_run_summary(r) for r in runs]
 
 
-@router.get("/runs/{run_id}", dependencies=[require_settings_api_key()])
+@router.get("/runs/{run_id}", dependencies=[require_auth()])
 async def get_run_detail(run_id: str, request: Request):
     """Get full backtest run results including trade list."""
     db = request.app.state.db
@@ -366,7 +366,7 @@ async def get_run_detail(run_id: str, request: Request):
         return _run_to_dict(run)
 
 
-@router.post("/compare", dependencies=[require_settings_api_key()])
+@router.post("/compare", dependencies=[require_auth()])
 async def compare_runs(body: CompareRequest, request: Request):
     """Compare 2-4 backtest runs side-by-side."""
     db = request.app.state.db
@@ -382,7 +382,7 @@ async def compare_runs(body: CompareRequest, request: Request):
     return {"runs": [_run_to_dict(run) for run in runs]}
 
 
-@router.delete("/runs/{run_id}", dependencies=[require_settings_api_key()])
+@router.delete("/runs/{run_id}", dependencies=[require_auth()])
 async def delete_run(run_id: str, request: Request):
     """Delete a backtest run."""
     db = request.app.state.db
@@ -398,7 +398,7 @@ async def delete_run(run_id: str, request: Request):
 
 # ---- Regime optimizer endpoint ----
 
-@router.post("/optimize-regime", dependencies=[require_settings_api_key()])
+@router.post("/optimize-regime", dependencies=[require_auth()])
 async def optimize_regime(body: OptimizeRegimeRequest, request: Request):
     """Run differential evolution to find optimal regime weights for a pair/timeframe."""
     db = request.app.state.db
@@ -536,7 +536,7 @@ async def optimize_regime(body: OptimizeRegimeRequest, request: Request):
     return {"run_id": run_id, "status": "running"}
 
 
-@router.post("/optimize-atr", dependencies=[require_settings_api_key()])
+@router.post("/optimize-atr", dependencies=[require_auth()])
 async def optimize_atr(body: OptimizeAtrRequest, request: Request):
     """Run ATR multiplier optimization on demand."""
     tracker = getattr(request.app.state, "tracker", None)

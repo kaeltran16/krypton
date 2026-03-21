@@ -2,7 +2,7 @@ import json
 
 from fastapi import APIRouter, Query, Request
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 
 router = APIRouter(prefix="/api")
 
@@ -14,7 +14,7 @@ def parse_redis_candles(raw_list: list[str]) -> list[dict]:
 @router.get("/candles")
 async def get_candles(
     request: Request,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
     pair: str = Query(...),
     timeframe: str = Query(...),
     limit: int = Query(200, ge=1, le=500),

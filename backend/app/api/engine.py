@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import PipelineSettings, RegimeWeights, PerformanceTrackerRow
 from app.engine.constants import get_engine_constants
 
@@ -23,7 +23,7 @@ def _configurable(value):
 
 
 @router.get("/parameters")
-async def get_parameters(request: Request, _key: str = require_settings_api_key()):
+async def get_parameters(request: Request, _key: str = require_auth()):
     """Return the full engine parameter tree."""
     settings = request.app.state.settings
     db = request.app.state.db
@@ -186,7 +186,7 @@ def _resolve_current_value(path: str, app) -> tuple[float | int | dict | None, s
 
 
 @router.post("/apply")
-async def apply_parameters(body: ApplyRequest, request: Request, _key: str = require_settings_api_key()):
+async def apply_parameters(body: ApplyRequest, request: Request, _key: str = require_auth()):
     """Preview or apply parameter changes."""
     if not body.changes:
         raise HTTPException(400, "No changes provided")

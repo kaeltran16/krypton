@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.pipeline_settings import router
+from tests.conftest import make_test_jwt
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +52,7 @@ def app_with_pipeline():
     app = FastAPI()
 
     mock_settings = MagicMock()
-    mock_settings.krypton_api_key = "test-key"
+    mock_settings.jwt_secret = "test-jwt-secret"
     mock_settings.pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     mock_settings.timeframes = ["15m", "1h", "4h"]
     mock_settings.engine_signal_threshold = 40
@@ -90,7 +91,7 @@ async def test_get_settings_returns_defaults(app_with_pipeline):
     ) as client:
         resp = await client.get(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -114,7 +115,7 @@ async def test_put_partial_update(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"signal_threshold": 70},
         )
     assert resp.status_code == 200
@@ -127,7 +128,7 @@ async def test_put_patches_settings_in_memory(app_with_pipeline):
     ) as client:
         await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"signal_threshold": 75, "news_context_window": 60},
         )
     settings = app_with_pipeline.state.settings
@@ -144,7 +145,7 @@ async def test_put_invalid_pair_format_returns_422(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"pairs": ["invalid-pair"]},
         )
     assert resp.status_code == 422
@@ -157,7 +158,7 @@ async def test_put_empty_pairs_returns_422(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"pairs": []},
         )
     assert resp.status_code == 422
@@ -170,7 +171,7 @@ async def test_put_invalid_timeframe_returns_422(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"timeframes": ["2h"]},
         )
     assert resp.status_code == 422
@@ -183,7 +184,7 @@ async def test_put_threshold_out_of_range_returns_422(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"signal_threshold": 150},
         )
     assert resp.status_code == 422
@@ -196,7 +197,7 @@ async def test_put_empty_body_returns_400(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={},
         )
     assert resp.status_code == 400
@@ -209,7 +210,7 @@ async def test_put_boolean_fields(app_with_pipeline):
     ) as client:
         resp = await client.put(
             "/api/pipeline/settings",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"onchain_enabled": False, "news_alerts_enabled": False},
         )
     assert resp.status_code == 200

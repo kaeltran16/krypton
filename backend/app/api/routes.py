@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import Signal, PerformanceTrackerRow
 from app.engine.performance_tracker import DEFAULT_SL, DEFAULT_TP1, DEFAULT_TP2
 from app.engine.combiner import (
@@ -274,7 +274,7 @@ class JournalPatch(BaseModel):
 
 def create_router() -> APIRouter:
     router = APIRouter(prefix="/api")
-    auth = require_settings_api_key()
+    auth = require_auth()
 
     @router.get("/signals")
     async def get_signals(

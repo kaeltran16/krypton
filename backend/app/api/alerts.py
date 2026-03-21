@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, select, update
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import Alert, AlertHistory, AlertSettings
 
 logger = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ def _generate_label(body: AlertCreate) -> str:
 
 @router.post("")
 async def create_alert(
-    request: Request, body: AlertCreate, _key: str = require_settings_api_key()
+    request: Request, body: AlertCreate, _key: str = require_auth()
 ):
     db = request.app.state.db
     redis = getattr(request.app.state, "redis", None)
@@ -185,7 +185,7 @@ async def create_alert(
 
 @router.get("")
 async def list_alerts(
-    request: Request, _key: str = require_settings_api_key()
+    request: Request, _key: str = require_auth()
 ):
     db = request.app.state.db
     async with db.session_factory() as session:
@@ -203,7 +203,7 @@ async def get_alert_history(
     until: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     db = request.app.state.db
 
@@ -246,7 +246,7 @@ async def get_alert_history(
 
 @router.get("/settings")
 async def get_alert_settings(
-    request: Request, _key: str = require_settings_api_key()
+    request: Request, _key: str = require_auth()
 ):
     db = request.app.state.db
     async with db.session_factory() as session:
@@ -271,7 +271,7 @@ async def get_alert_settings(
 @router.patch("/settings")
 async def update_alert_settings(
     request: Request, body: AlertSettingsUpdate,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     db = request.app.state.db
     update_data = body.model_dump(exclude_unset=True)
@@ -305,7 +305,7 @@ async def update_alert_settings(
 @router.patch("/{alert_id}")
 async def update_alert(
     request: Request, alert_id: str, body: AlertUpdate,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     db = request.app.state.db
     redis = getattr(request.app.state, "redis", None)
@@ -335,7 +335,7 @@ async def update_alert(
 @router.delete("/{alert_id}")
 async def delete_alert(
     request: Request, alert_id: str,
-    _key: str = require_settings_api_key(),
+    _key: str = require_auth(),
 ):
     db = request.app.state.db
     redis = getattr(request.app.state, "redis", None)

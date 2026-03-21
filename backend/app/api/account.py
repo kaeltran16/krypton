@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 
 router = APIRouter(prefix="/api/account")
 
@@ -37,7 +37,7 @@ class OrderRequest(BaseModel):
 
 
 @router.get("/balance")
-async def get_balance(request: Request, _key: str = require_settings_api_key()):
+async def get_balance(request: Request, _key: str = require_auth()):
     okx = request.app.state.okx_client
     if not okx:
         raise HTTPException(503, "OKX client not configured")
@@ -48,7 +48,7 @@ async def get_balance(request: Request, _key: str = require_settings_api_key()):
 
 
 @router.get("/positions")
-async def get_positions(request: Request, _key: str = require_settings_api_key()):
+async def get_positions(request: Request, _key: str = require_auth()):
     okx = request.app.state.okx_client
     if not okx:
         raise HTTPException(503, "OKX client not configured")
@@ -56,7 +56,7 @@ async def get_positions(request: Request, _key: str = require_settings_api_key()
 
 
 @router.get("/portfolio")
-async def get_portfolio(request: Request, _key: str = require_settings_api_key()):
+async def get_portfolio(request: Request, _key: str = require_auth()):
     okx = request.app.state.okx_client
     if not okx:
         raise HTTPException(503, "OKX client not configured")
@@ -97,7 +97,7 @@ async def get_portfolio(request: Request, _key: str = require_settings_api_key()
 
 
 @router.post("/order")
-async def place_order(request: Request, order: OrderRequest, _key: str = require_settings_api_key()):
+async def place_order(request: Request, order: OrderRequest, _key: str = require_auth()):
     okx = request.app.state.okx_client
     if not okx:
         raise HTTPException(503, "OKX client not configured")
@@ -115,16 +115,61 @@ async def place_order(request: Request, order: OrderRequest, _key: str = require
         raise HTTPException(400, msg)
 
     if order.tp_price or order.sl_price:
-        algo_result = await okx.place_algo_order(
-            pair=order.pair,
-            side=order.side,
-            size=order.size,
-            tp_trigger_price=order.tp_price,
-            sl_trigger_price=order.sl_price,
-        )
-        if algo_result["success"]:
-            result["algo_id"] = algo_result["algo_id"]
-        else:
-            result["warning"] = f"Entry filled but TP/SL failed: {algo_result['error']}"
+        # Validate TP/SL against last price before placing algo order
+        tp = float(order.tp_price) if order.tp_price else None
+        sl = float(order.sl_price) if order.sl_price else None
+        last_price = await okx.get_last_price(order.pair)
+        is_long = order.side == "buy"
 
+        invalid_reasons = []
+        if last_price:
+            if sl is not None:
+                if is_long and sl >= last_price:
+                    invalid_reasons.append(f"SL ({sl}) must be below last price ({last_price}) for a long")
+                elif not is_long and sl <= last_price:
+                    invalid_reasons.append(f"SL ({sl}) must be above last price ({last_price}) for a short")
+            if tp is not None:
+                if is_long and tp <= last_price:
+                    invalid_reasons.append(f"TP ({tp}) must be above last price ({last_price}) for a long")
+                elif not is_long and tp >= last_price:
+                    invalid_reasons.append(f"TP ({tp}) must be below last price ({last_price}) for a short")
+
+        if invalid_reasons:
+            result["warning"] = "Entry filled but TP/SL skipped: " + "; ".join(invalid_reasons)
+        else:
+            algo_result = await okx.place_algo_order(
+                pair=order.pair,
+                side=order.side,
+                size=order.size,
+                tp_trigger_price=order.tp_price,
+                sl_trigger_price=order.sl_price,
+            )
+            if algo_result["success"]:
+                result["algo_id"] = algo_result["algo_id"]
+            else:
+                result["warning"] = f"Entry filled but TP/SL failed: {algo_result['error']}"
+
+    return result
+
+
+class ClosePositionRequest(BaseModel):
+    pair: str
+    pos_side: str
+
+    @field_validator("pos_side")
+    @classmethod
+    def validate_pos_side(cls, v: str) -> str:
+        if v not in ("long", "short"):
+            raise ValueError("pos_side must be 'long' or 'short'")
+        return v
+
+
+@router.post("/close-position")
+async def close_position(request: Request, body: ClosePositionRequest, _key: str = require_auth()):
+    okx = request.app.state.okx_client
+    if not okx:
+        raise HTTPException(503, "OKX client not configured")
+    result = await okx.close_position(pair=body.pair, pos_side=body.pos_side)
+    if not result["success"]:
+        raise HTTPException(400, result["error"])
     return result

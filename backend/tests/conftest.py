@@ -1,8 +1,10 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, AsyncMock
 
+import jwt as pyjwt
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -10,14 +12,25 @@ from fastapi import FastAPI
 
 from app.main import create_app
 
-os.environ.setdefault("KRYPTON_API_KEY", "test-key")
+_TEST_JWT_SECRET = "test-jwt-secret"
+
 os.environ.setdefault("OPENROUTER_API_KEY", "test-key")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
+os.environ.setdefault("JWT_SECRET", _TEST_JWT_SECRET)
+os.environ.setdefault("ALLOWED_EMAILS", "test@example.com")
+
+
+def make_test_jwt(email: str = "test@example.com", user_id: str = "00000000-0000-0000-0000-000000000001"):
+    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(days=1)}
+    return pyjwt.encode(payload, _TEST_JWT_SECRET, algorithm="HS256")
 
 
 @asynccontextmanager
 async def _test_lifespan(app: FastAPI):
     mock_settings = MagicMock()
-    mock_settings.krypton_api_key = "test-key"
+    mock_settings.jwt_secret = _TEST_JWT_SECRET
+    mock_settings.google_client_id = "test-client-id"
+    mock_settings.allowed_emails = "test@example.com"
     mock_settings.pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     mock_settings.engine_traditional_weight = 0.40
     mock_settings.engine_flow_weight = 0.22
@@ -58,8 +71,10 @@ async def _test_lifespan(app: FastAPI):
 
 
 @pytest.fixture
-def app():
-    return create_app(lifespan_override=_test_lifespan)
+async def app():
+    a = create_app(lifespan_override=_test_lifespan)
+    async with _test_lifespan(a):
+        yield a
 
 
 @pytest.fixture
@@ -68,3 +83,9 @@ async def client(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
+
+
+@pytest.fixture
+def auth_cookies():
+    token = make_test_jwt()
+    return {"krypton_token": token}

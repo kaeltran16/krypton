@@ -2,21 +2,23 @@
 
 import pytest
 
-HEADERS = {"X-API-Key": "test-key"}
+from tests.conftest import make_test_jwt
+
+COOKIES = {"krypton_token": make_test_jwt()}
 
 
 @pytest.mark.asyncio
 async def test_optimize_atr_requires_pair_and_timeframe(client):
     resp = await client.post(
         "/api/backtest/optimize-atr",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={},
     )
     assert resp.status_code == 422  # validation error
 
 
 @pytest.mark.asyncio
-async def test_optimize_atr_success(client):
+async def test_optimize_atr_success(app, client):
     """Happy path: returns current/proposed multipliers and metrics."""
     from unittest.mock import AsyncMock, MagicMock
 
@@ -28,11 +30,11 @@ async def test_optimize_atr_success(client):
         "current_sortino": 1.42,
         "proposed_sortino": 1.78,
     })
-    client.app.state.tracker = tracker
+    app.state.tracker = tracker
 
     resp = await client.post(
         "/api/backtest/optimize-atr",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={"pair": "BTC-USDT-SWAP", "timeframe": "1h"},
     )
     assert resp.status_code == 200
@@ -46,18 +48,18 @@ async def test_optimize_atr_success(client):
 
 
 @pytest.mark.asyncio
-async def test_optimize_atr_insufficient_signals(client):
+async def test_optimize_atr_insufficient_signals(app, client):
     """Returns 400 when not enough resolved signals."""
     from unittest.mock import AsyncMock, MagicMock
 
     tracker = MagicMock()
     tracker.get_multipliers = AsyncMock(return_value=(1.5, 2.0, 3.0))
     tracker.optimize = AsyncMock(return_value=None)
-    client.app.state.tracker = tracker
+    app.state.tracker = tracker
 
     resp = await client.post(
         "/api/backtest/optimize-atr",
-        headers=HEADERS,
+        cookies=COOKIES,
         json={"pair": "BTC-USDT-SWAP", "timeframe": "1h"},
     )
     assert resp.status_code == 400

@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.ml import router as ml_router
+from tests.conftest import make_test_jwt
 
-API_KEY = "test-key"
-HEADERS = {"X-API-Key": API_KEY}
+COOKIES = {"krypton_token": make_test_jwt()}
 
 
 def _mock_db(scalars_all=None):
@@ -33,7 +33,7 @@ def _mock_db(scalars_all=None):
 def ml_app():
     app = FastAPI()
     mock_settings = MagicMock()
-    mock_settings.krypton_api_key = API_KEY
+    mock_settings.jwt_secret = "test-jwt-secret"
     mock_settings.ml_enabled = False
     mock_settings.ml_checkpoint_dir = "/tmp/test_models"
     mock_settings.pairs = ["BTC-USDT-SWAP"]
@@ -53,7 +53,7 @@ async def ml_client(ml_app):
 
 
 async def test_status_returns_disabled_by_default(ml_client):
-    resp = await ml_client.get("/api/ml/status", headers=HEADERS)
+    resp = await ml_client.get("/api/ml/status", cookies=COOKIES)
     assert resp.status_code == 200
     data = resp.json()
     assert data["ml_enabled"] is False
@@ -64,7 +64,7 @@ async def test_train_returns_job_id(ml_client):
     resp = await ml_client.post(
         "/api/ml/train",
         json={"timeframe": "1h", "epochs": 1},
-        headers=HEADERS,
+        cookies=COOKIES,
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -73,7 +73,7 @@ async def test_train_returns_job_id(ml_client):
 
 
 async def test_train_status_not_found(ml_client):
-    resp = await ml_client.get("/api/ml/train/nonexistent", headers=HEADERS)
+    resp = await ml_client.get("/api/ml/train/nonexistent", cookies=COOKIES)
     assert resp.status_code == 404
 
 
@@ -84,14 +84,14 @@ async def test_train_background_job_handles_no_data(ml_app, ml_client):
     resp = await ml_client.post(
         "/api/ml/train",
         json={"timeframe": "1h", "epochs": 1},
-        headers=HEADERS,
+        cookies=COOKIES,
     )
     job_id = resp.json()["job_id"]
 
     # Wait for background task to finish
     await asyncio.sleep(0.5)
 
-    resp = await ml_client.get(f"/api/ml/train/{job_id}", headers=HEADERS)
+    resp = await ml_client.get(f"/api/ml/train/{job_id}", cookies=COOKIES)
     data = resp.json()
     assert data["status"] == "failed"
     assert "No pair had enough data" in data.get("error", "")
@@ -101,7 +101,7 @@ async def test_train_accepts_seq_len_and_dropout(ml_client):
     resp = await ml_client.post(
         "/api/ml/train",
         json={"seq_len": 75, "dropout": 0.4},
-        headers={"X-API-Key": "test-key"},
+        cookies={"krypton_token": make_test_jwt()},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -116,7 +116,7 @@ async def test_cancel_training(ml_app, ml_client):
 
     resp = await ml_client.post(
         "/api/ml/train/test_cancel/cancel",
-        headers=HEADERS,
+        cookies=COOKIES,
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "cancelled"

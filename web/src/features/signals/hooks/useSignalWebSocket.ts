@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { WebSocketManager } from "../../../shared/lib/websocket";
-import { WS_BASE_URL, API_KEY } from "../../../shared/lib/constants";
+import { WS_BASE_URL } from "../../../shared/lib/constants";
+import { getWsToken } from "../../auth/hooks/useAuth";
 import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
 import { useNewsStore } from "../../news/store";
@@ -28,8 +29,9 @@ export function useSignalWebSocket() {
       useSignalStore.getState().setSignals(signals);
     }).catch(() => {});
 
+    const token = getWsToken();
     const params = new URLSearchParams();
-    if (API_KEY) params.set("api_key", API_KEY);
+    if (token) params.set("token", token);
     const qs = params.toString();
 
     const ws = new WebSocketManager(

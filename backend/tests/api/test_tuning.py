@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.routes import create_router
+from tests.conftest import make_test_jwt
 
 
 def _mock_db():
@@ -18,7 +19,7 @@ def _mock_db():
 def app_with_routes():
     app = FastAPI()
     settings = MagicMock()
-    settings.krypton_api_key = "test-key"
+    settings.jwt_secret = "test-jwt-secret"
     app.state.settings = settings
     db, session = _mock_db()
     app.state.db = db
@@ -47,7 +48,7 @@ async def test_get_tuning_returns_all_rows(app_with_routes):
     ) as client:
         resp = await client.get(
             "/api/engine/tuning",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -80,7 +81,7 @@ async def test_reset_tuning(app_with_routes):
     ) as client:
         resp = await client.post(
             "/api/engine/tuning/reset",
-            headers={"X-API-Key": "test-key"},
+            cookies={"krypton_token": make_test_jwt()},
             json={"pair": "BTC-USDT-SWAP", "timeframe": "1h"},
         )
     assert resp.status_code == 200

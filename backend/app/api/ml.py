@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.api.auth import require_settings_api_key
+from app.api.auth import require_auth
 from app.db.models import Candle, OrderFlowSnapshot
 from app.ml.data_loader import prepare_training_data
 from app.ml.labels import LabelConfig
@@ -36,7 +36,7 @@ class TrainRequest(BaseModel):
     label_threshold_pct: float = Field(default=1.5, gt=0, le=10)
 
 
-@router.post("/train", dependencies=[require_settings_api_key()])
+@router.post("/train", dependencies=[require_auth()])
 async def start_training(body: TrainRequest, request: Request):
     """Start ML model training on historical data."""
     db = request.app.state.db
@@ -206,7 +206,7 @@ async def start_training(body: TrainRequest, request: Request):
     return {"job_id": job_id, "status": "running"}
 
 
-@router.get("/train/{job_id}", dependencies=[require_settings_api_key()])
+@router.get("/train/{job_id}", dependencies=[require_auth()])
 async def get_training_status(job_id: str, request: Request):
     train_jobs = _get_train_jobs(request.app)
     job = train_jobs.get(job_id)
@@ -216,7 +216,7 @@ async def get_training_status(job_id: str, request: Request):
     return {"job_id": job_id, **{k: v for k, v in job.items() if k != "task"}}
 
 
-@router.post("/train/{job_id}/cancel", dependencies=[require_settings_api_key()])
+@router.post("/train/{job_id}/cancel", dependencies=[require_auth()])
 async def cancel_training(job_id: str, request: Request):
     """Cancel a running training job."""
     train_jobs = _get_train_jobs(request.app)
@@ -232,7 +232,7 @@ async def cancel_training(job_id: str, request: Request):
     return {"job_id": job_id, "status": "cancelled"}
 
 
-@router.get("/status", dependencies=[require_settings_api_key()])
+@router.get("/status", dependencies=[require_auth()])
 async def get_ml_status(request: Request):
     """Check if ML model is loaded and ready."""
     predictors = getattr(request.app.state, "ml_predictors", {})
@@ -250,7 +250,7 @@ class BackfillRequest(BaseModel):
     lookback_days: int = Field(default=365, ge=30, le=1825)
 
 
-@router.post("/backfill", dependencies=[require_settings_api_key()])
+@router.post("/backfill", dependencies=[require_auth()])
 async def start_backfill(body: BackfillRequest, request: Request):
     """Deep-fetch historical candles from OKX into the database for ML training."""
     db = request.app.state.db
@@ -347,7 +347,7 @@ async def start_backfill(body: BackfillRequest, request: Request):
     return {"job_id": job_id, "status": "running"}
 
 
-@router.get("/backfill/{job_id}", dependencies=[require_settings_api_key()])
+@router.get("/backfill/{job_id}", dependencies=[require_auth()])
 async def get_backfill_status(job_id: str, request: Request):
     backfill_jobs = _get_backfill_jobs(request.app)
     job = backfill_jobs.get(job_id)

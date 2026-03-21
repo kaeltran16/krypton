@@ -2,13 +2,14 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import make_test_jwt
 
-HEADERS = {"X-API-Key": "test-key"}
+COOKIES = {"krypton_token": make_test_jwt()}
 
 
 @pytest.mark.asyncio
 async def test_get_engine_parameters(client):
-    resp = await client.get("/api/engine/parameters", headers=HEADERS)
+    resp = await client.get("/api/engine/parameters", cookies=COOKIES)
     assert resp.status_code == 200
     data = resp.json()
 
