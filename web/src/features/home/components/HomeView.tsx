@@ -6,6 +6,8 @@ import { RecentSignals } from "./RecentSignals";
 import { MiniSparkline } from "./MiniSparkline";
 import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { SignalDetail } from "../../signals/components/SignalDetail";
+import { useSignalStore } from "../../signals/store";
 import type { Portfolio, Position } from "../../../shared/lib/api";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
@@ -15,39 +17,43 @@ export function HomeView() {
   const { stats, loading: statsLoading } = useSignalStats();
   const { news: recentNews, loading: newsLoading } = useRecentNews(5);
 
+  const selectedSignal = useSignalStore((s) => s.selectedSignal);
+  const clearSelection = useSignalStore((s) => s.clearSelection);
+
   const equityCurve = useMemo(
     () => stats?.equity_curve.map((d) => d.cumulative_pnl) ?? [],
     [stats?.equity_curve]
   );
 
-  if (error && !portfolio) {
-    return (
-      <div className="flex flex-col gap-3 p-4">
-        <div className="bg-surface-container rounded-lg p-4 text-center">
-          <p className="text-on-surface-variant text-sm">Unable to load portfolio</p>
-          <button
-            onClick={refresh}
-            className="mt-2 px-4 py-1.5 text-xs font-medium rounded-lg bg-surface-container-highest text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Retry
-          </button>
-        </div>
-        <RecentSignals />
-        <LatestNewsCard news={recentNews} loading={newsLoading} />
-        <PerformanceCard stats={stats} loading={statsLoading} />
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <AccountHeader portfolio={portfolio} loading={accountLoading} equityCurve={equityCurve} />
-      <PortfolioStrip portfolio={portfolio} loading={accountLoading} />
-      <OpenPositions positions={positions} loading={accountLoading} />
-      <RecentSignals />
-      <LatestNewsCard news={recentNews} loading={newsLoading} />
-      <PerformanceCard stats={stats} loading={statsLoading} />
-    </div>
+    <>
+      {error && !portfolio ? (
+        <div className="flex flex-col gap-3 p-4">
+          <div className="bg-surface-container rounded-lg p-4 text-center">
+            <p className="text-on-surface-variant text-sm">Unable to load portfolio</p>
+            <button
+              onClick={refresh}
+              className="mt-2 px-5 py-2.5 min-h-[44px] text-sm font-medium rounded-lg bg-surface-container-highest text-primary active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Retry
+            </button>
+          </div>
+          <RecentSignals />
+          <LatestNewsCard news={recentNews} loading={newsLoading} />
+          <PerformanceCard stats={stats} loading={statsLoading} />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 p-4">
+          <AccountHeader portfolio={portfolio} loading={accountLoading} equityCurve={equityCurve} />
+          <PortfolioStrip portfolio={portfolio} positions={positions} loading={accountLoading} />
+          <OpenPositions positions={positions} loading={accountLoading} />
+          <RecentSignals />
+          <LatestNewsCard news={recentNews} loading={newsLoading} />
+          <PerformanceCard stats={stats} loading={statsLoading} />
+        </div>
+      )}
+      <SignalDetail signal={selectedSignal} onClose={clearSelection} />
+    </>
   );
 }
 
@@ -61,7 +67,7 @@ function AccountHeader({ portfolio, loading, equityCurve = [] }: { portfolio: Po
 
   return (
     <div className="bg-surface-container rounded-lg p-5">
-      <span className="text-on-surface-variant text-[10px] uppercase tracking-widest">Total Equity</span>
+      <span className="text-on-surface-variant text-xs uppercase tracking-widest">Total Equity</span>
       <div className="font-headline text-3xl font-bold mt-1 tabular">${formatPrice(portfolio.total_equity)}</div>
       <div className="flex items-center gap-2 mt-3">
         <span className={`font-headline font-bold text-lg tabular ${isPositive ? "text-long" : "text-short"}`}>
@@ -80,7 +86,7 @@ function AccountHeader({ portfolio, loading, equityCurve = [] }: { portfolio: Po
   );
 }
 
-function PortfolioStrip({ portfolio, loading }: { portfolio: Portfolio | null; loading: boolean }) {
+function PortfolioStrip({ portfolio, positions, loading }: { portfolio: Portfolio | null; positions: Position[]; loading: boolean }) {
   if (loading || !portfolio) return null;
 
   const exposurePct = portfolio.total_equity > 0
@@ -91,21 +97,19 @@ function PortfolioStrip({ portfolio, loading }: { portfolio: Portfolio | null; l
     <div className="bg-surface-container-low rounded-lg p-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
-          <span className="text-on-surface-variant text-[10px] uppercase tracking-widest block">Unrealized</span>
-          <span className={`font-headline font-bold text-sm tabular ${portfolio.unrealized_pnl >= 0 ? "text-long" : "text-short"}`}>
-            {portfolio.unrealized_pnl >= 0 ? "+" : ""}{formatPrice(portfolio.unrealized_pnl)}
-          </span>
+          <span className="text-xs text-on-surface-variant uppercase tracking-widest block">Positions</span>
+          <span className={`font-headline font-bold text-sm tabular ${positions.length > 0 ? "text-primary" : ""}`}>{positions.length}</span>
         </div>
         <div>
-          <span className="text-on-surface-variant text-[10px] uppercase tracking-widest block">Available</span>
+          <span className="text-on-surface-variant text-xs uppercase tracking-widest block">Available</span>
           <span className="font-headline font-bold text-sm tabular">${formatPrice(portfolio.available_balance)}</span>
         </div>
         <div>
-          <span className="text-on-surface-variant text-[10px] uppercase tracking-widest block">Margin</span>
+          <span className="text-on-surface-variant text-xs uppercase tracking-widest block">Margin</span>
           <span className="font-headline font-bold text-sm tabular">{portfolio.margin_utilization.toFixed(1)}%</span>
         </div>
         <div>
-          <span className="text-on-surface-variant text-[10px] uppercase tracking-widest block">Exposure</span>
+          <span className="text-on-surface-variant text-xs uppercase tracking-widest block">Exposure</span>
           <span className={`font-headline font-bold text-sm tabular ${exposurePct > 100 ? "text-primary" : ""}`}>
             {exposurePct.toFixed(0)}%
           </span>
@@ -118,7 +122,7 @@ function PortfolioStrip({ portfolio, loading }: { portfolio: Portfolio | null; l
 function OpenPositions({ positions, loading }: { positions: Position[]; loading: boolean }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  if (loading) return <div className="h-16 bg-surface-container rounded-lg animate-pulse" />;
+  if (loading) return <div className="h-20 bg-surface-container rounded-lg animate-pulse" />;
 
   return (
     <div className="space-y-3">
@@ -128,7 +132,7 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
         </h2>
       </div>
       {positions.length === 0 ? (
-        <p className="px-1 text-sm text-outline">No open positions</p>
+        <p className="px-1 text-sm text-outline">No open positions &mdash; the engine is monitoring for opportunities</p>
       ) : (
         <div className="space-y-2">
           {positions.map((pos) => {
@@ -152,44 +156,50 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-headline font-bold text-sm">{formatPair(pos.pair)}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
                           isLong ? "bg-long/20 text-long" : "bg-short/20 text-short"
                         }`}>
                           {pos.side.toUpperCase()} {pos.leverage}x
                         </span>
                       </div>
-                      <span className="text-[10px] text-on-surface-variant tabular">Size: {pos.size}</span>
+                      <span className="text-xs text-on-surface-variant tabular">Size: {pos.size}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <span className={`font-headline font-bold text-sm block tabular ${pos.unrealized_pnl >= 0 ? "text-long" : "text-short"}`}>
                       {pos.unrealized_pnl >= 0 ? "+" : ""}{formatPrice(pos.unrealized_pnl)}
                     </span>
-                    <span className="text-[10px] text-on-surface-variant tabular">${formatPrice(pos.mark_price)}</span>
+                    <span className="text-xs text-on-surface-variant tabular">${formatPrice(pos.mark_price)}</span>
                   </div>
                 </button>
-                {isExpanded && (
-                  <div className="px-3 pb-3 grid grid-cols-3 gap-2 bg-surface-container-lowest/30">
-                    <div>
-                      <span className="text-[10px] text-on-surface-variant block uppercase">Entry</span>
-                      <span className="text-xs font-medium tabular">${formatPrice(pos.avg_price)}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-on-surface-variant block uppercase">Mark</span>
-                      <span className="text-xs font-medium tabular">${formatPrice(pos.mark_price)}</span>
-                    </div>
-                    {pos.liquidation_price && (
+                <div
+                  className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                    isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="px-3 pb-3 pt-1 grid grid-cols-3 gap-2">
                       <div>
-                        <span className="text-[10px] text-on-surface-variant block uppercase">Liq. Price</span>
-                        <span className="text-xs font-medium text-short tabular">${formatPrice(pos.liquidation_price)}</span>
+                        <span className="text-xs text-on-surface-variant block uppercase">Entry</span>
+                        <span className="text-xs font-medium tabular">${formatPrice(pos.avg_price)}</span>
                       </div>
-                    )}
-                    <div>
-                      <span className="text-[10px] text-on-surface-variant block uppercase">Margin</span>
-                      <span className="text-xs font-medium tabular">${formatPrice(pos.margin)}</span>
+                      <div>
+                        <span className="text-xs text-on-surface-variant block uppercase">Mark</span>
+                        <span className="text-xs font-medium tabular">${formatPrice(pos.mark_price)}</span>
+                      </div>
+                      {pos.liquidation_price && (
+                        <div>
+                          <span className="text-xs text-on-surface-variant block uppercase">Liq. Price</span>
+                          <span className="text-xs font-medium text-short tabular">${formatPrice(pos.liquidation_price)}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-xs text-on-surface-variant block uppercase">Margin</span>
+                        <span className="text-xs font-medium tabular">${formatPrice(pos.margin)}</span>
+                      </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
@@ -211,36 +221,52 @@ const SENTIMENT_COLOR: Record<string, string> = {
 };
 
 function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean }) {
-  if (loading) return <div className="h-16 bg-surface-container rounded-lg animate-pulse" />;
-  if (news.length === 0) return null;
+  if (loading) return <div className="h-24 bg-surface-container rounded-lg animate-pulse" />;
 
   return (
     <div className="space-y-3">
       <h2 className="text-xs font-bold tracking-widest uppercase text-on-surface-variant px-1">
         Latest News
       </h2>
+      {news.length === 0 ? (
+        <p className="px-1 text-sm text-outline">No recent news &mdash; feeds are being monitored</p>
+      ) : (
       <div className="space-y-2">
-        {news.map((n) => (
-          <div key={n.id} className={`bg-surface-container-low rounded-lg p-3 border-l-4 ${IMPACT_BORDER[n.impact ?? ""] ?? "border-l-outline-variant/20"}`}>
-            <p className="text-sm font-medium leading-snug">{n.headline}</p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[10px] text-on-surface-variant tabular">{n.source}</span>
-              {n.sentiment && (
-                <span className={`text-[10px] font-medium ${SENTIMENT_COLOR[n.sentiment] ?? ""}`}>
-                  {n.sentiment}
-                </span>
-              )}
-              <span className="text-[10px] text-outline">{n.published_at ? formatRelativeTime(n.published_at) : ""}</span>
+        {news.map((n) => {
+          const cls = `bg-surface-container-low rounded-lg p-3 border-l-4 ${IMPACT_BORDER[n.impact ?? ""] ?? "border-l-outline-variant/20"}`;
+          const inner = (
+            <>
+              <p className="text-sm font-medium leading-snug">{n.headline}</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-xs text-on-surface-variant tabular">{n.source}</span>
+                {n.sentiment && (
+                  <span className={`text-xs font-medium ${SENTIMENT_COLOR[n.sentiment] ?? ""}`}>
+                    {n.sentiment}
+                  </span>
+                )}
+                <span className="text-xs text-outline">{n.published_at ? formatRelativeTime(n.published_at) : ""}</span>
+              </div>
+            </>
+          );
+
+          return n.url ? (
+            <a key={n.id} href={n.url} target="_blank" rel="noopener noreferrer" className={`block active:bg-surface-container/50 transition-colors ${cls}`}>
+              {inner}
+            </a>
+          ) : (
+            <div key={n.id} className={cls}>
+              {inner}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      )}
     </div>
   );
 }
 
 function PerformanceCard({ stats, loading }: { stats: SignalStats | null; loading: boolean }) {
-  if (loading) return <div className="h-16 bg-surface-container rounded-lg animate-pulse" />;
+  if (loading) return <div className="h-28 bg-surface-container rounded-lg animate-pulse" />;
   if (!stats || stats.total_resolved === 0) return null;
 
   const netPnl = stats.equity_curve.length > 0
@@ -249,23 +275,23 @@ function PerformanceCard({ stats, loading }: { stats: SignalStats | null; loadin
 
   return (
     <div className="bg-surface-container rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">Performance (7D)</div>
+      <div className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">Performance (7D)</div>
       <div className="grid grid-cols-3 gap-3 text-center">
         <div>
           <div className={`text-xl font-headline font-bold tabular ${stats.win_rate >= 50 ? "text-long" : "text-short"}`}>
             {stats.win_rate}%
           </div>
-          <div className="text-[10px] text-on-surface-variant">Win Rate</div>
+          <div className="text-xs text-on-surface-variant">Win Rate</div>
         </div>
         <div>
           <div className="text-xl font-headline font-bold tabular">{stats.avg_rr}</div>
-          <div className="text-[10px] text-on-surface-variant">Avg R:R</div>
+          <div className="text-xs text-on-surface-variant">Avg R:R</div>
         </div>
         <div>
           <div className={`text-xl font-headline font-bold tabular ${netPnl >= 0 ? "text-long" : "text-short"}`}>
             {netPnl >= 0 ? "+" : ""}{netPnl.toFixed(1)}%
           </div>
-          <div className="text-[10px] text-on-surface-variant">Net P&L</div>
+          <div className="text-xs text-on-surface-variant">Net P&L</div>
         </div>
       </div>
     </div>
