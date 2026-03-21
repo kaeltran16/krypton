@@ -6,6 +6,7 @@ import { SignalDetail } from "./SignalDetail";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { OrderDialog } from "../../trading/components/OrderDialog";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
+import { EmptyState } from "../../../shared/components/EmptyState";
 import type { Signal, UserStatus } from "../types";
 
 type StatusFilter = "ALL" | "ACTIVE" | UserStatus;
@@ -50,13 +51,11 @@ export function SignalFeed() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 mt-12 text-center">
-          <Radio size={32} className="text-outline" />
-          <p className="text-on-surface-variant text-sm">
-            {statusFilter === "ALL" ? "No signals in the last 24 hours" : `No ${statusFilter.toLowerCase()} signals`}
-          </p>
-          <p className="text-outline text-xs">Signals appear as the engine detects opportunities</p>
-        </div>
+        <EmptyState
+          icon={<Radio size={32} />}
+          title={statusFilter === "ALL" ? "No signals in the last 24 hours" : `No ${statusFilter.toLowerCase()} signals`}
+          subtitle="Signals appear as the engine detects opportunities"
+        />
       ) : (
         <div className="space-y-2">
           {filtered.map((signal, i) => (

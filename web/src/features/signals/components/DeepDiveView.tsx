@@ -4,6 +4,7 @@ import { useSignalStats } from "../../home/hooks/useSignalStats";
 import { theme } from "../../../shared/theme";
 import { formatPair } from "../../../shared/lib/format";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
+import { EmptyState } from "../../../shared/components/EmptyState";
 import type { SignalStats, PerformanceMetrics } from "../types";
 
 type Period = "7" | "30" | "365";
@@ -31,11 +32,11 @@ export function DeepDiveView() {
   if (!stats || stats.total_resolved < 5) {
     return (
       <div className="p-3">
-        <div className="flex flex-col items-center gap-3 mt-12 text-center">
-          <Activity size={32} className="text-outline" />
-          <p className="text-on-surface-variant text-sm">Need at least 5 resolved trades</p>
-          <p className="text-outline text-xs">Deep dive metrics require more data</p>
-        </div>
+        <EmptyState
+          icon={<Activity size={32} />}
+          title="Need at least 5 resolved trades"
+          subtitle="Deep dive metrics require more data"
+        />
       </div>
     );
   }

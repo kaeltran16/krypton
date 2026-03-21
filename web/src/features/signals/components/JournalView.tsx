@@ -6,10 +6,10 @@ import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 
 type JournalTab = "analytics" | "calendar" | "deepdive";
 
-const TABS: { key: JournalTab; label: string }[] = [
-  { key: "analytics", label: "Analytics" },
-  { key: "calendar", label: "Calendar" },
-  { key: "deepdive", label: "Deep Dive" },
+const TABS: { value: JournalTab; label: string }[] = [
+  { value: "analytics", label: "Analytics" },
+  { value: "calendar", label: "Calendar" },
+  { value: "deepdive", label: "Deep Dive" },
 ];
 
 export function JournalView() {
@@ -19,7 +19,7 @@ export function JournalView() {
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3">
         <SegmentedControl
-          options={TABS.map(({ key, label }) => ({ value: key, label }))}
+          options={TABS}
           value={tab}
           onChange={setTab}
           fullWidth

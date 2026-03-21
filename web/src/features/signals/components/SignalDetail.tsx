@@ -9,6 +9,12 @@ import { IndicatorAudit } from "./IndicatorAudit";
 import { ReasoningChain } from "./ReasoningChain";
 import ParameterRow from "../../engine/components/ParameterRow";
 
+const USER_STATUSES: { value: UserStatus; label: string }[] = [
+  { value: "OBSERVED", label: "Observed" },
+  { value: "TRADED", label: "Traded" },
+  { value: "SKIPPED", label: "Skipped" },
+];
+
 interface SignalDetailProps {
   signal: Signal | null;
   onClose: () => void;
@@ -261,12 +267,6 @@ function JournalSection({ signal }: { signal: Signal }) {
     }
   };
 
-  const statuses: { value: UserStatus; label: string }[] = [
-    { value: "OBSERVED", label: "Observed" },
-    { value: "TRADED", label: "Traded" },
-    { value: "SKIPPED", label: "Skipped" },
-  ];
-
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
@@ -276,7 +276,7 @@ function JournalSection({ signal }: { signal: Signal }) {
       </div>
 
       <div className="flex gap-1.5 mb-3">
-        {statuses.map(({ value, label }) => (
+        {USER_STATUSES.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => handleStatusChange(value)}

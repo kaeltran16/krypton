@@ -22,8 +22,10 @@ export function SegmentedControl<T extends string>({
           key={opt.value}
           aria-pressed={value === opt.value}
           onClick={() => {
-            hapticTap();
-            onChange(opt.value);
+            if (value !== opt.value) {
+              hapticTap();
+              onChange(opt.value);
+            }
           }}
           className={`min-h-[44px] px-4 text-xs font-semibold rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
             fullWidth ? "flex-1" : ""

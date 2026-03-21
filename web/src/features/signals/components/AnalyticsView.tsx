@@ -3,6 +3,7 @@ import { BarChart3 } from "lucide-react";
 import { useSignalStats } from "../../home/hooks/useSignalStats";
 import { theme } from "../../../shared/theme";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
+import { EmptyState } from "../../../shared/components/EmptyState";
 import type { SignalStats } from "../types";
 
 type Period = "7" | "30" | "365";
@@ -30,11 +31,11 @@ export function AnalyticsView() {
   if (!stats || stats.total_resolved === 0) {
     return (
       <div className="p-3">
-        <div className="flex flex-col items-center gap-3 mt-12 text-center">
-          <BarChart3 size={32} className="text-outline" />
-          <p className="text-on-surface-variant text-sm">No resolved signals yet</p>
-          <p className="text-outline text-xs">Analytics will appear as signals resolve</p>
-        </div>
+        <EmptyState
+          icon={<BarChart3 size={32} />}
+          title="No resolved signals yet"
+          subtitle="Analytics will appear as signals resolve"
+        />
       </div>
     );
   }
