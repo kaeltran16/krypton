@@ -22,6 +22,7 @@ function createSignal(overrides: Partial<Signal> = {}): Signal {
     user_status: "OBSERVED",
     risk_metrics: null,
     detected_patterns: null,
+    raw_indicators: null,
     correlated_news_ids: null,
     engine_snapshot: null,
     created_at: "2026-02-27T12:00:00Z",

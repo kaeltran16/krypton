@@ -35,6 +35,53 @@ export interface LLMFactor {
   reason: string;
 }
 
+export interface RawIndicators {
+  rsi?: number;
+  adx?: number;
+  di_plus?: number;
+  di_minus?: number;
+  bb_pos?: number;
+  bb_width_pct?: number;
+  obv_slope?: number;
+  vol_ratio?: number;
+  atr?: number;
+  ema_9?: number;
+  ema_21?: number;
+  ema_50?: number;
+  mean_rev_score?: number;
+  squeeze_score?: number;
+  regime_trending?: number;
+  regime_ranging?: number;
+  regime_volatile?: number;
+  funding_rate?: number;
+  open_interest_change_pct?: number;
+  long_short_ratio?: number;
+  [key: string]: number | string | boolean | null | undefined;
+}
+
+export interface RegimeResult {
+  dominant: "trending" | "ranging" | "volatile";
+  trending: number;
+  ranging: number;
+  volatile: number;
+  dominantPct: number;
+}
+
+export function computeRegime(ind: { regime_trending?: number; regime_ranging?: number; regime_volatile?: number }): RegimeResult | null {
+  if (ind.regime_trending == null) return null;
+  const trending = ind.regime_trending ?? 0;
+  const ranging = ind.regime_ranging ?? 0;
+  const volatile_ = ind.regime_volatile ?? 0;
+  const total = trending + ranging + volatile_ || 1;
+  const dominant = trending >= ranging && trending >= volatile_
+    ? "trending" as const
+    : volatile_ >= ranging
+      ? "volatile" as const
+      : "ranging" as const;
+  const dominantVal = dominant === "trending" ? trending : dominant === "volatile" ? volatile_ : ranging;
+  return { dominant, trending, ranging, volatile: volatile_, dominantPct: Math.round((dominantVal / total) * 100) };
+}
+
 export interface Signal {
   id: number;
   pair: string;
@@ -42,6 +89,7 @@ export interface Signal {
   direction: Direction;
   final_score: number;
   traditional_score: number;
+  raw_indicators: RawIndicators | null;
   llm_factors: LLMFactor[] | null;
   llm_contribution: number | null;
   explanation: string | null;

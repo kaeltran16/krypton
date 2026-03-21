@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAccount } from "../../dashboard/hooks/useAccount";
 import { useSignalStats } from "../hooks/useSignalStats";
 import { useRecentNews } from "../../news/hooks/useNews";
 import { RecentSignals } from "./RecentSignals";
+import { MiniSparkline } from "./MiniSparkline";
 import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import type { Portfolio, Position } from "../../../shared/lib/api";
@@ -13,6 +14,11 @@ export function HomeView() {
   const { portfolio, positions, loading: accountLoading, error, refresh } = useAccount();
   const { stats, loading: statsLoading } = useSignalStats();
   const { news: recentNews, loading: newsLoading } = useRecentNews(5);
+
+  const equityCurve = useMemo(
+    () => stats?.equity_curve.map((d) => d.cumulative_pnl) ?? [],
+    [stats?.equity_curve]
+  );
 
   if (error && !portfolio) {
     return (
@@ -35,7 +41,7 @@ export function HomeView() {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <AccountHeader portfolio={portfolio} loading={accountLoading} />
+      <AccountHeader portfolio={portfolio} loading={accountLoading} equityCurve={equityCurve} />
       <PortfolioStrip portfolio={portfolio} loading={accountLoading} />
       <OpenPositions positions={positions} loading={accountLoading} />
       <RecentSignals />
@@ -45,7 +51,7 @@ export function HomeView() {
   );
 }
 
-function AccountHeader({ portfolio, loading }: { portfolio: Portfolio | null; loading: boolean }) {
+function AccountHeader({ portfolio, loading, equityCurve = [] }: { portfolio: Portfolio | null; loading: boolean; equityCurve?: number[] }) {
   if (loading) return <div className="h-24 bg-surface-container rounded-lg animate-pulse" />;
   if (!portfolio) return null;
 
@@ -66,6 +72,9 @@ function AccountHeader({ portfolio, loading }: { portfolio: Portfolio | null; lo
         }`}>
           {isPositive ? "+" : ""}{pct.toFixed(1)}%
         </span>
+        {equityCurve.length >= 2 && (
+          <MiniSparkline data={equityCurve} className="ml-auto opacity-80" />
+        )}
       </div>
     </div>
   );

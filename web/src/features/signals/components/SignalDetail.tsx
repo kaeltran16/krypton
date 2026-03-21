@@ -4,6 +4,8 @@ import { formatPrice, formatScore } from "../../../shared/lib/format";
 import { api } from "../../../shared/lib/api";
 import { useSignalStore } from "../store";
 import { PatternDetailRow } from "./PatternBadges";
+import { IndicatorAudit } from "./IndicatorAudit";
+import { ReasoningChain } from "./ReasoningChain";
 import ParameterRow from "../../engine/components/ParameterRow";
 
 interface SignalDetailProps {
@@ -84,6 +86,12 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
           </div>
         )}
       </div>
+
+      {signal.raw_indicators && (
+        <IndicatorAudit indicators={signal.raw_indicators} />
+      )}
+
+      <ReasoningChain signal={signal} />
 
       {signal.detected_patterns && signal.detected_patterns.length > 0 && (
         <PatternDetailRow patterns={signal.detected_patterns} />

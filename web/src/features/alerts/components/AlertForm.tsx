@@ -254,7 +254,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => onClose()}
           className="flex-1 py-3 text-sm bg-surface-container border border-outline-variant/20 rounded-lg min-h-[44px] text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           Cancel

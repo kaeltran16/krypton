@@ -48,6 +48,8 @@ def _signal_to_dict(signal: Signal) -> dict:
         "risk_metrics": signal.risk_metrics,
         "detected_patterns": signal.detected_patterns,
         "correlated_news_ids": signal.correlated_news_ids,
+        "raw_indicators": signal.raw_indicators,
+        "engine_snapshot": signal.engine_snapshot,
     }
 
 
