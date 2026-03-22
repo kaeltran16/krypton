@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import { hapticTap } from "../lib/haptics";
+import { useClickOutside } from "../hooks/useClickOutside";
 
 export interface DropdownOption {
   value: string;
@@ -38,21 +39,7 @@ export function Dropdown({
     setFocusIdx(-1);
   }, []);
 
-  // Click outside
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent | TouchEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        close();
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    document.addEventListener("touchstart", handler);
-    return () => {
-      document.removeEventListener("mousedown", handler);
-      document.removeEventListener("touchstart", handler);
-    };
-  }, [open, close]);
+  useClickOutside(containerRef, close, open);
 
   // Scroll focused item into view
   useEffect(() => {

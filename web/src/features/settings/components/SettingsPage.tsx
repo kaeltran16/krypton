@@ -6,6 +6,7 @@ import type { Timeframe } from "../../signals/types";
 import { QuietHoursSettings } from "../../alerts/components/QuietHoursSettings";
 import { Toggle } from "../../../shared/components/Toggle";
 import { hapticTap } from "../../../shared/lib/haptics";
+import { formatPair } from "../../../shared/lib/format";
 
 const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h"];
 
@@ -128,7 +129,7 @@ export default function SettingsPage() {
           selected={pairs}
           onToggle={(pair) => setPairs(toggleItem(pairs, pair))}
           multi
-          renderLabel={(pair) => pair.replace("-USDT-SWAP", "")}
+          renderLabel={formatPair}
         />
       </SettingsCard>
 

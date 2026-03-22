@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Proposal } from "../types";
+import { humanizeKey } from "../../../shared/lib/format";
 
 interface Props {
   proposals: Proposal[];
@@ -40,7 +41,7 @@ export default function ProposalHistory({ proposals }: Props) {
                 }>
                   {p.status}
                 </span>
-                <span className="text-muted">{p.parameter_group.replace(/_/g, " ")}</span>
+                <span className="text-muted">{humanizeKey(p.parameter_group)}</span>
               </div>
               <span className="text-[10px] text-muted">
                 {p.promoted_at

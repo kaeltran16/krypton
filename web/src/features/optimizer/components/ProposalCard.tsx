@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { Proposal } from "../types";
 import ParamInfoPopup from "../../engine/components/ParamInfoPopup";
+import { Button } from "../../../shared/components/Button";
+import { humanizeKey } from "../../../shared/lib/format";
 
 const STATUS_STYLE: Record<string, string> = {
   pending: "bg-accent/15 text-accent",
@@ -58,7 +60,7 @@ export default function ProposalCard({
       <div className="flex items-center justify-between">
         <div>
           <span className="text-sm font-medium text-on-surface">
-            {p.parameter_group.replace(/_/g, " ")}
+            {humanizeKey(p.parameter_group)}
           </span>
           <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${
             STATUS_STYLE[p.status] || "bg-dim/15 text-muted"
@@ -110,48 +112,58 @@ export default function ProposalCard({
       <div className="flex gap-2">
         {p.status === "pending" && (
           <>
-            <button
+            <Button
+              variant="primary"
+              size="sm"
+              loading={actionLoading}
               onClick={() => onApprove?.(p.id)}
-              disabled={actionLoading}
-              className="flex-1 min-h-[44px] text-xs font-medium rounded-lg bg-long/15 text-long hover:bg-long/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1"
             >
-              {actionLoading ? "..." : "Approve"}
-            </button>
-            <button
-              onClick={handleReject}
+              Approve
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
               disabled={actionLoading}
-              className="flex-1 min-h-[44px] text-xs font-medium rounded-lg bg-error/15 text-error hover:bg-error/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleReject}
+              className="flex-1"
             >
               {confirmAction === "reject" ? "Confirm Reject?" : "Reject"}
-            </button>
+            </Button>
           </>
         )}
         {p.status === "shadow" && (
           <>
-            <button
+            <Button
+              variant="primary"
+              size="sm"
+              loading={actionLoading}
               onClick={() => onPromote?.(p.id)}
-              disabled={actionLoading}
-              className="flex-1 min-h-[44px] text-xs font-medium rounded-lg bg-long/15 text-long hover:bg-long/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1"
             >
-              {actionLoading ? "..." : "Promote Early"}
-            </button>
-            <button
-              onClick={handleReject}
+              Promote Early
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
               disabled={actionLoading}
-              className="flex-1 min-h-[44px] text-xs font-medium rounded-lg bg-error/15 text-error hover:bg-error/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleReject}
+              className="flex-1"
             >
               {confirmAction === "reject" ? "Confirm Reject?" : "Reject"}
-            </button>
+            </Button>
           </>
         )}
         {p.status === "promoted" && (
-          <button
-            onClick={handleRollback}
+          <Button
+            variant="danger"
+            size="sm"
             disabled={actionLoading}
-            className="flex-1 min-h-[44px] text-xs font-medium rounded-lg bg-error/15 text-error hover:bg-error/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={handleRollback}
+            className="flex-1"
           >
             {confirmAction === "rollback" ? "Confirm Rollback?" : "Rollback"}
-          </button>
+          </Button>
         )}
       </div>
     </div>

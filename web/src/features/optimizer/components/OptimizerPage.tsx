@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useOptimizerStore } from "../store";
 import { useEngineStore } from "../../engine/store";
+import { Button } from "../../../shared/components/Button";
 import GroupHealthTable from "./GroupHealthTable";
 import ProposalCard from "./ProposalCard";
 import ShadowProgress from "./ShadowProgress";
@@ -80,13 +81,12 @@ export default function OptimizerPage() {
             )}
           </div>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          icon={<RefreshCw size={16} className={loading ? "animate-spin" : ""} />}
           onClick={() => { fetchStatus(); fetchProposals(); }}
-          className="p-2 text-primary hover:text-primary/80 transition-colors"
           aria-label="Refresh"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-        </button>
+        />
       </div>
 
       {/* Action error toast */}

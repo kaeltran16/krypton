@@ -1,5 +1,6 @@
 import { Check, AlertTriangle, XCircle } from "lucide-react";
 import type { GroupHealth } from "../types";
+import { humanizeKey } from "../../../shared/lib/format";
 
 const STATUS_CONFIG: Record<string, { bg: string; icon: typeof Check; label: string }> = {
   green: { bg: "bg-long", icon: Check, label: "Healthy" },
@@ -27,7 +28,7 @@ export default function GroupHealthTable({ groups }: Props) {
           >
             <div className="flex items-center gap-2">
               <Icon size={12} className={g.status === "green" ? "text-long" : g.status === "yellow" ? "text-accent" : "text-error"} aria-label={cfg.label} />
-              <span className="text-xs text-on-surface">{g.group.replace(/_/g, " ")}</span>
+              <span className="text-xs text-on-surface">{humanizeKey(g.group)}</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-[10px] text-muted">

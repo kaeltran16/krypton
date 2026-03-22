@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useLayoutEffect } from "react";
 import { Info } from "lucide-react";
+import { useClickOutside } from "../../../shared/hooks/useClickOutside";
 
 interface ParamDescription {
   description: string;
@@ -17,27 +18,16 @@ export default function ParamInfoPopup({ name, descriptions }: Props) {
   const [above, setAbove] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
 
-  const desc = descriptions?.[name];
-  if (!desc) return null;
-
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     setAbove(rect.top > 140);
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent | TouchEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    document.addEventListener("touchstart", handler);
-    return () => {
-      document.removeEventListener("mousedown", handler);
-      document.removeEventListener("touchstart", handler);
-    };
-  }, [open]);
+  useClickOutside(ref, () => setOpen(false), open);
+
+  const desc = descriptions?.[name];
+  if (!desc) return null;
 
   return (
     <div className="relative" ref={ref}>

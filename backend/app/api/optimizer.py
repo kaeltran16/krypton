@@ -25,6 +25,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/optimizer", tags=["optimizer"])
 
 
+async def _get_proposal(session, proposal_id: int) -> ParameterProposal:
+    """Fetch a proposal or raise 404."""
+    result = await session.execute(
+        select(ParameterProposal).where(ParameterProposal.id == proposal_id)
+    )
+    proposal = result.scalar_one_or_none()
+    if not proposal:
+        raise HTTPException(404, "Proposal not found")
+    return proposal
+
+
 @router.get("/status")
 async def get_status(request: Request, _key: str = require_auth()):
     """Return optimizer status: group health, global PF, active shadow."""
@@ -115,12 +126,7 @@ async def approve_proposal(
         raise HTTPException(409, "Another shadow proposal is already active")
 
     async with db.session_factory() as session:
-        result = await session.execute(
-            select(ParameterProposal).where(ParameterProposal.id == proposal_id)
-        )
-        proposal = result.scalar_one_or_none()
-        if not proposal:
-            raise HTTPException(404, "Proposal not found")
+        proposal = await _get_proposal(session, proposal_id)
         if proposal.status != "pending":
             raise HTTPException(400, f"Proposal is {proposal.status}, not pending")
 
@@ -150,12 +156,7 @@ async def reject_proposal_endpoint(
     db = request.app.state.db
 
     async with db.session_factory() as session:
-        result = await session.execute(
-            select(ParameterProposal).where(ParameterProposal.id == proposal_id)
-        )
-        proposal = result.scalar_one_or_none()
-        if not proposal:
-            raise HTTPException(404, "Proposal not found")
+        proposal = await _get_proposal(session, proposal_id)
         if proposal.status not in ("pending", "shadow"):
             raise HTTPException(400, f"Cannot reject proposal in {proposal.status} status")
 
@@ -186,12 +187,7 @@ async def promote_proposal_endpoint(
     db = request.app.state.db
 
     async with db.session_factory() as session:
-        result = await session.execute(
-            select(ParameterProposal).where(ParameterProposal.id == proposal_id)
-        )
-        proposal = result.scalar_one_or_none()
-        if not proposal:
-            raise HTTPException(404, "Proposal not found")
+        proposal = await _get_proposal(session, proposal_id)
         if proposal.status != "shadow":
             raise HTTPException(400, f"Cannot promote proposal in {proposal.status} status")
 
@@ -226,12 +222,7 @@ async def rollback_proposal_endpoint(
     db = request.app.state.db
 
     async with db.session_factory() as session:
-        result = await session.execute(
-            select(ParameterProposal).where(ParameterProposal.id == proposal_id)
-        )
-        proposal = result.scalar_one_or_none()
-        if not proposal:
-            raise HTTPException(404, "Proposal not found")
+        proposal = await _get_proposal(session, proposal_id)
         if proposal.status != "promoted":
             raise HTTPException(400, f"Cannot rollback proposal in {proposal.status} status")
 

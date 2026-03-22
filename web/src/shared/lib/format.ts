@@ -52,6 +52,26 @@ export function formatPricePrecision(price: number, pair: string): string {
   });
 }
 
+export function formatDurationSeconds(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+export function formatSecondsAgo(seconds: number | null | undefined): string {
+  if (seconds == null) return "N/A";
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  return `${Math.floor(seconds / 3600)}h ago`;
+}
+
+export function humanizeKey(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
 export function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);

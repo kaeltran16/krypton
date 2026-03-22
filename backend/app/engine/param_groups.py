@@ -13,6 +13,8 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
+from app.engine.constants import PATTERN_STRENGTHS
+
 # ── Priority layers (lower number = optimize first) ──
 
 PRIORITY_LAYERS: list[set[str]] = [
@@ -232,24 +234,12 @@ PARAM_GROUPS: dict[str, dict] = {
     "pattern_strengths": {
         "params": {
             name: f"patterns.strengths.{name}"
-            for name in [
-                "bullish_engulfing", "bearish_engulfing", "morning_star",
-                "evening_star", "three_white_soldiers", "three_black_crows",
-                "marubozu", "hammer", "hanging_man", "piercing_line",
-                "dark_cloud_cover", "inverted_hammer", "shooting_star",
-                "doji", "spinning_top",
-            ]
+            for name in PATTERN_STRENGTHS
         },
         "sweep_method": "de",
         "sweep_ranges": {
             name: (3, 25, None)
-            for name in [
-                "bullish_engulfing", "bearish_engulfing", "morning_star",
-                "evening_star", "three_white_soldiers", "three_black_crows",
-                "marubozu", "hammer", "hanging_man", "piercing_line",
-                "dark_cloud_cover", "inverted_hammer", "shooting_star",
-                "doji", "spinning_top",
-            ]
+            for name in PATTERN_STRENGTHS
         },
         "constraints": _pattern_strengths_ok,
         "priority": _priority_for("pattern_strengths"),

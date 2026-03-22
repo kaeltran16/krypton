@@ -491,6 +491,7 @@ export const api = {
   rejectProposal: (id: number, reason?: string) =>
     request<{ status: string; proposal_id: number }>(`/api/optimizer/proposals/${id}/reject`, {
       method: "POST",
+      headers: jsonHeaders,
       body: JSON.stringify({ reason: reason || "" }),
     }),
 

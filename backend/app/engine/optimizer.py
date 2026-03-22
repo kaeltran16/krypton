@@ -54,11 +54,7 @@ class OptimizerState:
             history = history[-window:]
         if not history:
             return None
-        gains = sum(p for p in history if p > 0)
-        losses = abs(sum(p for p in history if p < 0))
-        if losses == 0:
-            return float("inf") if gains > 0 else None
-        return gains / losses
+        return _compute_pf(history)
 
     def needs_eval(self, group_name: str) -> bool:
         if self.resolved_count < OPTIMIZER_CONFIG["min_signals_for_eval"]:
@@ -240,17 +236,13 @@ async def get_shadow_progress(
     proposal_id: int,
 ) -> dict:
     """Get shadow mode progress for a proposal."""
-    count_result = await session.execute(
-        select(func.count(ShadowResult.id))
-        .where(ShadowResult.proposal_id == proposal_id)
+    result = await session.execute(
+        select(
+            func.count(ShadowResult.id),
+            func.count(ShadowResult.shadow_outcome),
+        ).where(ShadowResult.proposal_id == proposal_id)
     )
-    total = count_result.scalar() or 0
-    resolved_result = await session.execute(
-        select(func.count(ShadowResult.id))
-        .where(ShadowResult.proposal_id == proposal_id)
-        .where(ShadowResult.shadow_outcome.is_not(None))
-    )
-    resolved = resolved_result.scalar() or 0
+    total, resolved = result.one()
     return {
         "total": total,
         "resolved": resolved,

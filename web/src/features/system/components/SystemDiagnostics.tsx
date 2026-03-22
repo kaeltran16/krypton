@@ -10,24 +10,9 @@ import {
 import { useSystemHealth } from "../hooks/useSystemHealth";
 import type { SystemHealthResponse } from "../types";
 import { Button } from "../../../shared/components/Button";
+import { formatDurationSeconds, formatSecondsAgo } from "../../../shared/lib/format";
 
 // ─── Helpers ───────────────────────────────────────────────────
-
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatSecondsAgo(seconds: number | null | undefined): string {
-  if (seconds == null) return "N/A";
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  return `${Math.floor(seconds / 3600)}h ago`;
-}
 
 function adjusted(original: number | null | undefined, elapsed: number): number | null {
   if (original == null) return null;
@@ -257,7 +242,7 @@ function ResourcesSection({ data, elapsed }: { data: SystemHealthResponse; elaps
       </div>
       <div className="flex justify-between items-center">
         <span className="text-[10px] font-bold text-on-surface-variant uppercase">Uptime</span>
-        <span className="text-xs font-bold tabular-nums text-on-surface">{formatUptime(uptime)}</span>
+        <span className="text-xs font-bold tabular-nums text-on-surface">{formatDurationSeconds(uptime)}</span>
       </div>
     </div>
   );
@@ -369,7 +354,7 @@ export function SystemDiagnostics() {
   const bufferEntries = Object.entries(data.pipeline.candle_buffer);
   const minBuffer = bufferEntries.length > 0 ? Math.min(...bufferEntries.map(([, v]) => v)) : 0;
   const wsSummary = `${bufferEntries.length} streams · min ${minBuffer} candles`;
-  const resourceSummary = `${data.resources.db_pool_active}/${data.resources.db_pool_size} pool · ${data.resources.ws_clients} WS · ${formatUptime(data.resources.uptime_seconds + elapsed)}`;
+  const resourceSummary = `${data.resources.db_pool_active}/${data.resources.db_pool_size} pool · ${data.resources.ws_clients} WS · ${formatDurationSeconds(data.resources.uptime_seconds + elapsed)}`;
   const freshnessSummary = `Tech ${formatSecondsAgo(adjusted(data.freshness.technicals_seconds_ago, elapsed))} · ${data.freshness.ml_models_loaded} ML models`;
 
   return (

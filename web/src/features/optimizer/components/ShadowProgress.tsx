@@ -1,4 +1,5 @@
 import type { ShadowProgress as ShadowProgressType, ProposalChange } from "../types";
+import { humanizeKey } from "../../../shared/lib/format";
 
 interface Props {
   group: string;
@@ -19,7 +20,7 @@ export default function ShadowProgress({ group, progress }: Props) {
           {progress.resolved}/{progress.target}
         </span>
       </div>
-      <div className="text-xs text-muted">{group.replace(/_/g, " ")}</div>
+      <div className="text-xs text-muted">{humanizeKey(group)}</div>
       <div className="h-2 bg-surface-container rounded-full overflow-hidden">
         <div
           className="h-full bg-blue-500 transition-all duration-300 rounded-full"

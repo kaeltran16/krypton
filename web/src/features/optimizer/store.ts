@@ -47,8 +47,7 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
     set({ actionLoading: true });
     try {
       await api.approveProposal(id);
-      await get().fetchStatus();
-      await get().fetchProposals();
+      await Promise.all([get().fetchStatus(), get().fetchProposals()]);
     } finally {
       set({ actionLoading: false });
     }
@@ -58,8 +57,7 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
     set({ actionLoading: true });
     try {
       await api.rejectProposal(id, reason);
-      await get().fetchStatus();
-      await get().fetchProposals();
+      await Promise.all([get().fetchStatus(), get().fetchProposals()]);
     } finally {
       set({ actionLoading: false });
     }
@@ -69,8 +67,7 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
     set({ actionLoading: true });
     try {
       await api.promoteProposal(id);
-      await get().fetchStatus();
-      await get().fetchProposals();
+      await Promise.all([get().fetchStatus(), get().fetchProposals()]);
     } finally {
       set({ actionLoading: false });
     }
@@ -80,8 +77,7 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
     set({ actionLoading: true });
     try {
       await api.rollbackProposal(id);
-      await get().fetchStatus();
-      await get().fetchProposals();
+      await Promise.all([get().fetchStatus(), get().fetchProposals()]);
     } finally {
       set({ actionLoading: false });
     }
