@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useSystemHealth } from "../hooks/useSystemHealth";
 import type { SystemHealthResponse } from "../types";
+import { Button } from "../../../shared/components/Button";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -85,18 +86,13 @@ function StatusBanner({
         <c.Icon size={18} className={c.text} />
         <span className={`font-headline font-bold text-sm uppercase tracking-wide ${c.text}`}>{c.label}</span>
       </div>
-      <button
+      <Button
+        variant="ghost"
+        icon={refreshing ? <Loader2 size={18} className="text-primary animate-spin" /> : <RefreshCw size={18} className="text-on-surface-variant" />}
         onClick={onRefresh}
         disabled={refreshing}
-        className="p-2 rounded-lg hover:bg-surface-container-highest transition-colors disabled:opacity-50"
         aria-label="Refresh system health"
-      >
-        {refreshing ? (
-          <Loader2 size={18} className="text-primary animate-spin" />
-        ) : (
-          <RefreshCw size={18} className="text-on-surface-variant" />
-        )}
-      </button>
+      />
     </div>
   );
 }
@@ -362,12 +358,7 @@ export function SystemDiagnostics() {
         <XCircle size={32} className="text-error mx-auto mb-3" />
         <p className="text-sm font-bold text-on-surface mb-1">Unable to reach backend</p>
         <p className="text-xs text-on-surface-variant mb-4">{error}</p>
-        <button
-          onClick={refresh}
-          className="px-4 py-2 bg-primary/10 text-primary text-xs font-bold rounded-lg hover:bg-primary/20 transition-colors"
-        >
-          Retry
-        </button>
+        <Button variant="primary" size="sm" onClick={refresh}>Retry</Button>
       </div>
     );
   }

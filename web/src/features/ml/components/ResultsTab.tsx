@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import type { MLTrainJob, MLTrainResult } from "../../../shared/lib/api";
+import { Button } from "../../../shared/components/Button";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { Toggle } from "../../../shared/components/Toggle";
 import { LossChart } from "./LossChart";
@@ -34,9 +35,9 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
     return (
       <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-6 text-center">
         <p className="text-sm text-on-surface-variant mb-4">No training results yet</p>
-        <button onClick={onSwitchToSetup} className="bg-primary/15 text-primary border border-primary/30 rounded-lg px-4 py-2 text-xs font-medium">
+        <Button onClick={onSwitchToSetup}>
           Go to Setup
-        </button>
+        </Button>
       </div>
     );
   }

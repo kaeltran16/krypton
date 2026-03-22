@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo } from "react";
 import { formatDuration, formatPair } from "../../../shared/lib/format";
+import { Button } from "../../../shared/components/Button";
 import {
   createChart,
   LineSeries,
@@ -45,12 +46,9 @@ export function BacktestCompare() {
       <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
         <p className="text-sm">No saved runs yet.</p>
         <p className="text-xs text-on-surface-variant mt-1">Run a backtest and save it to start comparing.</p>
-        <button
-          onClick={() => setTab("setup")}
-          className="mt-3 px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
+        <Button variant="secondary" size="sm" onClick={() => setTab("setup")} className="mt-3">
           Run a Backtest
-        </button>
+        </Button>
       </div>
     );
   }
@@ -83,29 +81,30 @@ export function BacktestCompare() {
               <span className={`text-sm font-mono tabular-nums ${run.net_pnl >= 0 ? "text-long" : "text-error"}`}>
                 {run.net_pnl >= 0 ? "+" : ""}{run.net_pnl.toFixed(2)}%
               </span>
-              <button
+              <Button
+                size="xs"
                 onClick={(e) => { e.preventDefault(); loadRunDetail(run.id); }}
-                className="px-2 py-1 rounded text-[10px] text-primary border border-primary/30 hover:bg-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 View
-              </button>
+              </Button>
             </label>
           ))}
         </div>
       </div>
 
       {/* Compare button */}
-      <button
+      <Button
+        variant="solid"
+        size="lg"
         onClick={runCompare}
-        disabled={compareIds.length < 2 || compareLoading}
-        className="w-full bg-primary-container text-on-primary-fixed py-3 rounded-lg font-headline font-bold text-xs tracking-widest uppercase disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        disabled={compareIds.length < 2}
+        loading={compareLoading}
+        className="font-headline font-bold text-xs tracking-widest uppercase"
       >
-        {compareLoading
-          ? "Comparing..."
-          : compareIds.length < 2
-            ? "Select at least 2 runs"
-            : `Compare ${compareIds.length} Runs`}
-      </button>
+        {compareIds.length < 2
+          ? "Select at least 2 runs"
+          : `Compare ${compareIds.length} Runs`}
+      </Button>
 
       {/* Comparison results */}
       {compareResult && compareResult.length >= 2 && (

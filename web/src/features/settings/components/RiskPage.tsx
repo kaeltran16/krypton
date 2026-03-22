@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Check, AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { api, type RiskSettings, type RiskRule, type RiskState, type RiskStatus } from "../../../shared/lib/api";
+import { Button } from "../../../shared/components/Button";
 
 type Status = "OK" | "WARNING" | "BLOCKED";
 
@@ -77,12 +78,7 @@ export default function RiskPage() {
     return (
       <div className="p-3 flex flex-col items-center gap-3 pt-16">
         <p className="text-sm text-on-surface-variant">Failed to load risk status</p>
-        <button
-          onClick={fetchStatus}
-          className="px-4 py-2 text-xs font-bold rounded-lg bg-primary/15 text-primary"
-        >
-          Retry
-        </button>
+        <Button variant="primary" size="sm" onClick={fetchStatus}>Retry</Button>
       </div>
     );
   }
@@ -102,14 +98,13 @@ export default function RiskPage() {
           <OverallIcon className={`w-4 h-4 ${overallStyle.dot}`} />
           <span className={`text-sm font-bold ${overallStyle.text}`}>{overallLabel}</span>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          icon={<RefreshCw className={`w-4 h-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} />}
           onClick={fetchStatus}
           disabled={loading}
-          className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
           aria-label="Refresh risk status"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} />
-        </button>
+        />
       </div>
 
       {/* 1. Risk Per Trade */}

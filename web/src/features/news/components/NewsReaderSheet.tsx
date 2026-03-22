@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { X, Zap, ExternalLink } from "lucide-react";
+import { Button } from "../../../shared/components/Button";
 import type { NewsEvent } from "../types";
 import { IMPACT_BADGE, SENTIMENT_COLOR } from "../constants";
 import { formatRelativeTime, formatPair } from "../../../shared/lib/format";
@@ -40,28 +41,17 @@ export function NewsReaderSheet({ event, onClose }: NewsReaderSheetProps) {
         if (e.target === dialogRef.current) onClose();
       }}
       className="bottom-sheet"
-      style={{ maxHeight: "85dvh" }}
       aria-label="Article reader"
     >
       {event && event.content_text && (
-        <div className="overflow-y-auto max-h-[85dvh]">
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 rounded-full bg-outline-variant" />
-          </div>
-
-          <div className="p-4">
-            <div className="flex justify-end mb-2">
-              <button
-                onClick={onClose}
-                aria-label="Close article"
-                className="text-on-surface-variant p-2 hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
-              >
-                <X size={20} />
-              </button>
+        <div className="flex flex-col max-h-[85dvh]">
+          {/* Sticky header */}
+          <div className="sticky top-0 z-10 bg-[var(--glass-dialog)] backdrop-blur-xl border-b border-outline-variant/10 pb-3">
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 rounded-full bg-outline-variant/50" />
             </div>
-
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-start justify-between px-4">
+              <div className="flex items-center gap-2">
                 {event.impact && (
                   <span className={`text-[10px] tracking-widest px-2 py-0.5 uppercase rounded font-medium ${IMPACT_BADGE[event.impact] ?? ""}`}>
                     {event.impact}
@@ -72,12 +62,21 @@ export function NewsReaderSheet({ event, onClose }: NewsReaderSheetProps) {
                     {event.sentiment}
                   </span>
                 )}
+                <span className="text-[10px] text-on-surface-variant tabular">
+                  {estimateReadTime(event.content_text)} min read
+                </span>
               </div>
-              <h2 className="font-headline text-xl font-bold mb-2">{event.headline}</h2>
+              <Button variant="ghost" size="sm" icon={<X size={18} />} onClick={onClose} aria-label="Close article" />
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="overflow-y-auto flex-1 p-4 pt-5">
+            <div className="mb-5">
+              <h2 className="font-headline text-xl font-bold leading-tight mb-2">{event.headline}</h2>
               <p className="text-on-surface-variant text-sm">
                 {event.source}
                 {event.published_at && ` · ${formatRelativeTime(event.published_at)}`}
-                {` · ${estimateReadTime(event.content_text)} min read`}
               </p>
             </div>
 
@@ -92,10 +91,15 @@ export function NewsReaderSheet({ event, onClose }: NewsReaderSheetProps) {
             )}
 
             <div className="border-t border-outline-variant/15 pt-4">
-              <article>
-                {event.content_text.split(/\n{2,}/).filter(Boolean).map((para, i) => (
-                  <p key={i} className="text-on-surface text-[15px] leading-relaxed mb-4">
-                    {para}
+              <article className="max-w-prose">
+                {event.content_text.split(/\n+/).filter((s) => s.trim()).map((para, i) => (
+                  <p
+                    key={i}
+                    className={`text-on-surface/90 leading-[1.75] mb-4 ${
+                      i === 0 ? "text-base" : "text-[15px]"
+                    }`}
+                  >
+                    {para.trim()}
                   </p>
                 ))}
               </article>

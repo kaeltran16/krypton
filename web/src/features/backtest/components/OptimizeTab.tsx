@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../../../shared/lib/api";
+import { Button } from "../../../shared/components/Button";
 import ApplyModal from "./ApplyModal";
 import type { AtrOptimizationResult } from "../../engine/types";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
@@ -63,10 +64,9 @@ export default function OptimizeTab() {
       <div className="border border-outline-variant/30 rounded-lg p-3">
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-medium">ATR Optimization</h4>
-          <button onClick={runAtrOptimize} disabled={loading}
-            className="px-3 py-1.5 text-xs bg-primary/15 text-primary rounded-lg disabled:opacity-50">
-            {loading ? "Running..." : "Optimize"}
-          </button>
+          <Button size="sm" onClick={runAtrOptimize} loading={loading}>
+            Optimize
+          </Button>
         </div>
 
         {error && <p className="text-xs text-error">{error}</p>}
@@ -95,10 +95,9 @@ export default function OptimizeTab() {
               {atrResult.metrics.signals_analyzed} signals analyzed |
               Sortino: {atrResult.metrics.current_sortino?.toFixed(2) ?? "\u2014"} {"\u2192"} {atrResult.metrics.proposed_sortino?.toFixed(2) ?? "\u2014"}
             </div>
-            <button onClick={handleApplyAtr}
-              className="text-xs text-primary hover:text-primary/80">
+            <Button size="xs" onClick={handleApplyAtr}>
               Apply to Live
-            </button>
+            </Button>
           </div>
         )}
       </div>

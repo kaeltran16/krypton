@@ -21,9 +21,14 @@ import { SplashScreen } from "./shared/components/SplashScreen";
 
 export default function App() {
   const { isLoading, isAuthenticated, login } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
 
-  if (isLoading) {
-    return <SplashScreen />;
+  if (showSplash) {
+    return (
+      <SplashScreen
+        onFinished={isLoading ? undefined : () => setShowSplash(false)}
+      />
+    );
   }
 
   if (!isAuthenticated) {

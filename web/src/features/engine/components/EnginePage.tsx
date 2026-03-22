@@ -6,6 +6,7 @@ import ParameterRow from "./ParameterRow";
 import WeightBar from "./WeightBar";
 import RegimeGrid from "./RegimeGrid";
 import { Dropdown } from "../../../shared/components/Dropdown";
+import { Button } from "../../../shared/components/Button";
 
 export default function EnginePage() {
   const { params, loading, error, fetch, refresh } = useEngineStore();
@@ -57,13 +58,12 @@ export default function EnginePage() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-on-surface">Engine Parameters</h3>
-          <button
+          <Button
+            variant="ghost"
+            icon={<RefreshCw size={16} className={loading ? "animate-spin" : ""} />}
             onClick={refresh}
-            className="p-2 text-primary hover:text-primary/80 transition-colors"
             aria-label="Refresh parameters"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-          </button>
+          />
         </div>
 
         <WeightBar weights={params.blending.source_weights} />

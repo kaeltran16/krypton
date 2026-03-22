@@ -77,7 +77,7 @@ export function Layout({
         })}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center pt-2 px-2 safe-bottom bg-[var(--glass-nav)] backdrop-blur-xl z-30 border-t border-outline-variant/15 shadow-[0_-12px_32px_rgba(0,0,0,0.2)]">
+      <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center pt-1.5 px-2 safe-bottom bg-[var(--glass-nav)] backdrop-blur-xl z-30 border-t border-outline-variant/15">
         {TABS.map((t) => {
           const Icon = TAB_ICONS[t];
           const active = tab === t;
@@ -86,18 +86,23 @@ export function Layout({
               key={t}
               onClick={() => switchTab(t)}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-col items-center justify-center min-h-[44px] py-2 px-3 transition-all duration-200 active:scale-95 ${
+              className={`relative flex flex-col items-center justify-center min-h-[48px] min-w-[48px] py-1.5 px-3 transition-colors duration-200 active:scale-[0.92] ${
                 active
-                  ? "text-primary-container shadow-[0_0_8px_rgba(105,218,255,0.15)]"
-                  : "text-on-surface-variant hover:text-on-surface"
+                  ? "text-primary"
+                  : "text-on-surface-variant"
               }`}
             >
-              <Icon
-                size={20}
-                strokeWidth={active ? 2.5 : 1.5}
-                className="mb-0.5"
-              />
-              <span className="font-sans font-medium text-[10px] uppercase tracking-wider">
+              <div className={`relative flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 ${
+                active ? "bg-primary/12" : ""
+              }`}>
+                <Icon
+                  size={20}
+                  strokeWidth={active ? 2.5 : 1.5}
+                />
+              </div>
+              <span className={`font-sans text-[10px] tracking-wider mt-0.5 transition-colors duration-200 ${
+                active ? "font-bold" : "font-medium text-on-surface-variant/70"
+              }`}>
                 {TAB_LABELS[t]}
               </span>
             </button>

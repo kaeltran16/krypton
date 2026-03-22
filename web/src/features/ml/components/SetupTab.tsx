@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api, type MLTrainRequest, type MLStatus, type MLTrainJob, type MLBackfillJob } from "../../../shared/lib/api";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
+import { Button } from "../../../shared/components/Button";
 import { SettingsSection, ConfigField, Slider, TIMEFRAMES, formatPairSlug } from "./shared";
 import { PRESETS, DEFAULT_CONFIG, CANDLES_PER_DAY, type PresetName } from "../presets";
 import type { DataReadinessMap } from "../types";
@@ -286,19 +287,8 @@ export function SetupTab({
 
       {/* Sticky Action Buttons */}
       <div className="fixed bottom-0 left-0 right-0 bg-surface/90 backdrop-blur-lg border-t border-outline-variant/10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex gap-2 z-40">
-        <button
-          onClick={handleReset}
-          className="flex-1 bg-surface-container rounded-lg border border-outline-variant/10 px-4 py-3 text-sm font-medium hover:bg-surface-container-highest transition-colors"
-        >
-          Reset to Defaults
-        </button>
-        <button
-          onClick={() => setShowConfirm(true)}
-          disabled={!!trainingJob}
-          className="flex-1 bg-primary/15 text-primary border border-primary/30 rounded-lg px-4 py-3 text-sm font-medium hover:bg-primary/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Start Training
-        </button>
+        <Button variant="secondary" size="lg" onClick={handleReset} className="flex-1">Reset to Defaults</Button>
+        <Button variant="primary" size="lg" disabled={!!trainingJob} onClick={() => setShowConfirm(true)} className="flex-1">Start Training</Button>
       </div>
 
       {/* Confirmation Dialog */}
@@ -310,22 +300,19 @@ export function SetupTab({
               This will overwrite existing models for selected pairs. Are you sure you want to proceed?
             </p>
             <div className="flex gap-2">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 bg-surface-container rounded-lg border border-outline-variant/10 px-3 py-2 text-xs font-medium"
-              >
-                Cancel
-              </button>
-              <button
+              <Button variant="secondary" size="sm" onClick={() => setShowConfirm(false)} className="flex-1">Cancel</Button>
+              <Button
+                variant="solid"
+                size="sm"
                 onClick={() => {
                   setShowConfirm(false);
                   const label = activePreset ? PRESETS.find((p) => p.name === activePreset)?.label : null;
                   onStartTraining(config, label);
                 }}
-                className="flex-1 bg-error/15 text-error border border-error/30 rounded-lg px-3 py-2 text-xs font-medium"
+                className="flex-1"
               >
-                Start Training
-              </button>
+                Start
+              </Button>
             </div>
           </div>
         </div>

@@ -13,7 +13,7 @@ export function TickerBar({ price, change24h, pair, onPairChange }: TickerBarPro
   const isPositive = (change24h ?? 0) >= 0;
 
   return (
-    <header className="bg-surface flex justify-between items-center w-full px-4 h-14 z-40 sticky top-0 safe-top">
+    <header className="bg-surface flex justify-between items-center w-full px-4 min-h-14 z-40 sticky top-0 safe-top">
       <div className="flex items-center gap-3">
         <span className="text-on-surface font-headline font-bold text-lg tracking-tight">KRYPTON</span>
         <div className="h-4 w-px bg-outline-variant/30" />

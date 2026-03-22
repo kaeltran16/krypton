@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { formatDuration, formatPair } from "../../../shared/lib/format";
+import { Button } from "../../../shared/components/Button";
 import {
   createChart,
   LineSeries,
@@ -29,12 +30,7 @@ export function BacktestResults() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-sm text-error mb-3">{runError}</p>
-        <button
-          onClick={() => setTab("setup")}
-          className="px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          Back to Setup
-        </button>
+        <Button variant="secondary" onClick={() => setTab("setup")}>Back to Setup</Button>
       </div>
     );
   }
@@ -43,12 +39,7 @@ export function BacktestResults() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
         <p className="text-sm">No backtest results yet.</p>
-        <button
-          onClick={() => setTab("setup")}
-          className="mt-3 px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          Run a Backtest
-        </button>
+        <Button variant="secondary" onClick={() => setTab("setup")} className="mt-3">Run a Backtest</Button>
       </div>
     );
   }
@@ -60,12 +51,7 @@ export function BacktestResults() {
         {activeRun.results && activeRun.results.trades.length > 0 ? (
           <ResultsContent run={activeRun} />
         ) : (
-          <button
-            onClick={() => setTab("setup")}
-            className="px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-          >
-            Back to Setup
-          </button>
+          <Button variant="secondary" onClick={() => setTab("setup")}>Back to Setup</Button>
         )}
       </div>
     );
@@ -75,12 +61,7 @@ export function BacktestResults() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-sm text-error mb-3">Backtest failed.</p>
-        <button
-          onClick={() => setTab("setup")}
-          className="px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          Retry
-        </button>
+        <Button variant="secondary" onClick={() => setTab("setup")}>Retry</Button>
       </div>
     );
   }
@@ -90,12 +71,7 @@ export function BacktestResults() {
       <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
         <p className="text-sm">No trades generated.</p>
         <p className="text-xs text-on-surface-variant mt-1">Try lowering the signal threshold or adjusting weights.</p>
-        <button
-          onClick={() => setTab("setup")}
-          className="mt-3 px-4 py-2 rounded-lg text-sm bg-surface-container-lowest text-on-surface border border-outline-variant/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          Adjust Settings
-        </button>
+        <Button variant="secondary" onClick={() => setTab("setup")} className="mt-3">Adjust Settings</Button>
       </div>
     );
   }

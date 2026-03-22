@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { api, type MLTrainJob, type MLTrainProgress } from "../../../shared/lib/api";
+import { Button } from "../../../shared/components/Button";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { StatusBadge, formatPairSlug } from "./shared";
 import { LossChart } from "./LossChart";
@@ -74,9 +75,9 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
         <p className="text-sm text-on-surface-variant mb-4">No active training job</p>
-        <button onClick={onSwitchToSetup} className="bg-primary/15 text-primary border border-primary/30 rounded-lg px-4 py-2 text-xs font-medium">
+        <Button onClick={onSwitchToSetup}>
           Configure Training
-        </button>
+        </Button>
       </div>
     );
   }
@@ -106,9 +107,9 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
             <StatusBadge status={job.status} />
           </div>
           {isRunning && (
-            <button onClick={onCancel} className="text-xs text-error hover:text-error/80 transition-colors">
+            <Button variant="danger" size="xs" onClick={onCancel}>
               Cancel
-            </button>
+            </Button>
           )}
         </div>
         {(presetLabel || configSummary) && (

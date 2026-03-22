@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import type { Signal } from "../../signals/types";
 import { api, type RiskCheckResult } from "../../../shared/lib/api";
 import { formatPrice } from "../../../shared/lib/format";
+import { Button } from "../../../shared/components/Button";
 
 interface Props {
   signal: Signal | null;
@@ -88,9 +89,7 @@ export function OrderDialog({ signal, onClose }: Props) {
       <div className="p-4 border-b border-outline-variant/10">
         <div className="flex items-center justify-between">
           <span className="text-lg font-headline font-bold">Confirm Order</span>
-          <button onClick={onClose} aria-label="Close" className="text-on-surface-variant hover:text-on-surface p-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            <X size={20} />
-          </button>
+          <Button variant="ghost" icon={<X size={20} />} onClick={onClose} aria-label="Close" />
         </div>
       </div>
 
@@ -192,19 +191,17 @@ export function OrderDialog({ signal, onClose }: Props) {
 
       <div className="p-4 border-t border-outline-variant/10">
         {result?.success ? (
-          <button onClick={onClose} className="w-full py-3 rounded-lg bg-surface-container-highest text-on-surface font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            Close
-          </button>
+          <Button variant="secondary" size="lg" onClick={onClose}>Close</Button>
         ) : (
-          <button
+          <Button
+            variant={side === "buy" ? "long" : "short"}
+            size="lg"
+            loading={submitting}
+            disabled={isBlocked && !overrideConfirmed}
             onClick={handleSubmit}
-            disabled={submitting || (isBlocked && !overrideConfirmed)}
-            className={`w-full py-3 rounded-lg font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-              side === "buy" ? "bg-long text-on-tertiary-fixed" : "bg-short text-white"
-            } disabled:opacity-50`}
           >
-            {submitting ? "Placing order..." : `${side.toUpperCase()} ${signal.pair}`}
-          </button>
+            {side.toUpperCase()} {signal.pair}
+          </Button>
         )}
       </div>
     </dialog>

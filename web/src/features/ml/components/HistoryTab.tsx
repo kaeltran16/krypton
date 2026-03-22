@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { MLTrainJob, MLTrainResult } from "../../../shared/lib/api";
+import { Button } from "../../../shared/components/Button";
 import { formatRelativeTime } from "../../../shared/lib/format";
 import { StatusBadge } from "./shared";
 import type { MLTrainJobWithMeta } from "../types";
@@ -81,27 +82,28 @@ export function HistoryTab({ history, onViewDetails, onRetrain, onDelete }: Hist
             {/* Action buttons */}
             <div className="flex gap-3 mt-2">
               {isCompleted && (
-                <button
+                <Button
+                  size="xs"
                   onClick={() => onViewDetails(job.job_id)}
-                  className="text-[10px] text-primary hover:underline"
                 >
                   View Details
-                </button>
+                </Button>
               )}
               {isCompleted && job.params && (
-                <button
+                <Button
+                  size="xs"
                   onClick={() => onRetrain(job.job_id)}
-                  className="text-[10px] text-primary hover:underline"
                 >
                   Retrain
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                variant="danger"
+                size="xs"
                 onClick={() => setConfirmDeleteId(job.job_id)}
-                className="text-[10px] text-error hover:underline"
               >
                 Delete
-              </button>
+              </Button>
             </div>
 
             {/* Delete confirmation */}
@@ -109,21 +111,23 @@ export function HistoryTab({ history, onViewDetails, onRetrain, onDelete }: Hist
               <div className="mt-2 bg-error/5 border border-error/20 rounded p-2 flex items-center justify-between">
                 <span className="text-[10px] text-error">Delete this run?</span>
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="xs"
                     onClick={() => setConfirmDeleteId(null)}
-                    className="text-[10px] text-on-surface-variant hover:text-on-surface"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="xs"
                     onClick={() => {
                       onDelete(job.job_id);
                       setConfirmDeleteId(null);
                     }}
-                    className="text-[10px] text-error font-medium hover:underline"
                   >
                     Confirm
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../../../shared/lib/api";
 import { useEngineStore } from "../../engine/store";
 import type { ParameterDiff } from "../../engine/types";
+import { Button } from "../../../shared/components/Button";
 
 interface Props {
   changes: Record<string, number>;
@@ -73,17 +74,9 @@ export default function ApplyModal({ changes, onClose }: Props) {
         )}
 
         <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">
-            {applied ? "Close" : "Cancel"}
-          </button>
+          <Button variant="ghost" size="sm" onClick={onClose}>{applied ? "Close" : "Cancel"}</Button>
           {!applied && diff && (
-            <button
-              onClick={confirm}
-              disabled={loading}
-              className="px-3 py-1.5 text-xs bg-primary/15 text-primary rounded-lg hover:bg-primary/30 disabled:opacity-50"
-            >
-              {loading ? "Applying..." : "Confirm Apply"}
-            </button>
+            <Button variant="primary" size="sm" onClick={confirm} loading={loading}>Confirm Apply</Button>
           )}
         </div>
       </div>

@@ -7,6 +7,7 @@ import { MiniSparkline } from "./MiniSparkline";
 import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { api, type Portfolio, type Position } from "../../../shared/lib/api";
+import { Button } from "../../../shared/components/Button";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
 
@@ -26,12 +27,7 @@ export function HomeView() {
         <div className="flex flex-col gap-3 p-4">
           <div className="bg-surface-container rounded-lg p-4 text-center">
             <p className="text-on-surface-variant text-sm">Unable to load portfolio</p>
-            <button
-              onClick={refresh}
-              className="mt-2 px-5 py-2.5 min-h-[44px] text-sm font-medium rounded-lg bg-surface-container-highest text-primary active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              Retry
-            </button>
+            <Button variant="secondary" onClick={refresh} className="mt-2">Retry</Button>
           </div>
           <RecentSignals />
           <LatestNewsCard news={recentNews} loading={newsLoading} />
@@ -194,7 +190,10 @@ function OpenPositions({ positions, loading, onRefresh }: { positions: Position[
                       </div>
                     </div>
                     <div className="px-3 pb-3">
-                      <button
+                      <Button
+                        variant="short"
+                        size="lg"
+                        loading={closing === key}
                         onClick={async (e) => {
                           e.stopPropagation();
                           setClosing(key);
@@ -208,11 +207,9 @@ function OpenPositions({ positions, loading, onRefresh }: { positions: Position[
                             setExpanded(null);
                           }
                         }}
-                        disabled={closing === key}
-                        className="w-full py-2.5 rounded-lg bg-short/15 text-short text-sm font-medium hover:bg-short/25 active:bg-short/35 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-short"
                       >
-                        {closing === key ? "Closing..." : "Close Position"}
-                      </button>
+                        Close Position
+                      </Button>
                     </div>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import { api } from "../../../shared/lib/api";
 import { useAlertStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 import { Dropdown } from "../../../shared/components/Dropdown";
+import { Button } from "../../../shared/components/Button";
 import type { Alert, AlertType, AlertUrgency, AlertCreateRequest } from "../types";
 
 const ALERT_TYPES: { value: AlertType; label: string }[] = [
@@ -283,20 +284,10 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       )}
 
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onClose()}
-          className="flex-1 py-3 text-sm bg-surface-container border border-outline-variant/20 rounded-lg min-h-[44px] text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="flex-1 bg-primary-container text-on-primary-fixed py-3 rounded-lg font-headline font-bold uppercase tracking-widest text-xs min-h-[44px] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-        >
-          {submitting ? "Saving..." : editAlert ? "Update Alert" : "Create Alert"}
-        </button>
+        <Button variant="secondary" size="lg" type="button" onClick={() => onClose()} className="flex-1">Cancel</Button>
+        <Button variant="solid" size="lg" type="submit" loading={submitting} className="flex-1">
+          {editAlert ? "Update Alert" : "Create Alert"}
+        </Button>
       </div>
     </form>
   );

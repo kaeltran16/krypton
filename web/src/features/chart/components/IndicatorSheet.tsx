@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { theme } from "../../../shared/theme";
+import { Button } from "../../../shared/components/Button";
 
 export interface IndicatorDef {
   id: string;
@@ -117,9 +118,7 @@ export function IndicatorSheet({ open, onClose, enabled, onToggle }: Props) {
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-headline font-bold text-base">Indicators</h2>
-          <button onClick={onClose} aria-label="Close indicators" className="text-on-surface-variant p-2 hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg">
-            <X size={20} />
-          </button>
+          <Button variant="ghost" icon={<X size={20} />} onClick={onClose} aria-label="Close indicators" />
         </div>
 
         {INDICATOR_GROUPS.map((group) => (

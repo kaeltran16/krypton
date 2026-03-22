@@ -5,7 +5,7 @@ import { formatPrice, formatScore } from "../../../shared/lib/format";
 import { PatternDetailRow } from "./PatternBadges";
 import { IndicatorAudit } from "./IndicatorAudit";
 import { ReasoningChain } from "./ReasoningChain";
-import ParameterRow from "../../engine/components/ParameterRow";
+import { Button } from "../../../shared/components/Button";
 
 interface SignalDetailProps {
   signal: Signal | null;
@@ -41,13 +41,7 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       if (e.target === ref.current) handleClose();
     }}>
       <div className="sticky top-0 z-10 flex justify-end p-2">
-        <button
-          onClick={handleClose}
-          aria-label="Close signal detail"
-          className="p-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <X size={20} />
-        </button>
+        <Button variant="ghost" size="md" icon={<X size={20} />} onClick={handleClose} aria-label="Close signal detail" />
       </div>
       {/* Hero Score Section */}
       <div className="px-5 pb-5 border-b border-outline-variant/10 flex justify-between items-center relative overflow-hidden">
@@ -185,24 +179,184 @@ function SnapshotSection({ snapshot }: { snapshot: Record<string, unknown> }) {
       <button
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between px-4 py-2 text-xs text-on-surface-variant hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        className="w-full flex items-center justify-between px-5 py-3 text-xs uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
       >
         Engine Parameters
-        <span>{open ? "\u2212" : "+"}</span>
+        <span className="text-sm">{open ? "\u2212" : "+"}</span>
       </button>
-      {open && (
-        <div>
-          {Object.entries(snapshot).map(([key, value]) => (
-            <ParameterRow
-              key={key}
-              name={key}
-              value={value as unknown}
-              source="configurable"
-            />
-          ))}
-        </div>
-      )}
+      {open && <SnapshotContent snapshot={snapshot} />}
     </div>
   );
+}
+
+function SnapshotContent({ snapshot }: { snapshot: Record<string, unknown> }) {
+  const weights = snapshot.source_weights as Record<string, number> | undefined;
+  const thresholds = snapshot.thresholds as Record<string, number> | undefined;
+  const atr = snapshot.atr_multipliers as Record<string, unknown> | undefined;
+  const regime = snapshot.regime_mix as Record<string, number> | undefined;
+  const regimeCaps = snapshot.regime_caps as Record<string, number> | undefined;
+  const regimeOuter = snapshot.regime_outer as Record<string, number> | undefined;
+  const meanRev = snapshot.mean_reversion as Record<string, unknown> | undefined;
+  const llmWeights = snapshot.llm_factor_weights as Record<string, number> | undefined;
+
+  return (
+        <div className="px-5 pb-5 space-y-4">
+          {/* Source Weights */}
+          {weights && Object.keys(weights).length > 0 && (
+            <SnapGroup title="Source Weights">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(weights).map(([k, v]) => (
+                  <SnapPill key={k} label={k} value={fmtPct(v)} />
+                ))}
+                {snapshot.ml_blend_weight != null && (
+                  <SnapPill label="ml" value={fmtPct(snapshot.ml_blend_weight as number)} />
+                )}
+              </div>
+            </SnapGroup>
+          )}
+
+          {/* Thresholds */}
+          {thresholds && Object.keys(thresholds).length > 0 && (
+            <SnapGroup title="Thresholds">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(thresholds).map(([k, v]) => (
+                  <SnapPill key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+            </SnapGroup>
+          )}
+
+          {/* ATR Multipliers */}
+          {atr && (
+            <SnapGroup title="ATR Multipliers">
+              <div className="flex flex-wrap gap-1.5">
+                {atr.sl != null && <SnapPill label="SL" value={String(atr.sl)} />}
+                {atr.tp1 != null && <SnapPill label="TP1" value={String(atr.tp1)} />}
+                {atr.tp2 != null && <SnapPill label="TP2" value={String(atr.tp2)} />}
+                {atr.source && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary self-center">
+                    {String(atr.source).replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+            </SnapGroup>
+          )}
+
+          {/* Regime Mix */}
+          {regime && Object.keys(regime).length > 0 && (
+            <SnapGroup title="Regime Mix">
+              <RegimeBar regime={regime} />
+            </SnapGroup>
+          )}
+
+          {/* Regime Caps */}
+          {regimeCaps && Object.keys(regimeCaps).length > 0 && (
+            <SnapGroup title="Regime Caps">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(regimeCaps).map(([k, v]) => (
+                  <SnapPill key={k} label={k} value={String(Math.round(v))} />
+                ))}
+              </div>
+            </SnapGroup>
+          )}
+
+          {/* Regime Outer */}
+          {regimeOuter && Object.keys(regimeOuter).length > 0 && (
+            <SnapGroup title="Regime Outer Weights">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(regimeOuter).map(([k, v]) => (
+                  <SnapPill key={k} label={k} value={v.toFixed(3)} />
+                ))}
+              </div>
+            </SnapGroup>
+          )}
+
+          {/* LLM Factor Weights */}
+          {llmWeights && Object.keys(llmWeights).length > 0 && (
+            <SnapGroup title="LLM Factor Weights">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(llmWeights).map(([k, v]) => (
+                  <SnapPill key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+              {snapshot.llm_factor_cap != null && (
+                <div className="mt-1.5">
+                  <SnapPill label="cap" value={String(snapshot.llm_factor_cap)} />
+                </div>
+              )}
+            </SnapGroup>
+          )}
+
+          {/* Mean Reversion */}
+          {meanRev && Object.keys(meanRev).length > 0 && (
+            <SnapGroup title="Mean Reversion">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(meanRev).map(([k, v]) => (
+                  <SnapPill key={k} label={k.replace(/_/g, " ")} value={typeof v === "number" ? v.toFixed(2) : String(v)} />
+                ))}
+              </div>
+            </SnapGroup>
+          )}
+
+          {/* Confluence */}
+          {snapshot.confluence_max_score != null && (
+            <SnapGroup title="Confluence">
+              <SnapPill label="max score" value={String(snapshot.confluence_max_score)} />
+            </SnapGroup>
+          )}
+        </div>
+  );
+}
+
+function SnapGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-on-surface-variant/60 mb-1.5">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function SnapPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded bg-surface-container-highest/60">
+      <span className="text-on-surface-variant">{label}</span>
+      <span className="font-mono text-on-surface">{value}</span>
+    </span>
+  );
+}
+
+function RegimeBar({ regime }: { regime: Record<string, number> }) {
+  const total = Object.values(regime).reduce((a, b) => a + b, 0) || 1;
+  const colors: Record<string, string> = {
+    trending: "bg-primary",
+    ranging: "bg-accent",
+    volatile: "bg-short",
+  };
+  return (
+    <div>
+      <div className="flex h-2 rounded-full overflow-hidden">
+        {Object.entries(regime).map(([k, v]) => (
+          <div
+            key={k}
+            className={`${colors[k] ?? "bg-muted"} transition-all`}
+            style={{ width: `${(v / total) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex gap-3 mt-1.5">
+        {Object.entries(regime).map(([k, v]) => (
+          <span key={k} className="text-[10px] text-on-surface-variant">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${colors[k] ?? "bg-muted"} mr-1`} />
+            {k} {Math.round((v / total) * 100)}%
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function fmtPct(v: number): string {
+  return v <= 1 ? `${Math.round(v * 100)}%` : `${v}%`;
 }
 

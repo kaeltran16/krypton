@@ -2,6 +2,7 @@ import { Newspaper } from "lucide-react";
 import type { Signal } from "../types";
 import { formatScore, formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { PatternBadges } from "./PatternBadges";
+import { Button } from "../../../shared/components/Button";
 
 interface SignalCardProps {
   signal: Signal;
@@ -112,12 +113,13 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
           </div>
         </div>
         {onExecute && isPending && (
-          <button
+          <Button
+            variant="solid"
+            size="sm"
             onClick={(e) => { e.stopPropagation(); onExecute(signal); }}
-            className="bg-primary-container text-on-primary-fixed px-5 py-2 rounded-lg font-bold text-xs hover:opacity-90 active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Execute
-          </button>
+          </Button>
         )}
       </div>
     </div>
