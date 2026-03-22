@@ -12,6 +12,7 @@ export interface NewsEvent {
   sentiment: NewsSentiment | null;
   affected_pairs: string[];
   llm_summary: string | null;
+  content_text: string | null;
   published_at: string | null;
   created_at: string | null;
 }

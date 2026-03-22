@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { TrendingUp, TrendingDown, Minus, ChevronDown, Zap } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, BookOpen, ExternalLink } from "lucide-react";
 import type { NewsEvent } from "../types";
+import { IMPACT_BADGE, SENTIMENT_COLOR } from "../constants";
 import { formatRelativeTime, formatPair } from "../../../shared/lib/format";
 
 interface NewsCardProps {
   event: NewsEvent;
+  onSelect?: (event: NewsEvent) => void;
 }
 
 const IMPACT_BORDER: Record<string, string> = {
@@ -13,35 +14,19 @@ const IMPACT_BORDER: Record<string, string> = {
   low: "border-l-on-surface-variant/20",
 };
 
-const IMPACT_BADGE: Record<string, string> = {
-  high: "bg-error-container text-on-error",
-  medium: "bg-surface-container-highest text-on-surface-variant",
-  low: "bg-surface-container-highest text-on-surface-variant",
-};
-
 const SENTIMENT_ICON: Record<string, typeof TrendingUp> = {
   bullish: TrendingUp,
   bearish: TrendingDown,
   neutral: Minus,
 };
 
-const SENTIMENT_COLOR: Record<string, string> = {
-  bullish: "text-long",
-  bearish: "text-short",
-  neutral: "text-on-surface-variant",
-};
+const CARD_BASE = "w-full bg-surface-container-low rounded-lg p-4 border-l-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
-export function NewsCard({ event }: NewsCardProps) {
-  const [expanded, setExpanded] = useState(false);
+function CardContent({ event }: { event: NewsEvent }) {
   const SentimentIcon = event.sentiment ? SENTIMENT_ICON[event.sentiment] : null;
 
   return (
-    <button
-      aria-expanded={expanded}
-      onClick={() => setExpanded(!expanded)}
-      className={`w-full bg-surface-container-low rounded-lg p-4 border-l-4 text-left transition-all hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${IMPACT_BORDER[event.impact ?? "low"] ?? "border-l-outline-variant/20"}`}
-    >
-      {/* Header: impact badge + time + sentiment */}
+    <>
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-3">
           {event.impact && (
@@ -61,10 +46,8 @@ export function NewsCard({ event }: NewsCardProps) {
         )}
       </div>
 
-      {/* Headline */}
       <h3 className="font-headline text-base font-bold leading-tight mb-3">{event.headline}</h3>
 
-      {/* Affected pairs */}
       {event.affected_pairs.length > 0 && event.affected_pairs[0] !== "ALL" && (
         <div className="flex flex-wrap gap-2 mb-2">
           {event.affected_pairs.map((pair) => (
@@ -75,22 +58,54 @@ export function NewsCard({ event }: NewsCardProps) {
         </div>
       )}
 
-      {/* Expandable AI summary */}
-      {event.llm_summary && !expanded && (
-        <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-primary/60">
-          <ChevronDown size={14} />
-          View AI Analysis
+      {event.content_text ? (
+        <div className="flex items-center gap-1.5 text-xs text-primary/80 mt-1">
+          <BookOpen size={14} />
+          Read article
         </div>
-      )}
-      {expanded && event.llm_summary && (
-        <div className="bg-surface-container-lowest rounded-lg p-4 border border-outline-variant/10 mt-2">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap size={14} className="text-primary" />
-            <span className="text-[10px] uppercase tracking-widest text-primary">Krypton AI Summary</span>
-          </div>
-          <p className="text-sm text-on-surface-variant leading-relaxed">{event.llm_summary}</p>
+      ) : event.url ? (
+        <div className="flex items-center gap-1.5 text-xs text-primary/80 mt-1">
+          <ExternalLink size={14} />
+          Open in browser
         </div>
-      )}
-    </button>
+      ) : null}
+    </>
+  );
+}
+
+export function NewsCard({ event, onSelect }: NewsCardProps) {
+  const borderClass = IMPACT_BORDER[event.impact ?? "low"] ?? "border-l-outline-variant/20";
+
+  // Has extractable content → button that opens reader sheet
+  if (event.content_text) {
+    return (
+      <button
+        onClick={() => onSelect?.(event)}
+        className={`${CARD_BASE} hover:bg-surface-container cursor-pointer ${borderClass}`}
+      >
+        <CardContent event={event} />
+      </button>
+    );
+  }
+
+  // Has URL but no content → external link
+  if (event.url) {
+    return (
+      <a
+        href={event.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${CARD_BASE} hover:bg-surface-container block cursor-pointer ${borderClass}`}
+      >
+        <CardContent event={event} />
+      </a>
+    );
+  }
+
+  // Neither → non-interactive div
+  return (
+    <div className={`${CARD_BASE} ${borderClass}`}>
+      <CardContent event={event} />
+    </div>
   );
 }

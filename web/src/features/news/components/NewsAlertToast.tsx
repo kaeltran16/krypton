@@ -3,14 +3,14 @@ import { useNewsStore } from "../store";
 
 const IMPACT_STYLES: Record<string, string> = {
   high: "border-short/40 bg-short/10",
-  medium: "border-accent/40 bg-accent/10",
-  low: "border-border bg-card",
+  medium: "border-primary/40 bg-primary/10",
+  low: "border-outline-variant bg-surface-container",
 };
 
 const SENTIMENT_STYLES: Record<string, string> = {
   bullish: "text-long",
   bearish: "text-short",
-  neutral: "text-muted",
+  neutral: "text-on-surface-variant",
 };
 
 export function NewsAlertToast() {
@@ -35,7 +35,6 @@ export function NewsAlertToast() {
         className={`rounded-lg border p-3 shadow-lg backdrop-blur-md ${borderStyle}`}
         onClick={() => setExpanded(!expanded)}
         onTouchEnd={(e) => {
-          // Swipe detection is complex; simple tap-to-dismiss on second tap
           if (expanded) {
             e.preventDefault();
             dismiss();
@@ -47,7 +46,7 @@ export function NewsAlertToast() {
             <div className="flex items-center gap-1.5 mb-1">
               {alert.impact && (
                 <span className={`text-[10px] font-bold uppercase ${
-                  alert.impact === "high" ? "text-short" : "text-accent"
+                  alert.impact === "high" ? "text-short" : "text-primary"
                 }`}>
                   {alert.impact}
                 </span>
@@ -57,11 +56,11 @@ export function NewsAlertToast() {
                   {alert.sentiment}
                 </span>
               )}
-              <span className="text-[10px] text-dim">{alert.source}</span>
+              <span className="text-[10px] text-outline">{alert.source}</span>
             </div>
             <p className="text-sm font-medium leading-snug">{alert.headline}</p>
             {expanded && alert.llm_summary && (
-              <p className="mt-1.5 text-xs text-muted leading-relaxed">
+              <p className="mt-1.5 text-xs text-on-surface-variant leading-relaxed">
                 {alert.llm_summary}
               </p>
             )}
@@ -71,7 +70,7 @@ export function NewsAlertToast() {
               e.stopPropagation();
               dismiss();
             }}
-            className="text-dim text-xs p-1"
+            className="text-outline text-xs p-1"
           >
             &times;
           </button>

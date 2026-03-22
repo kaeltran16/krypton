@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 
 import feedparser
 import httpx
+import trafilatura
 from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -41,6 +42,15 @@ def normalize_headline(headline: str) -> str:
 def fingerprint_headline(headline: str) -> str:
     """SHA-256 of normalized headline for dedup."""
     return hashlib.sha256(normalize_headline(headline).encode()).hexdigest()
+
+
+def extract_article_text(html: str) -> str | None:
+    """Extract main article text from HTML using trafilatura. Returns None on failure."""
+    try:
+        text = trafilatura.extract(html)
+        return text if text else None
+    except Exception:
+        return None
 
 
 def is_relevant(headline: str, pairs: list[str], keywords: list[str]) -> bool:
@@ -284,6 +294,26 @@ class NewsCollector:
             # else: headlines stored without scoring
             scored.extend(batch)
 
+        # Fetch article content concurrently for extraction
+        async def _fetch_article(client: httpx.AsyncClient, h: dict, sem: asyncio.Semaphore):
+            if not h.get("url"):
+                h["content_text"] = None
+                return
+            async with sem:
+                try:
+                    resp = await client.get(h["url"], follow_redirects=True)
+                    resp.raise_for_status()
+                    h["content_text"] = await asyncio.get_event_loop().run_in_executor(
+                        None, extract_article_text, resp.text
+                    )
+                except Exception as e:
+                    logger.debug(f"Article fetch failed for {h.get('url', '?')}: {e}")
+                    h["content_text"] = None
+
+        sem = asyncio.Semaphore(5)
+        async with httpx.AsyncClient(timeout=10) as client:
+            await asyncio.gather(*[_fetch_article(client, h, sem) for h in scored])
+
         # Persist to DB and alert
         async with self.db.session_factory() as session:
             for h in scored:
@@ -298,6 +328,7 @@ class NewsCollector:
                         sentiment=h.get("sentiment"),
                         affected_pairs=h.get("affected_pairs", []),
                         llm_summary=h.get("llm_summary"),
+                        content_text=h.get("content_text"),
                         published_at=h.get("published_at", datetime.now(timezone.utc)),
                     ).on_conflict_do_nothing(constraint="uq_news_url")
                     result = await session.execute(stmt)

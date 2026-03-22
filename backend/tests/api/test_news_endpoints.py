@@ -203,3 +203,43 @@ async def test_news_router_registered():
     routes = [r.path for r in app.routes]
     assert "/api/news" in routes
     assert "/api/news/recent" in routes
+
+
+@pytest.mark.asyncio
+async def test_get_news_includes_content_text():
+    """API response includes content_text field."""
+    news = [_make_news_event(id=1, content_text="Full article text here.")]
+    app = FastAPI()
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
+    app.state.db = _mock_db(scalars_all=news)
+    app.include_router(router)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            "/api/news", cookies={"krypton_token": make_test_jwt()},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[0]["content_text"] == "Full article text here."
+
+
+@pytest.mark.asyncio
+async def test_get_news_content_text_null_when_absent():
+    """API response returns null content_text when not set."""
+    news = [_make_news_event(id=1, content_text=None)]
+    app = FastAPI()
+    app.state.settings = MagicMock(jwt_secret="test-jwt-secret")
+    app.state.db = _mock_db(scalars_all=news)
+    app.include_router(router)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            "/api/news", cookies={"krypton_token": make_test_jwt()},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[0]["content_text"] is None

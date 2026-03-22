@@ -137,6 +137,7 @@ class NewsEvent(Base):
     sentiment: Mapped[str | None] = mapped_column(String(16))
     affected_pairs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     llm_summary: Mapped[str | None] = mapped_column(Text)
+    content_text: Mapped[str | None] = mapped_column(Text)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

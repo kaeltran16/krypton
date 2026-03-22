@@ -59,6 +59,20 @@ def test_signal_outcome_fields():
     assert signal.outcome_duration_minutes is None
 
 
+def test_news_event_has_content_text_column():
+    """Verify the content_text column exists on NewsEvent."""
+    from app.db.models import NewsEvent
+    columns = {c.name for c in NewsEvent.__table__.columns}
+    assert "content_text" in columns
+
+
+def test_news_event_content_text_is_nullable():
+    """Verify content_text is nullable (optional)."""
+    from app.db.models import NewsEvent
+    col = NewsEvent.__table__.columns["content_text"]
+    assert col.nullable is True
+
+
 def test_order_flow_snapshot_instantiation():
     snap = OrderFlowSnapshot(
         pair="BTC-USDT-SWAP",

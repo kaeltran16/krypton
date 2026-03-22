@@ -22,6 +22,7 @@ def _news_to_dict(n: NewsEvent) -> dict:
         "sentiment": n.sentiment,
         "affected_pairs": n.affected_pairs,
         "llm_summary": n.llm_summary,
+        "content_text": n.content_text,
         "published_at": n.published_at.isoformat() if n.published_at else None,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     }
