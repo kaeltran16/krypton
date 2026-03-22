@@ -203,6 +203,44 @@ dialog[open].bottom-sheet {
                     linear-gradient(to bottom, rgba(0, 207, 252, 0.03) 1px, transparent 1px);
 }
 
+/* Custom range slider — Settings threshold */
+input[type="range"].styled-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--color-surface-container-lowest, #0d1117);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"].styled-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(105, 218, 255, 0.4);
+}
+
+input[type="range"].styled-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(105, 218, 255, 0.4);
+}
+
+input[type="range"].styled-range::-moz-range-track {
+  height: 6px;
+  background: var(--color-surface-container-lowest, #0d1117);
+  border-radius: 3px;
+}
+
 /* Respect reduced-motion preferences (WCAG 2.1) */
 @media (prefers-reduced-motion: reduce) {
   .animate-card-enter { animation: none !important; opacity: 1; transform: none; }

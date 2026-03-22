@@ -2,19 +2,12 @@ import { useState } from "react";
 import { useSettingsStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 import { subscribeToPush, unsubscribeFromPush } from "../../../shared/lib/push";
-import { useSignalStore } from "../../signals/store";
 import type { Timeframe } from "../../signals/types";
 import { QuietHoursSettings } from "../../alerts/components/QuietHoursSettings";
-import { SettingsGroup } from "./SettingsGroup";
 import { Toggle } from "../../../shared/components/Toggle";
+import { hapticTap } from "../../../shared/lib/haptics";
 
 const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h"];
-
-const PAIR_NAMES: Record<string, string> = {
-  "BTC-USDT-SWAP": "Bitcoin",
-  "ETH-USDT-SWAP": "Ethereum",
-  "WIF-USDT-SWAP": "dogwifhat",
-};
 
 function toggleItem<T>(list: T[], item: T, minOne = true): T[] {
   if (list.includes(item)) {
@@ -24,15 +17,76 @@ function toggleItem<T>(list: T[], item: T, minOne = true): T[] {
   return [...list, item];
 }
 
+/* ── Shared card container (matches RiskSection without status icon) ── */
+
+function SettingsCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="bg-surface-container border border-outline-variant/10 rounded-lg p-4">
+      <h3 className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-3">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/* ── Unified pill button row ── */
+
+function PillSelect<T extends string | number>({
+  options,
+  selected,
+  onToggle,
+  multi = false,
+  renderLabel,
+}: {
+  options: readonly T[];
+  selected: T | readonly T[];
+  onToggle: (value: T) => void;
+  multi?: boolean;
+  renderLabel?: (value: T) => string;
+}) {
+  const isActive = (v: T) =>
+    multi ? (selected as readonly T[]).includes(v) : selected === v;
+
+  return (
+    <div className="flex gap-3">
+      {options.map((opt) => (
+        <button
+          key={String(opt)}
+          onClick={() => { hapticTap(); onToggle(opt); }}
+          className={`flex-1 min-h-[44px] py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+            isActive(opt)
+              ? "bg-primary/15 text-primary border border-primary/30 font-bold"
+              : "bg-surface-container-lowest text-on-surface-variant"
+          }`}
+        >
+          {renderLabel ? renderLabel(opt) : String(opt)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── Section label ── */
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-[10px] font-bold text-primary uppercase tracking-widest opacity-80 px-1 mb-2">
+      {children}
+    </h2>
+  );
+}
+
+/* ── Main page ── */
+
 export default function SettingsPage() {
   const {
-    pairs, timeframes, threshold, notificationsEnabled, apiBaseUrl,
+    pairs, timeframes, threshold, notificationsEnabled,
     onchainEnabled, newsAlertsEnabled, newsContextWindow,
     loading, syncError,
-    setPairs, setTimeframes, setThreshold, setNotificationsEnabled, setApiBaseUrl,
+    setPairs, setTimeframes, setThreshold, setNotificationsEnabled,
     setOnchainEnabled, setNewsAlertsEnabled, setNewsContextWindow,
   } = useSettingsStore();
-  const connected = useSignalStore((s) => s.connected);
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "error">("idle");
 
   async function handleNotificationToggle(enabled: boolean) {
@@ -49,123 +103,101 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-3 space-y-4">
-        <div className="h-32 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
-        <div className="h-24 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
+      <div className="p-3 space-y-3">
+        <div className="h-28 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
+        <div className="h-20 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
         <div className="h-24 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 space-y-4">
+    <div className="p-3 space-y-3">
       {syncError && (
-        <div className="bg-error/10 border border-error/30 rounded-lg px-3 py-2 text-xs text-error">
+        <div role="alert" className="bg-error/10 border border-error/30 rounded-lg px-3 py-2 text-xs text-error">
           Settings sync failed — changes may not be saved
         </div>
       )}
 
-      {/* TRADING */}
-      <SettingsGroup title="Trading">
-        <div className="px-3 py-3 border-b border-outline-variant/10">
-          <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">Pairs</div>
-          <div className="grid grid-cols-3 gap-2">
-            {AVAILABLE_PAIRS.map((pair) => (
-              <button
-                key={pair}
-                onClick={() => setPairs(toggleItem(pairs, pair))}
-                className={`py-3 rounded-lg text-center transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  pairs.includes(pair)
-                    ? "bg-surface-container-highest border-b-2 border-primary"
-                    : "bg-surface-container-highest"
-                }`}
-              >
-                <span className="block font-headline font-bold text-sm">{pair.replace("-USDT-SWAP", "")}</span>
-                <span className="block text-[10px] text-on-surface-variant">{PAIR_NAMES[pair] ?? pair}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* ── Trading ── */}
+      <SectionLabel>Trading</SectionLabel>
 
-        <div className="px-3 py-3 border-b border-outline-variant/10">
-          <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">Timeframes</div>
-          <div className="flex gap-1.5">
-            {TIMEFRAMES.map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframes(toggleItem(timeframes, tf))}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  timeframes.includes(tf)
-                    ? "bg-surface-container-highest text-primary border border-primary/20"
-                    : "bg-surface-container-lowest text-on-surface-variant"
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
-        </div>
+      <SettingsCard title="Pairs">
+        <PillSelect
+          options={AVAILABLE_PAIRS}
+          selected={pairs}
+          onToggle={(pair) => setPairs(toggleItem(pairs, pair))}
+          multi
+          renderLabel={(pair) => pair.replace("-USDT-SWAP", "")}
+        />
+      </SettingsCard>
 
-        <div className="px-3 py-3 border-b border-outline-variant/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-on-surface">Signal Threshold</span>
-            <span className="font-headline font-bold text-lg tabular-nums text-primary">{threshold}</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value))}
-            className="w-full accent-primary"
-          />
-          <div className="flex justify-between text-[10px] font-mono text-outline mt-0.5">
-            <span>0</span>
-            <span>100</span>
-          </div>
-        </div>
+      <SettingsCard title="Timeframes">
+        <PillSelect
+          options={TIMEFRAMES}
+          selected={timeframes}
+          onToggle={(tf) => setTimeframes(toggleItem(timeframes, tf))}
+          multi
+        />
+      </SettingsCard>
 
-        <div className="px-3 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+      <SettingsCard title="Signal Threshold">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-on-surface-variant">Minimum score to trigger a signal</span>
+          <span className="font-headline text-2xl font-bold tabular-nums text-primary">{threshold}</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={threshold}
+          onChange={(e) => setThreshold(Number(e.target.value))}
+          className="styled-range w-full"
+          aria-label="Signal threshold"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={threshold}
+        />
+        <div className="flex justify-between text-[10px] font-mono text-outline mt-1.5">
+          <span>0</span>
+          <span>100</span>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="On-Chain Scoring">
+        <div className="flex items-center justify-between">
           <div>
-            <span className="text-sm text-on-surface">On-Chain Scoring</span>
-            <p className="text-[10px] text-on-surface-variant mt-0.5">Blend exchange flows and whale metrics</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">Blend exchange flows and whale metrics</p>
           </div>
           <Toggle checked={onchainEnabled} onChange={setOnchainEnabled} />
         </div>
+      </SettingsCard>
 
-        <div className="px-3 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+      <SettingsCard title="News Alerts">
+        <div className="flex items-center justify-between">
           <div>
-            <span className="text-sm text-on-surface">News Alerts</span>
-            <p className="text-[10px] text-on-surface-variant mt-0.5">Push for high-impact news</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">Push for high-impact news</p>
           </div>
           <Toggle checked={newsAlertsEnabled} onChange={setNewsAlertsEnabled} />
         </div>
+      </SettingsCard>
 
-        <div className="px-3 py-3 flex items-center justify-between">
-          <span className="text-sm text-on-surface">LLM News Window</span>
-          <div className="bg-surface-container-lowest p-1 flex gap-1 rounded-lg">
-            {[15, 30, 60].map((mins) => (
-              <button
-                key={mins}
-                onClick={() => setNewsContextWindow(mins)}
-                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  newsContextWindow === mins
-                    ? "bg-surface-container-high text-primary border border-primary/20"
-                    : "text-on-surface-variant"
-                }`}
-              >
-                {mins}m
-              </button>
-            ))}
-          </div>
-        </div>
-      </SettingsGroup>
+      <SettingsCard title="LLM News Window">
+        <PillSelect
+          options={[15, 30, 60]}
+          selected={newsContextWindow}
+          onToggle={(mins) => setNewsContextWindow(mins)}
+          renderLabel={(mins) => `${mins}m`}
+        />
+      </SettingsCard>
 
-      {/* NOTIFICATIONS */}
-      <SettingsGroup title="Notifications">
-        <div className="px-3 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+      {/* ── Notifications ── */}
+      <SectionLabel>Notifications</SectionLabel>
+
+      <SettingsCard title="Push Notifications">
+        <div className="flex items-center justify-between">
           <div>
-            <span className="text-sm text-on-surface">Push Notifications</span>
+            <span className="text-sm text-on-surface">Enable push notifications</span>
             {pushStatus === "error" && (
               <p className="text-xs text-error mt-0.5">Permission denied</p>
             )}
@@ -176,42 +208,11 @@ export default function SettingsPage() {
             onChange={(v) => handleNotificationToggle(v)}
           />
         </div>
-        <div className="px-3 py-3">
-          <QuietHoursSettings />
-        </div>
-      </SettingsGroup>
+      </SettingsCard>
 
-      {/* SYSTEM */}
-      <SettingsGroup title="System">
-        <div className="px-3 py-3 border-b border-outline-variant/10">
-          <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">API Endpoint</div>
-          <div className="bg-surface-container p-4 rounded-lg">
-            <input
-              type="url"
-              value={apiBaseUrl}
-              onChange={(e) => setApiBaseUrl(e.target.value)}
-              className="w-full bg-surface-container-lowest px-3 py-2 rounded text-[11px] font-mono text-on-surface border border-outline-variant/20 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
-            />
-            <div className="flex items-center gap-2 mt-2">
-              <div className={`w-2 h-2 rounded-full ${connected ? "bg-tertiary-dim" : "bg-error animate-pulse motion-reduce:animate-none"}`} />
-              <span className="text-[10px] font-mono text-outline">{connected ? "Connected" : "Disconnected"}</span>
-            </div>
-            <div className="flex gap-4 mt-1">
-              <span className="text-[10px] font-mono text-outline">Latency: —</span>
-              <span className="text-[10px] font-mono text-outline">SSL: Active</span>
-            </div>
-          </div>
-        </div>
-        <div className="px-3 py-3 flex items-center justify-between">
-          <span className="text-sm text-on-surface">Version</span>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-tertiary-dim" />
-            <span className="text-sm text-on-surface-variant font-mono">1.0.0</span>
-            <span className="text-[10px] text-on-surface-variant">System Operational</span>
-          </div>
-        </div>
-      </SettingsGroup>
+      <section className="bg-surface-container border border-outline-variant/10 rounded-lg p-4">
+        <QuietHoursSettings />
+      </section>
     </div>
   );
 }
-

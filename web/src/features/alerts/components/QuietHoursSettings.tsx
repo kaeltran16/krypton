@@ -40,7 +40,7 @@ export function QuietHoursSettings() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between min-h-[44px]">
-        <span className="text-sm text-on-surface">Quiet Hours</span>
+        <span className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Quiet Hours</span>
         <Toggle checked={settings.quiet_hours_enabled} onChange={(v) => update({ quiet_hours_enabled: v })} disabled={saving} />
       </div>
 
