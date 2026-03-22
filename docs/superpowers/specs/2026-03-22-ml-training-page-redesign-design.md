@@ -22,12 +22,12 @@ Single 929-line file (`MLTrainingView.tsx`) with 4 tabs: Configure, Training, Hi
 
 Top-to-bottom layout:
 
-1. **Preset bar** — Three buttons: Quick Test, Balanced, Production. Selecting one fills all config sliders. Further manual slider changes are preserved until a different preset is selected.
+1. **Preset bar** — Uses `SegmentedControl` (pill variant, fullWidth) with three options: Quick Test, Balanced, Production. Selecting one fills all config sliders. Further manual slider changes are preserved until a different preset is selected. SegmentedControl already enforces 44px min touch targets and haptic feedback.
    - Quick Test: 30 epochs, batch=32, hidden=64, layers=1, seq_len=25, dropout=0.2, lr=0.003
    - Balanced: 100 epochs, batch=64, hidden=128, layers=2, seq_len=50, dropout=0.3, lr=0.001
    - Production: 300 epochs, batch=128, hidden=256, layers=3, seq_len=100, dropout=0.3, lr=0.0005
 
-2. **Data readiness section** — Shows candle count per pair for the currently selected timeframe. Color-coded progress bars: green when sufficient (>=100 candles), red when insufficient. "Backfill Now" button appears only when a pair has insufficient data. Requires new backend endpoint.
+2. **Data readiness section** — Shows candle count per pair for the currently selected timeframe. Progress bars with dual indicators: green bar + checkmark icon when sufficient (>=100 candles), red/error bar + warning icon when insufficient (never rely on color alone). Numeric candle count shown as text beside each bar. "Backfill Now" button appears only when a pair has insufficient data. Fetches from new backend endpoint on mount and on timeframe change. Shows skeleton shimmer while loading. On fetch error, shows inline error message with retry button. Requires new backend endpoint.
 
 3. **Data parameters** — Timeframe selector (15m/1h/4h), Lookback Days slider, Label Horizon slider, Label Threshold % slider. Same controls as current.
 
@@ -35,11 +35,11 @@ Top-to-bottom layout:
 
 5. **Backfill section (inline)** — Uses the timeframe + lookback days already configured above. "Start Backfill" button. When running, shows per-pair progress with:
    - Progress bar calculated as `fetched / (lookback_days * candles_per_day)` where candles_per_day is a frontend constant: 96 for 15m, 24 for 1h, 6 for 4h
-   - ETA estimated from elapsed rate
+   - ETA estimated from elapsed rate (show "Estimating..." until >=10% progress for accuracy)
    - Per-pair status: spinner for active, checkmark for done
    - Auto-refreshes data readiness bars on completion
 
-6. **Action buttons** — Reset to Defaults, Start Training. Confirmation dialog same as current.
+6. **Action buttons** — Sticky bar at bottom of viewport with safe-area padding. Contains Reset to Defaults (text/secondary) and Start Training (primary filled). Confirmation dialog same as current. Sticky position ensures the CTA is always reachable without scrolling past all config sections on mobile.
 
 ### Training Tab
 
@@ -49,9 +49,9 @@ When a job is running:
 
 1. **Job header** — Pulsing indicator, job ID, status badge, preset name + config summary, cancel button.
 
-2. **Loss curve chart** — Custom canvas component. Two lines: train loss (gold/#F0B90B) and val loss (green/#0ECB81) over epochs. Y-axis: loss values. X-axis: epoch numbers. Updates live every 3s poll cycle. Shows "Best val: X @ epoch Y" below the chart.
+2. **Loss curve chart** — Custom canvas component. Two lines: train loss (accent/#0EB5E5, solid) and val loss (long/#2DD4A0, dashed) over epochs. Uses theme tokens, not hardcoded colors. Y-axis: loss values. X-axis: epoch numbers. Updates live every 3s poll cycle. Shows "Best val: X @ epoch Y" text below the chart.
 
-3. **Pair selector** — Tabs to switch the chart between pairs. Auto-advances to whichever pair is currently training.
+3. **Pair selector** — `SegmentedControl` (underline variant) to switch the chart between pairs. Horizontally scrollable if pairs exceed viewport width. Auto-advances to whichever pair is currently training.
 
 4. **Metrics grid** — 2x2 card layout: Train Loss, Val Loss, Direction Accuracy, Best Epoch. Updated live.
 
@@ -59,13 +59,15 @@ The loss curve data comes from accumulating per-epoch progress reports. The comp
 
 ### Results Tab
 
+When no completed runs exist: empty state with "No training results yet" message and a "Go to Setup" button that navigates to the Setup tab.
+
 **Default view (latest run):**
 
 1. **Pair selector** — Same tab style as Training tab.
 
 2. **Performance summary** — 3-column grid: Val Loss, Direction Accuracy, Total Samples.
 
-3. **Classification metrics table** — Rows for Long, Short, Neutral. Columns for Precision and Recall. Color-coded: green for long, red for short, gray for neutral.
+3. **Classification metrics table** — Rows for Long, Short, Neutral. Columns for Precision and Recall. Each row has a directional icon alongside the label: arrow-up for Long (long/#2DD4A0), arrow-down for Short (short/#FB7185), dash for Neutral (muted/#8E9AAD). Color supplements the icon+text, never the sole indicator.
 
 4. **Config used** — 2-column grid showing all hyperparameters. Tags for Flow Used, best epoch, model version.
 
@@ -75,7 +77,7 @@ The loss curve data comes from accumulating per-epoch progress reports. The comp
 
 Toggle switch in the header. When enabled:
 
-1. **Run selectors** — Run A is always the latest (gold border). Run B is selectable from a dropdown of history entries (purple border).
+1. **Run selectors** — Run A is always the latest (primary/#8B9AFF border). Run B is selectable from a dropdown of history entries (purple/#A78BFA border). Both use theme tokens.
 
 2. **Metrics comparison table** — Rows: Val Loss, Dir. Accuracy, Long Precision, Short Precision, Best Epoch, Flow Data. Columns: Run A, Run B. Winning metric highlighted with color + bold.
 
@@ -91,7 +93,7 @@ Compact list (no cards, denser layout). Each row:
 - Config summary line: preset name, timeframe, epochs, pair count
 - Key metrics inline: val loss + direction accuracy (for completed jobs)
 - Error message (for failed jobs)
-- Action buttons: View Details (navigates to Results tab with that run loaded), Retrain (restores config to Setup tab), Delete
+- Action buttons: View Details (navigates to Results tab with that run loaded), Retrain (restores config to Setup tab), Delete (with confirmation dialog before removing)
 
 ## File Structure
 
@@ -123,12 +125,13 @@ interface LossChartProps {
 ```
 
 Renders:
-- Two polylines (train=gold, val=green) with anti-aliased drawing
+- Two polylines with anti-aliased drawing: train loss (accent/#0EB5E5, solid line) and val loss (long/#2DD4A0, dashed line). Distinct line styles ensure colorblind accessibility — never rely on color alone.
 - Y-axis: auto-scaled to data range with 3-4 tick labels
 - X-axis: epoch numbers
-- Optional vertical dashed line at bestEpoch
-- Legend in top-right corner
+- Optional vertical dashed line at bestEpoch (muted/#8E9AAD, dotted — visually distinct from val's dashes)
+- Legend in top-right corner showing line style + color + label for each series
 - Responsive width (fills container)
+- Canvas element gets a dynamic `aria-label` summarizing the key insight (e.g., "Loss chart: best validation loss 0.032 at epoch 47 of 100")
 
 No animation or zoom. Simple, static chart that re-renders when data changes. Uses `useRef` for canvas + `useEffect` to draw.
 

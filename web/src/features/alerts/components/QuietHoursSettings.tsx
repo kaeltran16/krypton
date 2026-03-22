@@ -4,10 +4,13 @@ import { Toggle } from "../../../shared/components/Toggle";
 import { Dropdown } from "../../../shared/components/Dropdown";
 import { api } from "../../../shared/lib/api";
 
+const inputCls = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none";
+
 export function QuietHoursSettings() {
   const settings = useAlertStore((s) => s.settings);
   const fetchSettings = useAlertStore((s) => s.fetchSettings);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -24,10 +27,13 @@ export function QuietHoursSettings() {
 
   async function update(patch: Record<string, unknown>) {
     setSaving(true);
+    setError(null);
     try {
       const updated = await api.updateAlertSettings(patch as any);
       useAlertStore.setState({ settings: updated });
-    } catch {}
+    } catch {
+      setError("Failed to save settings");
+    }
     setSaving(false);
   }
 
@@ -38,6 +44,10 @@ export function QuietHoursSettings() {
         <Toggle checked={settings.quiet_hours_enabled} onChange={(v) => update({ quiet_hours_enabled: v })} disabled={saving} />
       </div>
 
+      {error && (
+        <p className="text-error text-xs bg-error/10 rounded-lg p-2">{error}</p>
+      )}
+
       {settings.quiet_hours_enabled && (
         <>
           <div className="flex gap-3">
@@ -47,7 +57,7 @@ export function QuietHoursSettings() {
                 type="time"
                 value={settings.quiet_hours_start}
                 onChange={(e) => update({ quiet_hours_start: e.target.value })}
-                className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                className={inputCls}
               />
             </label>
             <label className="flex-1">
@@ -56,7 +66,7 @@ export function QuietHoursSettings() {
                 type="time"
                 value={settings.quiet_hours_end}
                 onChange={(e) => update({ quiet_hours_end: e.target.value })}
-                className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                className={inputCls}
               />
             </label>
           </div>

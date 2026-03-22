@@ -6,6 +6,7 @@ interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void;
   fullWidth?: boolean;
   variant?: "pill" | "underline";
+  compact?: boolean;
 }
 
 export function SegmentedControl<T extends string>({
@@ -14,6 +15,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   fullWidth = false,
   variant = "pill",
+  compact = false,
 }: SegmentedControlProps<T>) {
   const isUnderline = variant === "underline";
 
@@ -33,12 +35,12 @@ export function SegmentedControl<T extends string>({
                 onChange(opt.value);
               }
             }}
-            className={`min-h-[44px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            className={`${compact ? "min-h-[36px]" : "min-h-[44px]"} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               fullWidth ? "flex-1 text-center" : ""
             } ${
               isUnderline
                 ? `pb-1 text-sm font-semibold border-b-2 ${active ? "text-on-surface border-primary" : "text-on-surface-variant border-transparent"}`
-                : `px-4 text-xs font-semibold rounded ${active ? "bg-primary/15 text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`
+                : `px-4 ${compact ? "text-[11px]" : "text-xs"} font-semibold rounded ${active ? "bg-primary/15 text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`
             }`}
           >
             {opt.label}

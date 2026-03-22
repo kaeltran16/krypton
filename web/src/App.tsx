@@ -17,23 +17,13 @@ import { SignalDetail } from "./features/signals/components/SignalDetail";
 import { useSignalStore } from "./features/signals/store";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { LoginScreen } from "./features/auth/components/LoginScreen";
+import { SplashScreen } from "./shared/components/SplashScreen";
 
 export default function App() {
   const { isLoading, isAuthenticated, login } = useAuth();
 
-  useEffect(() => {
-    if (!isLoading) {
-      const splash = document.getElementById("splash");
-      if (splash) {
-        splash.classList.add("hide");
-        const timer = setTimeout(() => splash.remove(), 500);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [isLoading]);
-
   if (isLoading) {
-    return null; // index.html splash is still visible
+    return <SplashScreen />;
   }
 
   if (!isAuthenticated) {

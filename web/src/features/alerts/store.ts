@@ -15,6 +15,7 @@ interface AlertState {
   history: AlertHistoryEntry[];
   settings: AlertSettings | null;
   loading: boolean;
+  historyLoading: boolean;
   toasts: AlertToast[];
 
   fetchAlerts: () => Promise<void>;
@@ -32,6 +33,7 @@ export const useAlertStore = create<AlertState>()((set, get) => ({
   history: [],
   settings: null,
   loading: false,
+  historyLoading: false,
   toasts: [],
 
   fetchAlerts: async () => {
@@ -45,10 +47,13 @@ export const useAlertStore = create<AlertState>()((set, get) => ({
   },
 
   fetchHistory: async () => {
+    set({ historyLoading: true });
     try {
       const history = await api.getAlertHistory({ limit: 50 });
-      set({ history });
-    } catch {}
+      set({ history, historyLoading: false });
+    } catch {
+      set({ historyLoading: false });
+    }
   },
 
   fetchSettings: async () => {

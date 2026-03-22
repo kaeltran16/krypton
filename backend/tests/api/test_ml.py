@@ -120,3 +120,40 @@ async def test_cancel_training(ml_app, ml_client):
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "cancelled"
+
+
+async def test_data_readiness_returns_per_pair_counts(ml_app, ml_client):
+    """GET /api/ml/data-readiness?timeframe=1h returns candle counts per pair."""
+    from unittest.mock import MagicMock, AsyncMock
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timezone
+
+    # Mock DB to return aggregate results
+    mock_session = AsyncMock()
+    mock_row_btc = MagicMock()
+    mock_row_btc.pair = "BTC-USDT-SWAP"
+    mock_row_btc.count = 8760
+    mock_row_btc.oldest = datetime(2025, 3, 22, tzinfo=timezone.utc)
+
+    mock_result = MagicMock()
+    mock_result.all.return_value = [mock_row_btc]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield mock_session
+
+    ml_app.state.db.session_factory = fake_session
+
+    resp = await ml_client.get("/api/ml/data-readiness?timeframe=1h", cookies=COOKIES)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "BTC-USDT-SWAP" in data
+    assert data["BTC-USDT-SWAP"]["count"] == 8760
+    assert data["BTC-USDT-SWAP"]["sufficient"] is True
+
+
+async def test_data_readiness_requires_timeframe(ml_client):
+    """GET /api/ml/data-readiness without timeframe returns 422."""
+    resp = await ml_client.get("/api/ml/data-readiness", cookies=COOKIES)
+    assert resp.status_code == 422

@@ -229,6 +229,7 @@ class Trainer:
                     "total_epochs": cfg.epochs,
                     "train_loss": avg_train_loss,
                     "val_loss": avg_val_loss,
+                    "direction_acc": None,  # computed at end only
                 })
 
             # Early stopping (only with validation)
@@ -292,6 +293,44 @@ class Trainer:
             shutil.copy2(best_pt, versioned_pt)
             logger.info(f"Versioned checkpoint saved: {versioned_pt}")
 
+        # ── Compute classification metrics on validation set at best epoch ──
+        direction_accuracy = 0.0
+        precision_per_class = {"long": 0.0, "short": 0.0, "neutral": 0.0}
+        recall_per_class = {"long": 0.0, "short": 0.0, "neutral": 0.0}
+
+        if use_val:
+            # Load best checkpoint for evaluation
+            best_pt = os.path.join(cfg.checkpoint_dir, "best_model.pt")
+            if os.path.exists(best_pt):
+                model.load_state_dict(torch.load(best_pt, map_location=self.device, weights_only=True))
+
+            model.eval()
+            all_preds = []
+            all_labels = []
+            with torch.no_grad():
+                for x, y_dir, _y_reg in val_loader:
+                    x = x.to(self.device)
+                    y_dir = y_dir.to(self.device)
+                    dir_logits, _ = model(x)
+                    preds = dir_logits.argmax(dim=1)
+                    all_preds.extend(preds.cpu().numpy())
+                    all_labels.extend(y_dir.cpu().numpy())
+
+            all_preds = np.array(all_preds)
+            all_labels = np.array(all_labels)
+
+            # Direction accuracy
+            direction_accuracy = float((all_preds == all_labels).mean()) if len(all_labels) > 0 else 0.0
+
+            # Per-class precision and recall (manual — no sklearn)
+            class_names = {0: "neutral", 1: "long", 2: "short"}
+            for cls_id, cls_name in class_names.items():
+                tp = int(((all_preds == cls_id) & (all_labels == cls_id)).sum())
+                fp = int(((all_preds == cls_id) & (all_labels != cls_id)).sum())
+                fn = int(((all_preds != cls_id) & (all_labels == cls_id)).sum())
+                precision_per_class[cls_name] = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                recall_per_class[cls_name] = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+
         return {
             "train_loss": train_losses,
             "val_loss": val_losses,
@@ -299,4 +338,7 @@ class Trainer:
             "best_val_loss": best_val_loss,
             "version": version_tag,
             "lr_history": lr_history,
+            "direction_accuracy": direction_accuracy,
+            "precision_per_class": precision_per_class,
+            "recall_per_class": recall_per_class,
         }

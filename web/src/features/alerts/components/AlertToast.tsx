@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAlertStore } from "../store";
 import { hapticPulse, hapticDoublePulse } from "../../../shared/lib/haptics";
+import { X } from "lucide-react";
 
 const URGENCY_STYLES: Record<string, string> = {
   critical: "border-short/60 bg-short/15",
@@ -27,7 +28,11 @@ export function AlertToast() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 p-3 space-y-2 pointer-events-none">
+    <div
+      className="fixed top-0 left-0 right-0 z-50 p-3 pt-[calc(0.75rem+env(safe-area-inset-top))] space-y-2 pointer-events-none"
+      role="alert"
+      aria-live="polite"
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -48,7 +53,13 @@ export function AlertToast() {
                 Value: {toast.triggerValue.toLocaleString()}
               </p>
             </div>
-            <button className="text-dim text-xs p-1">&times;</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); dismiss(toast.id); }}
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              aria-label="Dismiss alert"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       ))}

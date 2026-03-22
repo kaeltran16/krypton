@@ -24,8 +24,8 @@ export function AlertsPage() {
   }, [fetchAlerts]);
 
   return (
-    <div className="space-y-4">
-      <SegmentedControl options={TABS} value={tab} onChange={setTab} fullWidth />
+    <div className="space-y-5">
+      <SegmentedControl options={TABS} value={tab} onChange={setTab} fullWidth compact />
 
       {tab === "active" && (
         <AlertList onEdit={(a) => { setEditingAlert(a); setTab("create"); }} />

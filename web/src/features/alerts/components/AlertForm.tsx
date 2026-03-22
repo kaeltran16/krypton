@@ -37,9 +37,11 @@ const PORTFOLIO_CONDITIONS = [
 const URGENCIES: AlertUrgency[] = ["critical", "normal", "silent"];
 
 const inputCls = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none";
+const labelCls = "text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5 mt-1 block";
 
 export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boolean) => void; alert?: Alert | null }) {
   const [type, setType] = useState<AlertType>(editAlert?.type as AlertType ?? "price");
+  const [label, setLabel] = useState(editAlert?.label ?? "");
   const [pair, setPair] = useState<string>(editAlert?.pair ?? "");
   const [condition, setCondition] = useState(editAlert?.condition ?? "");
   const [threshold, setThreshold] = useState(editAlert?.threshold?.toString() ?? "");
@@ -66,6 +68,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
     try {
       if (editAlert) {
         const updated = await api.updateAlert(editAlert.id, {
+          label: label.trim() || undefined,
           threshold: threshold ? parseFloat(threshold) : undefined,
           secondary_threshold: secondaryThreshold ? parseInt(secondaryThreshold) : undefined,
           urgency,
@@ -81,6 +84,7 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       } else {
         const body: AlertCreateRequest = {
           type,
+          label: label.trim() || undefined,
           pair: pair || null,
           urgency,
           cooldown_minutes: parseInt(cooldown) || 15,
@@ -113,18 +117,18 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {!editAlert && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {ALERT_TYPES.map((t) => (
             <button
               key={t.value}
               type="button"
               onClick={() => { setType(t.value); setCondition(""); }}
-              className={`py-3 text-xs font-bold uppercase tracking-wider rounded-lg border min-h-[44px] transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors min-h-[36px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 type === t.value
-                  ? "bg-surface-container-highest text-primary border-primary/40"
-                  : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/20"
+                  ? "bg-primary/15 text-primary border-primary/30"
+                  : "bg-transparent text-on-surface-variant border-outline-variant/30"
               }`}
             >
               {t.label}
@@ -132,6 +136,17 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
           ))}
         </div>
       )}
+
+      <label>
+        <span className={labelCls}>Name</span>
+        <input
+          type="text"
+          placeholder="e.g. BTC breakout alert"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className={inputCls}
+        />
+      </label>
 
       {type !== "portfolio" && (
         <Dropdown
@@ -160,32 +175,38 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       )}
 
       {type !== "signal" && (
-        <input
-          type="number"
-          placeholder="Threshold"
-          value={threshold}
-          onChange={(e) => setThreshold(e.target.value)}
-          className={inputCls}
-          required
-          step="any"
-        />
+        <label>
+          <span className={labelCls}>Threshold</span>
+          <input
+            type="number"
+            placeholder="Enter value"
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+            className={inputCls}
+            required
+            step="any"
+          />
+        </label>
       )}
 
       {type === "price" && condition === "pct_move" && (
-        <input
-          type="number"
-          placeholder="Window (minutes, 5-60)"
-          value={secondaryThreshold}
-          onChange={(e) => setSecondaryThreshold(e.target.value)}
-          className={inputCls}
-          min={5}
-          max={60}
-          required
-        />
+        <label>
+          <span className={labelCls}>Window (minutes)</span>
+          <input
+            type="number"
+            placeholder="5–60"
+            value={secondaryThreshold}
+            onChange={(e) => setSecondaryThreshold(e.target.value)}
+            className={inputCls}
+            min={5}
+            max={60}
+            required
+          />
+        </label>
       )}
 
       {type === "signal" && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Dropdown
             value={filterDirection}
             onChange={setFilterDirection}
@@ -197,15 +218,18 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
             ]}
             ariaLabel="Filter direction"
           />
-          <input
-            type="number"
-            placeholder="Min score (0-100)"
-            value={filterMinScore}
-            onChange={(e) => setFilterMinScore(e.target.value)}
-            className={inputCls}
-            min={0}
-            max={100}
-          />
+          <label>
+            <span className={labelCls}>Min Score</span>
+            <input
+              type="number"
+              placeholder="0–100"
+              value={filterMinScore}
+              onChange={(e) => setFilterMinScore(e.target.value)}
+              className={inputCls}
+              min={0}
+              max={100}
+            />
+          </label>
           <Dropdown
             value={filterTimeframe}
             onChange={setFilterTimeframe}
@@ -222,17 +246,17 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       )}
 
       <div>
-        <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">Urgency</div>
-        <div className="bg-surface-container-lowest rounded p-1 flex gap-1">
+        <div className={labelCls}>Urgency</div>
+        <div className="flex flex-wrap gap-1.5">
           {URGENCIES.map((u) => (
             <button
               key={u}
               type="button"
               onClick={() => setUrgency(u)}
-              className={`flex-1 py-2 text-xs font-bold uppercase rounded min-h-[44px] transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors min-h-[36px] capitalize focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 urgency === u
-                  ? "bg-surface-container-highest text-on-surface rounded"
-                  : "text-on-surface-variant"
+                  ? "bg-primary/15 text-primary border-primary/30"
+                  : "bg-transparent text-on-surface-variant border-outline-variant/30"
               }`}
             >
               {u}
@@ -241,18 +265,21 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
         </div>
       </div>
 
-      <input
-        type="number"
-        placeholder="Cooldown (minutes)"
-        value={cooldown}
-        onChange={(e) => setCooldown(e.target.value)}
-        className={inputCls}
-        min={1}
-        max={1440}
-      />
+      <label>
+        <span className={labelCls}>Cooldown (minutes)</span>
+        <input
+          type="number"
+          placeholder="15"
+          value={cooldown}
+          onChange={(e) => setCooldown(e.target.value)}
+          className={inputCls}
+          min={1}
+          max={1440}
+        />
+      </label>
 
       {error && (
-        <p className="text-error text-xs">{error}</p>
+        <p className="text-error text-xs bg-error/10 rounded-lg p-2">{error}</p>
       )}
 
       <div className="flex gap-2">

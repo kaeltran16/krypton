@@ -7,6 +7,7 @@ import { api } from "../../../../shared/lib/api";
 vi.mock("../../../../shared/lib/api", () => ({
   api: {
     getMLStatus: vi.fn(),
+    getMLDataReadiness: vi.fn(),
     startMLTraining: vi.fn(),
     getMLTrainingStatus: vi.fn(),
     cancelMLTraining: vi.fn(),
@@ -33,44 +34,55 @@ describe("MLTrainingView", () => {
     vi.clearAllMocks();
     localStorageMock.clear();
     vi.mocked(api.getMLStatus).mockResolvedValue({ ml_enabled: true, loaded_pairs: [] });
+    vi.mocked(api.getMLDataReadiness).mockResolvedValue({
+      "BTC-USDT-SWAP": { count: 8760, oldest: "2025-03-22T00:00:00Z", sufficient: true },
+      "ETH-USDT-SWAP": { count: 500, oldest: "2025-06-01T00:00:00Z", sufficient: true },
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  async function renderAndSettle(props = {}) {
+  async function renderAndSettle() {
     let result: ReturnType<typeof render>;
     await act(async () => {
-      result = render(<MLTrainingView {...props} />);
+      result = render(<MLTrainingView />);
     });
     return result!;
   }
 
   describe("Initial State", () => {
-    it("should render all tabs", async () => {
+    it("should render new tab structure (Setup, Training, Results, History)", async () => {
       await renderAndSettle();
 
-      expect(screen.getByText("Configure")).toBeInTheDocument();
+      expect(screen.getByText("Setup")).toBeInTheDocument();
       expect(screen.getByText("Training")).toBeInTheDocument();
+      expect(screen.getByText("Results")).toBeInTheDocument();
       expect(screen.getByText("History")).toBeInTheDocument();
-      expect(screen.getByText("Backfill")).toBeInTheDocument();
     });
 
     it("should load ML status on mount", async () => {
       await renderAndSettle();
-
       expect(api.getMLStatus).toHaveBeenCalledOnce();
     });
 
-    it("should render without onBack (SubPageShell handles navigation)", async () => {
+    it("should fetch data readiness on mount", async () => {
       await renderAndSettle();
-      expect(screen.queryByText("Back")).not.toBeInTheDocument();
+      expect(api.getMLDataReadiness).toHaveBeenCalledWith("1h");
     });
   });
 
-  describe("Configure Tab", () => {
-    it("should render configuration form with default values", async () => {
+  describe("Setup Tab", () => {
+    it("should render preset bar", async () => {
+      await renderAndSettle();
+
+      expect(screen.getByText("Quick Test")).toBeInTheDocument();
+      expect(screen.getByText("Balanced")).toBeInTheDocument();
+      expect(screen.getByText("Production")).toBeInTheDocument();
+    });
+
+    it("should render config sliders", async () => {
       await renderAndSettle();
 
       expect(screen.getByText("Timeframe")).toBeInTheDocument();
@@ -78,7 +90,7 @@ describe("MLTrainingView", () => {
       expect(screen.getByText("Epochs")).toBeInTheDocument();
     });
 
-    it("should show confirmation dialog when start training is clicked", async () => {
+    it("should show confirmation dialog when Start Training is clicked", async () => {
       await renderAndSettle();
 
       await act(async () => {
@@ -86,16 +98,6 @@ describe("MLTrainingView", () => {
       });
 
       expect(screen.getByText("Confirm Training")).toBeInTheDocument();
-    });
-
-    it("should reset to defaults when reset button is clicked", async () => {
-      await renderAndSettle();
-
-      await act(async () => {
-        fireEvent.click(screen.getByText("Reset to Defaults"));
-      });
-
-      expect(screen.getByText("1h")).toBeInTheDocument();
     });
   });
 
@@ -111,6 +113,18 @@ describe("MLTrainingView", () => {
     });
   });
 
+  describe("Results Tab", () => {
+    it("should show empty state when no completed runs exist", async () => {
+      await renderAndSettle();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("Results"));
+      });
+
+      expect(screen.getByText("No training results yet")).toBeInTheDocument();
+    });
+  });
+
   describe("History Tab", () => {
     it("should display empty state when no history", async () => {
       await renderAndSettle();
@@ -122,14 +136,20 @@ describe("MLTrainingView", () => {
       expect(screen.getByText("No training history yet")).toBeInTheDocument();
     });
 
-    it("should display job cards when history exists", async () => {
+    it("should display job entries when history exists", async () => {
       const mockHistory = [
         {
           job_id: "test-job-1",
           status: "completed",
-          result: { "BTC-USDT": { best_epoch: 10, best_val_loss: 0.5, total_epochs: 100, total_samples: 1000, flow_data_used: false } },
+          result: {
+            "BTC-USDT": {
+              best_epoch: 10, best_val_loss: 0.5, total_epochs: 100,
+              total_samples: 1000, flow_data_used: false,
+              direction_accuracy: 0.65,
+            },
+          },
           created_at: new Date().toISOString(),
-          params: { timeframe: "1h", lookback_days: 365 },
+          params: { timeframe: "1h", lookback_days: 365, epochs: 100 },
         },
       ];
       localStorageMock.getItem.mockReturnValue(JSON.stringify(mockHistory));
@@ -143,18 +163,36 @@ describe("MLTrainingView", () => {
       expect(screen.getByText("test-job-1")).toBeInTheDocument();
       expect(screen.getByText("completed")).toBeInTheDocument();
     });
-  });
 
-  describe("Backfill Tab", () => {
-    it("should render backfill form", async () => {
+    it("should navigate to Results when View Details is clicked", async () => {
+      const mockHistory = [
+        {
+          job_id: "test-job-1",
+          status: "completed",
+          result: {
+            "BTC-USDT": {
+              best_epoch: 10, best_val_loss: 0.5, total_epochs: 100,
+              total_samples: 1000, flow_data_used: false,
+            },
+          },
+          created_at: new Date().toISOString(),
+          params: { timeframe: "1h", lookback_days: 365, epochs: 100 },
+        },
+      ];
+      localStorageMock.getItem.mockReturnValue(JSON.stringify(mockHistory));
+
       await renderAndSettle();
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Backfill"));
+        fireEvent.click(screen.getByText("History"));
       });
 
-      expect(screen.getByText("Backfill Settings")).toBeInTheDocument();
-      expect(screen.getByText("Start Backfill")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(screen.getByText("View Details"));
+      });
+
+      // Should now be on Results tab showing that run
+      expect(screen.getByText("Run test-job-1")).toBeInTheDocument();
     });
   });
 });

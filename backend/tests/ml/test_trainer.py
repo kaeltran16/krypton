@@ -110,3 +110,40 @@ class TestTrainer:
             result = trainer.train(features, direction, sl, tp1, tp2)
             assert len(result["val_loss"]) == 1
             assert result["val_loss"][0] > 0
+
+    def test_train_returns_classification_metrics(self, synthetic_data):
+        """Trainer.train() result includes direction_accuracy, precision_per_class, recall_per_class."""
+        features, direction, sl, tp1, tp2 = synthetic_data
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = TrainConfig(
+                epochs=3,
+                batch_size=32,
+                seq_len=50,
+                hidden_size=32,
+                num_layers=1,
+                lr=1e-3,
+                checkpoint_dir=tmpdir,
+            )
+            trainer = Trainer(config)
+            result = trainer.train(features, direction, sl, tp1, tp2)
+
+            # Existing fields still present
+            assert "best_epoch" in result
+            assert "best_val_loss" in result
+            assert "train_loss" in result
+            assert "val_loss" in result
+
+            # New fields
+            assert "direction_accuracy" in result
+            assert isinstance(result["direction_accuracy"], float)
+            assert 0.0 <= result["direction_accuracy"] <= 1.0
+
+            assert "precision_per_class" in result
+            for cls in ("long", "short", "neutral"):
+                assert cls in result["precision_per_class"]
+                assert 0.0 <= result["precision_per_class"][cls] <= 1.0
+
+            assert "recall_per_class" in result
+            for cls in ("long", "short", "neutral"):
+                assert cls in result["recall_per_class"]
+                assert 0.0 <= result["recall_per_class"][cls] <= 1.0

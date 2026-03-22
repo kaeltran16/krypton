@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.auth import require_auth
@@ -34,6 +34,41 @@ class TrainRequest(BaseModel):
     dropout: float = Field(default=0.3, ge=0.0, le=0.7)
     label_horizon: int = Field(default=24, ge=4, le=96)
     label_threshold_pct: float = Field(default=1.5, gt=0, le=10)
+
+
+@router.get("/data-readiness", dependencies=[require_auth()])
+async def get_data_readiness(timeframe: str, request: Request):
+    """Return per-pair candle counts for a given timeframe."""
+    db = request.app.state.db
+    settings = request.app.state.settings
+
+    async with db.session_factory() as session:
+        result = await session.execute(
+            select(
+                Candle.pair,
+                func.count().label("count"),
+                func.min(Candle.timestamp).label("oldest"),
+            )
+            .where(Candle.timeframe == timeframe)
+            .where(Candle.pair.in_(settings.pairs))
+            .group_by(Candle.pair)
+        )
+        rows = result.all()
+
+    data = {}
+    for row in rows:
+        data[row.pair] = {
+            "count": row.count,
+            "oldest": row.oldest.isoformat() if row.oldest else None,
+            "sufficient": row.count >= 100,
+        }
+
+    # Include pairs with zero candles
+    for pair in settings.pairs:
+        if pair not in data:
+            data[pair] = {"count": 0, "oldest": None, "sufficient": False}
+
+    return data
 
 
 @router.post("/train", dependencies=[require_auth()])
@@ -182,6 +217,17 @@ async def start_training(body: TrainRequest, request: Request):
                     "total_samples": len(features),
                     "flow_data_used": flow_used,
                     "version": pair_result.get("version"),
+                    "direction_accuracy": pair_result.get("direction_accuracy"),
+                    "precision_per_class": pair_result.get("precision_per_class"),
+                    "recall_per_class": pair_result.get("recall_per_class"),
+                    "loss_history": [
+                        {
+                            "epoch": i + 1,
+                            "train_loss": pair_result["train_loss"][i],
+                            "val_loss": pair_result["val_loss"][i] if i < len(pair_result["val_loss"]) else None,
+                        }
+                        for i in range(len(pair_result["train_loss"]))
+                    ],
                 }
 
             if not pair_results:
@@ -302,25 +348,29 @@ async def start_backfill(body: BackfillRequest, request: Request):
                         oldest_ts = int(rows[-1][0])
                         batch_count = 0
 
-                        async with db.session_factory() as session:
-                            for row in rows:
-                                ts_ms = int(row[0])
-                                if ts_ms < cutoff_ms:
-                                    continue
-                                ts = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
-                                stmt = pg_insert(Candle).values(
-                                    pair=pair,
-                                    timeframe=body.timeframe,
-                                    timestamp=ts,
-                                    open=float(row[1]),
-                                    high=float(row[2]),
-                                    low=float(row[3]),
-                                    close=float(row[4]),
-                                    volume=float(row[5]),
-                                ).on_conflict_do_nothing(constraint="uq_candle")
+                        batch_values = []
+                        for row in rows:
+                            ts_ms = int(row[0])
+                            if ts_ms < cutoff_ms:
+                                continue
+                            ts = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+                            batch_values.append({
+                                "pair": pair,
+                                "timeframe": body.timeframe,
+                                "timestamp": ts,
+                                "open": float(row[1]),
+                                "high": float(row[2]),
+                                "low": float(row[3]),
+                                "close": float(row[4]),
+                                "volume": float(row[5]),
+                            })
+                        batch_count = len(batch_values)
+
+                        if batch_values:
+                            async with db.session_factory() as session:
+                                stmt = pg_insert(Candle).values(batch_values).on_conflict_do_nothing(constraint="uq_candle")
                                 await session.execute(stmt)
-                                batch_count += 1
-                            await session.commit()
+                                await session.commit()
 
                         total += batch_count
 
