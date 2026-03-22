@@ -233,11 +233,11 @@ function SnapshotContent({ snapshot }: { snapshot: Record<string, unknown> }) {
                 {atr.sl != null && <SnapPill label="SL" value={String(atr.sl)} />}
                 {atr.tp1 != null && <SnapPill label="TP1" value={String(atr.tp1)} />}
                 {atr.tp2 != null && <SnapPill label="TP2" value={String(atr.tp2)} />}
-                {atr.source && (
+                {atr.source != null ? (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary self-center">
                     {String(atr.source).replace(/_/g, " ")}
                   </span>
-                )}
+                ) : null}
               </div>
             </SnapGroup>
           )}
