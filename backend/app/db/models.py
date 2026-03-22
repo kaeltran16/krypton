@@ -382,3 +382,51 @@ class RegimeWeights(Base):
     __table_args__ = (
         UniqueConstraint("pair", "timeframe", name="uq_regime_weights_pair_timeframe"),
     )
+
+
+class ParameterProposal(Base):
+    __tablename__ = "parameter_proposals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )  # pending, shadow, approved, rejected, promoted, rolled_back
+    parameter_group: Mapped[str] = mapped_column(String(50), nullable=False)
+    changes: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    backtest_metrics: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    shadow_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    shadow_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    promoted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rejected_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ShadowResult(Base):
+    __tablename__ = "shadow_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    proposal_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("parameter_proposals.id"), nullable=False, index=True
+    )
+    signal_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("signals.id"), nullable=False, index=True
+    )
+    shadow_score: Mapped[float] = mapped_column(Float, nullable=False)
+    shadow_entry: Mapped[float] = mapped_column(Float, nullable=False)
+    shadow_sl: Mapped[float] = mapped_column(Float, nullable=False)
+    shadow_tp1: Mapped[float] = mapped_column(Float, nullable=False)
+    shadow_tp2: Mapped[float] = mapped_column(Float, nullable=False)
+    shadow_outcome: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # tp1_hit, tp2_hit, sl_hit, expired, None (unresolved)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )

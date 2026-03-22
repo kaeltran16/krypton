@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.api.auth import require_auth
 from app.db.models import PipelineSettings, RegimeWeights, PerformanceTrackerRow
-from app.engine.constants import get_engine_constants
+from app.engine.constants import get_engine_constants, PARAMETER_DESCRIPTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,8 @@ async def get_parameters(request: Request, _key: str = require_auth()):
         pass
 
     params["learned_atr"] = learned_atr
+
+    params["descriptions"] = PARAMETER_DESCRIPTIONS
 
     return params
 

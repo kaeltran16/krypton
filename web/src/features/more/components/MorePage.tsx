@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity } from "lucide-react";
+import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity, Zap } from "lucide-react";
 import { SubPageShell } from "../../../shared/components/SubPageShell";
 import SettingsPage from "../../settings/components/SettingsPage";
 import RiskPage from "../../settings/components/RiskPage";
@@ -9,9 +9,10 @@ import { MLTrainingView } from "../../ml/components/MLTrainingView";
 import { AlertsPage } from "../../alerts/components/AlertsPage";
 import { JournalView } from "../../signals/components/JournalView";
 import { SystemDiagnostics } from "../../system/components/SystemDiagnostics";
+import OptimizerPage from "../../optimizer/components/OptimizerPage";
 import { hapticTap } from "../../../shared/lib/haptics";
 
-type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | null;
+type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | "optimizer" | null;
 
 const CLUSTERS = [
   {
@@ -19,6 +20,7 @@ const CLUSTERS = [
     items: [
       { key: "engine" as SubPage, icon: Cpu, label: "Engine", desc: "Pipeline parameters & weights", color: "text-primary" },
       { key: "backtest" as SubPage, icon: LineChart, label: "Backtest", desc: "Historical simulation hub", color: "text-primary" },
+      { key: "optimizer" as SubPage, icon: Zap, label: "Optimizer", desc: "Auto-tune parameters", color: "text-purple-400" },
     ],
   },
   {
@@ -48,6 +50,7 @@ const PAGE_TITLES: Record<string, string> = {
   settings: "Settings",
   journal: "Journal & Analytics",
   system: "System Diagnostics",
+  optimizer: "Optimizer",
 };
 
 export function MorePage() {
@@ -64,6 +67,7 @@ export function MorePage() {
         {activePage === "settings" && <SettingsPage />}
         {activePage === "journal" && <JournalView />}
         {activePage === "system" && <SystemDiagnostics />}
+        {activePage === "optimizer" && <OptimizerPage />}
       </SubPageShell>
     );
   }

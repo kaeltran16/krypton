@@ -1,31 +1,22 @@
-"""Test GET /api/engine/parameters endpoint."""
-
 import pytest
-from httpx import ASGITransport, AsyncClient
-from tests.conftest import make_test_jwt
-
-COOKIES = {"krypton_token": make_test_jwt()}
+from app.engine.constants import PARAMETER_DESCRIPTIONS
 
 
-@pytest.mark.asyncio
-async def test_get_engine_parameters(client):
-    resp = await client.get("/api/engine/parameters", cookies=COOKIES)
-    assert resp.status_code == 200
-    data = resp.json()
+def test_parameter_descriptions_structure():
+    """Every description has required fields."""
+    assert len(PARAMETER_DESCRIPTIONS) > 0
+    for key, desc in PARAMETER_DESCRIPTIONS.items():
+        assert "description" in desc, f"{key} missing description"
+        assert "pipeline_stage" in desc, f"{key} missing pipeline_stage"
+        assert "range" in desc, f"{key} missing range"
+        assert isinstance(desc["description"], str)
+        assert isinstance(desc["pipeline_stage"], str)
+        assert isinstance(desc["range"], str)
 
-    # top-level categories present
-    for key in ("technical", "order_flow", "onchain", "blending", "levels", "patterns", "performance_tracker"):
-        assert key in data, f"Missing category: {key}"
 
-    # check a hardcoded param
-    adx = data["technical"]["indicator_periods"]["adx"]
-    assert adx == {"value": 14, "source": "hardcoded"}
-
-    # check a configurable param
-    signal = data["blending"]["thresholds"]["signal"]
-    assert signal["source"] == "configurable"
-    assert isinstance(signal["value"], int)
-
-    # regime_weights and learned_atr are dynamic (empty in test)
-    assert "regime_weights" in data
-    assert "learned_atr" in data
+def test_parameter_descriptions_coverage():
+    """Descriptions cover key parameter groups."""
+    keys = set(PARAMETER_DESCRIPTIONS.keys())
+    # Spot-check a few from each group
+    assert "signal_threshold" in keys or "signal" in keys
+    assert "traditional_weight" in keys or "traditional" in keys

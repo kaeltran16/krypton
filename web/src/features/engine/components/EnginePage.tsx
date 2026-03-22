@@ -7,6 +7,7 @@ import WeightBar from "./WeightBar";
 import RegimeGrid from "./RegimeGrid";
 import { Dropdown } from "../../../shared/components/Dropdown";
 import { Button } from "../../../shared/components/Button";
+import PipelineFlow from "./PipelineFlow";
 
 export default function EnginePage() {
   const { params, loading, error, fetch, refresh } = useEngineStore();
@@ -55,6 +56,7 @@ export default function EnginePage() {
 
   return (
     <div className="p-3 space-y-2">
+      <PipelineFlow />
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-on-surface">Engine Parameters</h3>

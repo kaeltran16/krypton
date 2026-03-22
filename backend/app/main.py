@@ -1031,6 +1031,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Tracker bootstrap failed: %s", e)
 
+    from app.engine.optimizer import OptimizerState
+    app.state.optimizer = OptimizerState()
+
     # Load learned regime weights from DB
     app.state.regime_weights = {}
     try:
@@ -1310,6 +1313,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.system import router as system_router
     app.include_router(system_router)
+
+    from app.api.optimizer import router as optimizer_router
+    app.include_router(optimizer_router)
 
     return app
 

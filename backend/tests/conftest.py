@@ -59,6 +59,10 @@ async def _test_lifespan(app: FastAPI):
         "mean_rev_blend_ratio": 0.6,
     }
     app.state.pipeline_settings_lock = asyncio.Lock()
+    from app.engine.optimizer import OptimizerState
+    app.state.optimizer = OptimizerState()
+    app.state.manager = MagicMock()
+    app.state.manager.broadcast = AsyncMock()
     app.state.start_time = 1000000.0
     app.state.last_pipeline_cycle = 1000000.0
 

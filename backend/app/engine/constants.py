@@ -112,6 +112,419 @@ PERFORMANCE_TRACKER = {
 }
 
 
+PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
+    # ── Blending / Source Weights ──
+    "traditional": {
+        "description": "Weight given to technical indicator scores (ADX, RSI, BB, OBV, volume) in the final blend",
+        "pipeline_stage": "Combiner -> Source Blending",
+        "range": "0.0-1.0 — all source weights must sum to 1.0",
+    },
+    "flow": {
+        "description": "Weight given to order flow scores (funding rate, open interest, long/short ratio) in the final blend",
+        "pipeline_stage": "Combiner -> Source Blending",
+        "range": "0.0-1.0 — all source weights must sum to 1.0",
+    },
+    "onchain": {
+        "description": "Weight given to on-chain metric scores (netflow, whale activity, addresses) in the final blend",
+        "pipeline_stage": "Combiner -> Source Blending",
+        "range": "0.0-1.0 — all source weights must sum to 1.0",
+    },
+    "pattern": {
+        "description": "Weight given to candlestick pattern scores in the final blend",
+        "pipeline_stage": "Combiner -> Source Blending",
+        "range": "0.0-1.0 — all source weights must sum to 1.0",
+    },
+    # ── Thresholds ──
+    "signal_threshold": {
+        "description": "Minimum absolute blended score required to emit a trading signal. Lower = more signals but lower quality",
+        "pipeline_stage": "Combiner -> Signal Emission",
+        "range": "20-60 — must be greater than llm_threshold",
+    },
+    "llm_threshold": {
+        "description": "Score above which LLM analysis is triggered. Scores below this skip LLM entirely",
+        "pipeline_stage": "Combiner -> LLM Gate",
+        "range": "10-40 — must be less than signal_threshold",
+    },
+    "ml_confidence_threshold": {
+        "description": "Minimum ML model confidence required for ML predictions to blend into the score",
+        "pipeline_stage": "Combiner -> ML Gate",
+        "range": "0.50-0.85 — higher = only very confident ML predictions influence signals",
+    },
+    "ml_blend_weight": {
+        "description": "How much weight the ML model's prediction gets when blended with the traditional score",
+        "pipeline_stage": "Combiner -> ML Blending",
+        "range": "0.0-1.0 — 0 = ignore ML, 1 = fully trust ML",
+    },
+    # ── Technical Indicators ──
+    "adx_period": {
+        "description": "Lookback period for Average Directional Index — measures trend strength",
+        "pipeline_stage": "Technical Scoring -> Trend",
+        "range": "7-21 — shorter = more responsive, longer = smoother",
+    },
+    "rsi_period": {
+        "description": "Lookback period for Relative Strength Index — measures momentum",
+        "pipeline_stage": "Technical Scoring -> Mean Reversion",
+        "range": "7-21 — shorter = more sensitive to price swings",
+    },
+    "sma_period": {
+        "description": "Lookback period for Simple Moving Average used as price reference",
+        "pipeline_stage": "Technical Scoring -> Trend",
+        "range": "10-30",
+    },
+    "obv_slope_window": {
+        "description": "Window for computing On-Balance Volume slope — detects volume-price divergence",
+        "pipeline_stage": "Technical Scoring -> Volume",
+        "range": "5-15",
+    },
+    # ── Sigmoid Parameters ──
+    "trend_strength_center": {
+        "description": "ADX value at the midpoint of the trend-strength sigmoid. Below this, trend is considered weak",
+        "pipeline_stage": "Technical Scoring -> Trend",
+        "range": "10-35 — higher = requires stronger trend to activate",
+    },
+    "trend_strength_steepness": {
+        "description": "How sharply the trend-strength sigmoid transitions from weak to strong trend",
+        "pipeline_stage": "Technical Scoring -> Trend",
+        "range": "0.05-0.50 — higher = more binary (on/off) behavior",
+    },
+    "vol_expansion_center": {
+        "description": "Bollinger Band width percentile at the sigmoid midpoint. Determines what counts as expanded volatility",
+        "pipeline_stage": "Technical Scoring -> Squeeze/Expansion",
+        "range": "30-70",
+    },
+    "vol_expansion_steepness": {
+        "description": "Steepness of the volatility expansion sigmoid curve",
+        "pipeline_stage": "Technical Scoring -> Squeeze/Expansion",
+        "range": "0.03-0.15",
+    },
+    "trend_score_steepness": {
+        "description": "Steepness of the trend score sigmoid — controls how trend strength maps to score contribution",
+        "pipeline_stage": "Technical Scoring -> Trend",
+        "range": "0.10-0.60",
+    },
+    "obv_slope_steepness": {
+        "description": "Steepness of the OBV slope sigmoid — controls sensitivity to volume-price divergence",
+        "pipeline_stage": "Technical Scoring -> Volume",
+        "range": "1-8",
+    },
+    "volume_ratio_steepness": {
+        "description": "Steepness of the volume ratio sigmoid — controls how relative volume maps to score",
+        "pipeline_stage": "Technical Scoring -> Volume",
+        "range": "1.0-6.0",
+    },
+    # ── Mean Reversion ──
+    "rsi_steepness": {
+        "description": "RSI sigmoid steepness for mean reversion scoring. Higher = RSI extremes contribute more sharply",
+        "pipeline_stage": "Technical Scoring -> Mean Reversion",
+        "range": "0.10-0.50",
+    },
+    "bb_pos_steepness": {
+        "description": "Bollinger Band position sigmoid steepness. Controls how proximity to bands affects mean-reversion score",
+        "pipeline_stage": "Technical Scoring -> Mean Reversion",
+        "range": "5.0-20.0",
+    },
+    "squeeze_steepness": {
+        "description": "Squeeze/expansion sigmoid steepness for mean reversion context",
+        "pipeline_stage": "Technical Scoring -> Squeeze/Expansion",
+        "range": "0.05-0.20",
+    },
+    "blend_ratio": {
+        "description": "RSI vs Bollinger Band weighting in mean-reversion score. 0.6 = 60% RSI, 40% BB position",
+        "pipeline_stage": "Technical Scoring -> Mean Reversion",
+        "range": "0.3-0.8",
+    },
+    # ── Order Flow ──
+    "funding_max": {
+        "description": "Maximum score contribution from funding rate. Caps how much extreme funding can influence the signal",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "15-50 — funding + oi + ls_ratio max scores must sum <= 100",
+    },
+    "oi_max": {
+        "description": "Maximum score contribution from open interest changes",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "10-35",
+    },
+    "ls_ratio_max": {
+        "description": "Maximum score contribution from long/short ratio",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "15-50",
+    },
+    "funding_steepness": {
+        "description": "Sigmoid steepness for funding rate scoring. Higher = more sensitive to funding extremes",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "3000-15000",
+    },
+    "oi_steepness": {
+        "description": "Sigmoid steepness for open interest change scoring",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "30-120",
+    },
+    "ls_ratio_steepness": {
+        "description": "Sigmoid steepness for long/short ratio scoring",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "2-12",
+    },
+    # ── ATR / Levels ──
+    "sl": {
+        "description": "Default stop-loss distance as ATR multiplier. Higher = wider stop, fewer stop-outs but larger losses",
+        "pipeline_stage": "Level Calculation",
+        "range": "0.8-2.5 ATR multiples",
+    },
+    "tp1": {
+        "description": "Default take-profit-1 distance as ATR multiplier. First partial exit target",
+        "pipeline_stage": "Level Calculation",
+        "range": "1.0-4.0 ATR multiples — must be > sl",
+    },
+    "tp2": {
+        "description": "Default take-profit-2 distance as ATR multiplier. Full exit target",
+        "pipeline_stage": "Level Calculation",
+        "range": "2.0-6.0 ATR multiples — must be > tp1",
+    },
+    # ── Pattern Strengths ──
+    "bullish_engulfing": {
+        "description": "Score contribution when a bullish engulfing pattern is detected",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "bearish_engulfing": {
+        "description": "Score contribution when a bearish engulfing pattern is detected",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "morning_star": {
+        "description": "Score contribution for morning star reversal pattern (three-candle bullish)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "evening_star": {
+        "description": "Score contribution for evening star reversal pattern (three-candle bearish)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "three_white_soldiers": {
+        "description": "Score contribution for three consecutive bullish candles with higher closes",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "three_black_crows": {
+        "description": "Score contribution for three consecutive bearish candles with lower closes",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "marubozu": {
+        "description": "Score contribution for marubozu (full-body candle with minimal wicks)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "hammer": {
+        "description": "Score contribution for hammer pattern (bullish reversal, long lower shadow)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "hanging_man": {
+        "description": "Score contribution for hanging man pattern (bearish reversal after uptrend)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "piercing_line": {
+        "description": "Score contribution for piercing line pattern (bullish two-candle reversal)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "dark_cloud_cover": {
+        "description": "Score contribution for dark cloud cover (bearish two-candle reversal)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "inverted_hammer": {
+        "description": "Score contribution for inverted hammer (potential bullish reversal)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "shooting_star": {
+        "description": "Score contribution for shooting star (bearish reversal, long upper shadow)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "doji": {
+        "description": "Score contribution for doji (indecision, nearly equal open/close)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    "spinning_top": {
+        "description": "Score contribution for spinning top (small body, indecision)",
+        "pipeline_stage": "Pattern Scoring",
+        "range": "3-25",
+    },
+    # ── LLM Factor Weights ──
+    "support_proximity": {
+        "description": "LLM factor weight for price proximity to support level",
+        "pipeline_stage": "LLM Gate -> Structure Factors",
+        "range": "2-10",
+    },
+    "resistance_proximity": {
+        "description": "LLM factor weight for price proximity to resistance level",
+        "pipeline_stage": "LLM Gate -> Structure Factors",
+        "range": "2-10",
+    },
+    "level_breakout": {
+        "description": "LLM factor weight for key level breakout detection",
+        "pipeline_stage": "LLM Gate -> Structure Factors",
+        "range": "3-12",
+    },
+    "htf_alignment": {
+        "description": "LLM factor weight for higher-timeframe trend alignment",
+        "pipeline_stage": "LLM Gate -> Structure Factors",
+        "range": "3-10",
+    },
+    "rsi_divergence": {
+        "description": "LLM factor weight for RSI divergence with price",
+        "pipeline_stage": "LLM Gate -> Momentum Factors",
+        "range": "3-10",
+    },
+    "volume_divergence": {
+        "description": "LLM factor weight for volume divergence with price trend",
+        "pipeline_stage": "LLM Gate -> Momentum Factors",
+        "range": "2-10",
+    },
+    "macd_divergence": {
+        "description": "LLM factor weight for MACD divergence with price",
+        "pipeline_stage": "LLM Gate -> Momentum Factors",
+        "range": "2-10",
+    },
+    "volume_exhaustion": {
+        "description": "LLM factor weight for volume exhaustion signals",
+        "pipeline_stage": "LLM Gate -> Exhaustion Factors",
+        "range": "2-8",
+    },
+    "funding_extreme": {
+        "description": "LLM factor weight for extreme funding rate conditions",
+        "pipeline_stage": "LLM Gate -> Exhaustion Factors",
+        "range": "2-8",
+    },
+    "crowded_positioning": {
+        "description": "LLM factor weight for crowded market positioning",
+        "pipeline_stage": "LLM Gate -> Exhaustion Factors",
+        "range": "2-8",
+    },
+    "pattern_confirmation": {
+        "description": "LLM factor weight for candlestick pattern confirmation",
+        "pipeline_stage": "LLM Gate -> Event Factors",
+        "range": "2-8",
+    },
+    "news_catalyst": {
+        "description": "LLM factor weight for news catalyst presence",
+        "pipeline_stage": "LLM Gate -> Event Factors",
+        "range": "3-10",
+    },
+    "factor_cap": {
+        "description": "Maximum total LLM factor contribution to the final score. Caps LLM influence regardless of individual factor weights",
+        "pipeline_stage": "LLM Gate",
+        "range": "20-50",
+    },
+    # ── On-Chain (BTC) ──
+    "btc_netflow_max": {
+        "description": "Max on-chain score from BTC exchange netflow. Outflow = bullish (accumulation)",
+        "pipeline_stage": "On-Chain Scoring -> BTC",
+        "range": "5-50",
+    },
+    "btc_whale_max": {
+        "description": "Max on-chain score from BTC whale transaction activity",
+        "pipeline_stage": "On-Chain Scoring -> BTC",
+        "range": "5-50",
+    },
+    "btc_addresses_max": {
+        "description": "Max on-chain score from BTC active address growth",
+        "pipeline_stage": "On-Chain Scoring -> BTC",
+        "range": "5-50",
+    },
+    "btc_nupl_max": {
+        "description": "Max on-chain score from BTC Net Unrealized Profit/Loss (contrarian)",
+        "pipeline_stage": "On-Chain Scoring -> BTC",
+        "range": "5-50",
+    },
+    "btc_hashrate_max": {
+        "description": "Max on-chain score from BTC hashrate trend (rising = bullish)",
+        "pipeline_stage": "On-Chain Scoring -> BTC",
+        "range": "5-50",
+    },
+    # ── On-Chain (ETH) ──
+    "eth_netflow_max": {
+        "description": "Max on-chain score from ETH exchange netflow",
+        "pipeline_stage": "On-Chain Scoring -> ETH",
+        "range": "5-50",
+    },
+    "eth_whale_max": {
+        "description": "Max on-chain score from ETH whale transaction activity",
+        "pipeline_stage": "On-Chain Scoring -> ETH",
+        "range": "5-50",
+    },
+    "eth_addresses_max": {
+        "description": "Max on-chain score from ETH active address growth",
+        "pipeline_stage": "On-Chain Scoring -> ETH",
+        "range": "5-50",
+    },
+    "eth_staking_max": {
+        "description": "Max on-chain score from ETH staking deposits (deposits = bullish)",
+        "pipeline_stage": "On-Chain Scoring -> ETH",
+        "range": "5-50",
+    },
+    "eth_gas_max": {
+        "description": "Max on-chain score from ETH gas price trend (rising = network activity)",
+        "pipeline_stage": "On-Chain Scoring -> ETH",
+        "range": "5-50",
+    },
+    # ── Regime Caps (per-regime inner scoring caps) ──
+    "trend_cap": {
+        "description": "Maximum score contribution from trend-following indicators within this regime",
+        "pipeline_stage": "Regime Detection -> Inner Caps",
+        "range": "10-45 — all four caps must sum to 100 per regime",
+    },
+    "mean_rev_cap": {
+        "description": "Maximum score contribution from mean-reversion indicators within this regime",
+        "pipeline_stage": "Regime Detection -> Inner Caps",
+        "range": "10-45",
+    },
+    "squeeze_cap": {
+        "description": "Maximum score contribution from squeeze/expansion detection within this regime",
+        "pipeline_stage": "Regime Detection -> Inner Caps",
+        "range": "10-45",
+    },
+    "volume_cap": {
+        "description": "Maximum score contribution from volume confirmation within this regime",
+        "pipeline_stage": "Regime Detection -> Inner Caps",
+        "range": "10-45",
+    },
+    # ── Regime Outer Weights ──
+    "tech_weight": {
+        "description": "Weight given to technical score within this regime's outer blend",
+        "pipeline_stage": "Regime Detection -> Outer Weights",
+        "range": "0.10-0.50 — all four weights must sum to 1.0 per regime",
+    },
+    "flow_weight": {
+        "description": "Weight given to order flow score within this regime's outer blend",
+        "pipeline_stage": "Regime Detection -> Outer Weights",
+        "range": "0.10-0.50",
+    },
+    "onchain_weight": {
+        "description": "Weight given to on-chain score within this regime's outer blend",
+        "pipeline_stage": "Regime Detection -> Outer Weights",
+        "range": "0.10-0.50",
+    },
+    "pattern_weight": {
+        "description": "Weight given to pattern score within this regime's outer blend",
+        "pipeline_stage": "Regime Detection -> Outer Weights",
+        "range": "0.10-0.50",
+    },
+    # ── Confluence ──
+    "confluence_max_score": {
+        "description": "Maximum score bonus from multi-timeframe trend alignment",
+        "pipeline_stage": "Confluence Scoring",
+        "range": "5-25",
+    },
+}
+
+
 def get_engine_constants() -> dict:
     """Return all hardcoded engine constants as a nested dict.
 

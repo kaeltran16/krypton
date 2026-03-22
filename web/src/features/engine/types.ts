@@ -58,4 +58,5 @@ export interface EngineParameters {
   regime_weights: Record<string, Record<string, Record<string, RegimeCapWeights>>>;
   learned_atr: Record<string, Record<string, LearnedAtrEntry>>;
   performance_tracker: Record<string, Record<string, ParameterValue>>;
+  descriptions?: Record<string, { description: string; pipeline_stage: string; range: string }>;
 }

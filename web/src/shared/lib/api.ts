@@ -6,6 +6,7 @@ import type { PipelineSettingsAPI } from "../../features/settings/types";
 import type { Alert, AlertCreateRequest, AlertUpdateRequest, AlertHistoryEntry, AlertSettings } from "../../features/alerts/types";
 import type { EngineParameters, ParameterDiff, AtrOptimizationResult } from "../../features/engine/types";
 import type { SystemHealthResponse } from "../../features/system/types";
+import type { OptimizerStatus, Proposal } from "../../features/optimizer/types";
 
 // ML Training Types
 export interface MLTrainRequest {
@@ -468,4 +469,38 @@ export const api = {
 
   // System
   getSystemHealth: () => request<SystemHealthResponse>("/api/system/health"),
+
+  // Optimizer
+  getOptimizerStatus: () =>
+    request<OptimizerStatus>("/api/optimizer/status"),
+
+  getOptimizerProposals: (params?: { limit?: number; offset?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    if (params?.status) query.set("status", params.status);
+    const qs = query.toString();
+    return request<{ proposals: Proposal[] }>(`/api/optimizer/proposals${qs ? `?${qs}` : ""}`);
+  },
+
+  approveProposal: (id: number) =>
+    request<{ status: string; proposal_id: number }>(`/api/optimizer/proposals/${id}/approve`, {
+      method: "POST",
+    }),
+
+  rejectProposal: (id: number, reason?: string) =>
+    request<{ status: string; proposal_id: number }>(`/api/optimizer/proposals/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || "" }),
+    }),
+
+  promoteProposal: (id: number) =>
+    request<{ status: string; proposal_id: number }>(`/api/optimizer/proposals/${id}/promote`, {
+      method: "POST",
+    }),
+
+  rollbackProposal: (id: number) =>
+    request<{ status: string; proposal_id: number }>(`/api/optimizer/proposals/${id}/rollback`, {
+      method: "POST",
+    }),
 };
