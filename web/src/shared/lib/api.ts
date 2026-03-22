@@ -5,6 +5,7 @@ import type { BacktestRun, BacktestRunSummary, BacktestConfig } from "../../feat
 import type { PipelineSettingsAPI } from "../../features/settings/types";
 import type { Alert, AlertCreateRequest, AlertUpdateRequest, AlertHistoryEntry, AlertSettings } from "../../features/alerts/types";
 import type { EngineParameters, ParameterDiff, AtrOptimizationResult } from "../../features/engine/types";
+import type { SystemHealthResponse } from "../../features/system/types";
 
 // ML Training Types
 export interface MLTrainRequest {
@@ -464,4 +465,7 @@ export const api = {
       headers: jsonHeaders,
       body: JSON.stringify({ pair, timeframe }),
     }),
+
+  // System
+  getSystemHealth: () => request<SystemHealthResponse>("/api/system/health"),
 };

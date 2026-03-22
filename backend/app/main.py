@@ -1,4 +1,5 @@
 import asyncio
+import time
 import json
 import logging
 import os
@@ -609,6 +610,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
         agreement=agreement, emitted=emitted,
     )
 
+    app.state.last_pipeline_cycle = time.time()
+
     if not emitted:
         return
 
@@ -999,6 +1002,8 @@ async def lifespan(app: FastAPI):
     app.state.manager = ws_manager
     app.state.order_flow = {}
     app.state.pipeline_tasks = set()
+    app.state.start_time = time.time()
+    app.state.last_pipeline_cycle = 0.0
     app.state.pipeline_settings_lock = asyncio.Lock()
 
     from app.engine.performance_tracker import PerformanceTracker
@@ -1285,6 +1290,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.engine import router as engine_router
     app.include_router(engine_router)
+
+    from app.api.system import router as system_router
+    app.include_router(system_router)
 
     return app
 
