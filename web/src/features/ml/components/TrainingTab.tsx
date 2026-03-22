@@ -5,6 +5,8 @@ import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { StatusBadge, formatPairSlug } from "./shared";
 import { LossChart } from "./LossChart";
 import type { LossHistoryEntry } from "../types";
+import { Card } from "../../../shared/components/Card";
+import { MetricCard } from "../../../shared/components/MetricCard";
 
 interface TrainingTabProps {
   job: MLTrainJob | null;
@@ -70,7 +72,7 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
 
   if (!job) {
     return (
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-6 text-center">
+      <Card className="text-center" padding="lg">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-on-surface-variant mx-auto mb-3">
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
@@ -78,7 +80,7 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
         <Button onClick={onSwitchToSetup}>
           Configure Training
         </Button>
-      </div>
+      </Card>
     );
   }
 
@@ -99,7 +101,7 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
   return (
     <div className="space-y-4">
       {/* Job header */}
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
+      <Card padding="sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${isRunning ? "bg-primary animate-pulse motion-reduce:animate-none" : "bg-muted"}`} />
@@ -120,7 +122,7 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
           </p>
         )}
         {job.error && <p className="text-xs text-error mt-2">{job.error}</p>}
-      </div>
+      </Card>
 
       {/* Pair selector */}
       {pairs.length > 1 && (
@@ -136,38 +138,31 @@ export function TrainingTab({ job, onCancel, onComplete, onSwitchToSetup, preset
 
       {/* Loss curve chart */}
       {currentLossData.length > 0 && (
-        <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
+        <Card padding="sm">
           <LossChart data={currentLossData} height={180} />
           {currentProgress && bestValEntry && (
             <p className="text-[10px] text-on-surface-variant text-center mt-2">
               Best val: {bestValEntry.val_loss?.toFixed(4)} @ epoch {bestValEntry.epoch}
             </p>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Metrics grid */}
       {currentProgress && (
         <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: "Train Loss", value: currentProgress.train_loss.toFixed(4) },
-            { label: "Val Loss", value: currentProgress.val_loss?.toFixed(4) ?? "—" },
-            { label: "Direction Acc", value: currentProgress.direction_acc != null ? `${(currentProgress.direction_acc * 100).toFixed(1)}%` : "—" },
-            { label: "Epoch", value: `${currentProgress.epoch}/${currentProgress.total_epochs}` },
-          ].map((m) => (
-            <div key={m.label} className="bg-surface-container rounded-lg border border-outline-variant/10 p-3 text-center">
-              <p className="text-[10px] text-on-surface-variant mb-1">{m.label}</p>
-              <p className="text-sm font-mono text-on-surface">{m.value}</p>
-            </div>
-          ))}
+          <MetricCard label="Train Loss" value={currentProgress.train_loss.toFixed(4)} />
+          <MetricCard label="Val Loss" value={currentProgress.val_loss?.toFixed(4) ?? "—"} />
+          <MetricCard label="Direction Acc" value={currentProgress.direction_acc != null ? `${(currentProgress.direction_acc * 100).toFixed(1)}%` : "—"} />
+          <MetricCard label="Epoch" value={`${currentProgress.epoch}/${currentProgress.total_epochs}`} />
         </div>
       )}
 
       {/* Initializing state */}
       {isRunning && pairs.length === 0 && (
-        <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-4 text-center text-sm text-on-surface-variant">
+        <Card className="text-center text-sm text-on-surface-variant">
           Training initializing...
-        </div>
+        </Card>
       )}
     </div>
   );

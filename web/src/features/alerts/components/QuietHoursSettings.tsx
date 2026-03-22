@@ -3,8 +3,7 @@ import { useAlertStore } from "../store";
 import { Toggle } from "../../../shared/components/Toggle";
 import { Dropdown } from "../../../shared/components/Dropdown";
 import { api } from "../../../shared/lib/api";
-
-const inputCls = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none";
+import { FormField, INPUT_STYLES } from "../../../shared/components/FormField";
 
 export function QuietHoursSettings() {
   const settings = useAlertStore((s) => s.settings);
@@ -51,34 +50,31 @@ export function QuietHoursSettings() {
       {settings.quiet_hours_enabled && (
         <>
           <div className="flex gap-3">
-            <label className="flex-1">
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Start</span>
+            <FormField label="Start" className="flex-1">
               <input
                 type="time"
                 value={settings.quiet_hours_start}
                 onChange={(e) => update({ quiet_hours_start: e.target.value })}
-                className={inputCls}
+                className={INPUT_STYLES}
               />
-            </label>
-            <label className="flex-1">
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">End</span>
+            </FormField>
+            <FormField label="End" className="flex-1">
               <input
                 type="time"
                 value={settings.quiet_hours_end}
                 onChange={(e) => update({ quiet_hours_end: e.target.value })}
-                className={inputCls}
+                className={INPUT_STYLES}
               />
-            </label>
+            </FormField>
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Timezone</span>
+          <FormField label="Timezone">
             <Dropdown
               value={settings.quiet_hours_tz}
               onChange={(v) => update({ quiet_hours_tz: v })}
               options={timezoneOptions}
               ariaLabel="Select timezone"
             />
-          </div>
+          </FormField>
         </>
       )}
     </div>

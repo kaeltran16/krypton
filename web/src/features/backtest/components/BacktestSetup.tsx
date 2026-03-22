@@ -4,6 +4,7 @@ import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 import { formatPair } from "../../../shared/lib/format";
 import ParameterOverridePanel from "./ParameterOverridePanel";
 import { Toggle } from "../../../shared/components/Toggle";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
 
 const TIMEFRAMES = ["15m", "1h", "4h"] as const;
 
@@ -343,9 +344,7 @@ function Section({
   if (!collapsible) {
     return (
       <div>
-        <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">
-          {title}
-        </h3>
+        <SectionLabel>{title}</SectionLabel>
         <div className="bg-surface-container p-5 rounded">{children}</div>
       </div>
     );
@@ -368,9 +367,7 @@ function Section({
         >
           <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider text-on-surface-variant flex-1">
-          {title}
-        </h3>
+        <SectionLabel className="flex-1 mb-0 px-0">{title}</SectionLabel>
         {!isOpen && summary && (
           <span className="text-[10px] text-on-surface-variant/70 font-mono truncate max-w-[60%] text-right">
             {summary}

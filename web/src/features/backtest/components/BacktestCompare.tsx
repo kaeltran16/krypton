@@ -1,6 +1,8 @@
 import { useEffect, useRef, useMemo } from "react";
 import { formatDuration, formatPair } from "../../../shared/lib/format";
 import { Button } from "../../../shared/components/Button";
+import { Card } from "../../../shared/components/Card";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
 import {
   createChart,
   LineSeries,
@@ -57,8 +59,8 @@ export function BacktestCompare() {
     <div className="space-y-4">
       {/* Run selection */}
       <div>
-        <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Select Runs to Compare</h3>
-        <div className="bg-surface-container rounded-lg border border-outline-variant/10 divide-y divide-outline-variant/10">
+        <SectionLabel>Select Runs to Compare</SectionLabel>
+        <Card padding="none" className="divide-y divide-outline-variant/10">
           {completedRuns.map((run) => (
             <label
               key={run.id}
@@ -89,7 +91,7 @@ export function BacktestCompare() {
               </Button>
             </label>
           ))}
-        </div>
+        </Card>
       </div>
 
       {/* Compare button */}
@@ -121,8 +123,8 @@ export function BacktestCompare() {
 function CompareTable({ runs }: { runs: BacktestRun[] }) {
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Side-by-Side</h3>
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-x-auto">
+      <SectionLabel>Side-by-Side</SectionLabel>
+      <Card padding="none" className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-outline-variant/10">
@@ -172,7 +174,7 @@ function CompareTable({ runs }: { runs: BacktestRun[] }) {
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -242,8 +244,8 @@ function CompareEquityCurves({ runs }: { runs: BacktestRun[] }) {
 
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Equity Curves</h3>
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden">
+      <SectionLabel>Equity Curves</SectionLabel>
+      <Card padding="none" className="overflow-hidden">
         <div ref={containerRef} />
         <div className="flex items-center gap-4 px-3 py-2 border-t border-outline-variant/10">
           {runs.map((run, i) => (
@@ -255,7 +257,7 @@ function CompareEquityCurves({ runs }: { runs: BacktestRun[] }) {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -283,8 +285,8 @@ function ConfigDiff({ runs }: { runs: BacktestRun[] }) {
 
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Config Differences</h3>
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-x-auto">
+      <SectionLabel>Config Differences</SectionLabel>
+      <Card padding="none" className="overflow-x-auto">
         {diffs.length === 0 ? (
           <p className="px-3 py-4 text-sm text-on-surface-variant text-center">All parameters identical across runs</p>
         ) : (
@@ -325,7 +327,7 @@ function ConfigDiff({ runs }: { runs: BacktestRun[] }) {
             </p>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

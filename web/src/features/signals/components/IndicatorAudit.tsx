@@ -1,5 +1,6 @@
 import { computeRegime } from "../types";
 import type { RawIndicators } from "../types";
+import { ProgressBar } from "../../../shared/components/ProgressBar";
 
 interface IndicatorAuditProps {
   indicators: RawIndicators;
@@ -86,19 +87,12 @@ export function IndicatorAudit({ indicators }: IndicatorAuditProps) {
               {row.format(row.value)}
             </span>
           </div>
-          <div
-            role="progressbar"
-            aria-valuenow={Math.round(row.value)}
-            aria-valuemin={0}
-            aria-valuemax={row.max}
-            aria-label={`${row.label}: ${row.format(row.value)}`}
-            className="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden"
-          >
-            <div
-              className={`h-full rounded-full transition-all ${row.color ?? "bg-primary"}`}
-              style={{ width: `${Math.min((row.value / row.max) * 100, 100)}%` }}
-            />
-          </div>
+          <ProgressBar
+            value={Math.min((row.value / row.max) * 100, 100)}
+            color={row.color ?? "bg-primary"}
+            label={`${row.label}: ${row.format(row.value)}`}
+            track="bg-surface-container-highest"
+          />
         </div>
       ))}
 

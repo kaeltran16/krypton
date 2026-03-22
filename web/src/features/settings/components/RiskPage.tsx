@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Check, AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { api, type RiskSettings, type RiskRule, type RiskState, type RiskStatus } from "../../../shared/lib/api";
 import { Button } from "../../../shared/components/Button";
+import { ProgressBar } from "../../../shared/components/ProgressBar";
+import { Skeleton } from "../../../shared/components/Skeleton";
 
 type Status = "OK" | "WARNING" | "BLOCKED";
 
@@ -67,9 +69,7 @@ export default function RiskPage() {
   if (loading && !data) {
     return (
       <div className="p-3 space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-28 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
-        ))}
+        <Skeleton count={3} height="h-28" />
       </div>
     );
   }
@@ -311,21 +311,12 @@ function DailyLossSection({ settings, state, rules, update, saving, sectionError
       <div className={`font-headline text-2xl font-bold tabular-nums mb-1 ${style.text}`}>
         {(state.daily_pnl_pct * 100).toFixed(1)}% / {(settings.daily_loss_limit_pct * 100).toFixed(0)}%
       </div>
-      <div
-        className="h-1.5 bg-surface-container-lowest rounded-full overflow-hidden mb-3"
-        role="progressbar"
-        aria-valuenow={Math.round(usagePct)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={rule?.reason ?? "Daily loss limit"}
-      >
-        <div
-          className={`h-full rounded-full transition-all ${
-            status === "BLOCKED" ? "bg-error" : status === "WARNING" ? "bg-orange" : "bg-long"
-          }`}
-          style={{ width: `${usagePct}%` }}
-        />
-      </div>
+      <ProgressBar
+        value={usagePct}
+        color={status === "BLOCKED" ? "bg-error" : status === "WARNING" ? "bg-orange" : "bg-long"}
+        label={rule?.reason ?? "Daily loss limit"}
+        className="mb-3"
+      />
       <PresetButtons
         options={[
           { label: "2%", value: 0.02 },
@@ -358,21 +349,12 @@ function MaxExposureSection({ settings, state, rules, update, saving, sectionErr
       <div className={`font-headline text-2xl font-bold tabular-nums mb-1 ${style.text}`}>
         {(state.exposure_pct * 100).toFixed(0)}% / {(settings.max_exposure_pct * 100).toFixed(0)}%
       </div>
-      <div
-        className="h-1.5 bg-surface-container-lowest rounded-full overflow-hidden mb-3"
-        role="progressbar"
-        aria-valuenow={Math.round(usagePct)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={rule?.reason ?? "Max exposure"}
-      >
-        <div
-          className={`h-full rounded-full transition-all ${
-            status === "BLOCKED" ? "bg-error" : status === "WARNING" ? "bg-orange" : "bg-long"
-          }`}
-          style={{ width: `${usagePct}%` }}
-        />
-      </div>
+      <ProgressBar
+        value={usagePct}
+        color={status === "BLOCKED" ? "bg-error" : status === "WARNING" ? "bg-orange" : "bg-long"}
+        label={rule?.reason ?? "Max exposure"}
+        className="mb-3"
+      />
       <PresetButtons
         options={[
           { label: "100%", value: 1.0 },
@@ -452,19 +434,12 @@ function CooldownSection({ settings, state, rules, update, saving, sectionError 
         </span>
       </div>
       {cooldownMinutes && (
-        <div
-          className="h-1.5 bg-surface-container-lowest rounded-full overflow-hidden mb-3"
-          role="progressbar"
-          aria-valuenow={Math.round(progressPct)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={progressRule.reason}
-        >
-          <div
-            className={`h-full rounded-full transition-all ${timerActive ? "bg-orange" : "bg-long"}`}
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
+        <ProgressBar
+          value={progressPct}
+          color={timerActive ? "bg-orange" : "bg-long"}
+          label={progressRule.reason}
+          className="mb-3"
+        />
       )}
       <PresetButtons
         options={[

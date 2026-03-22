@@ -4,6 +4,7 @@ import { api } from "../../../shared/lib/api";
 import { Pencil, Trash2 } from "lucide-react";
 import { Toggle } from "../../../shared/components/Toggle";
 import type { Alert } from "../types";
+import { Skeleton } from "../../../shared/components/Skeleton";
 
 const URGENCY_BORDER: Record<string, string> = {
   critical: "border-tertiary-dim",
@@ -50,9 +51,7 @@ export function AlertList({ onEdit }: { onEdit: (alert: Alert) => void }) {
   if (loading) {
     return (
       <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-20 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
-        ))}
+        <Skeleton count={3} />
       </div>
     );
   }

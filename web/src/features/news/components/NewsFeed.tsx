@@ -3,6 +3,7 @@ import { useNews } from "../hooks/useNews";
 import { NewsCard } from "./NewsCard";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import type { NewsCategory, NewsEvent, NewsImpact } from "../types";
+import { Skeleton } from "../../../shared/components/Skeleton";
 
 type CategoryFilter = "all" | NewsCategory;
 type ImpactFilter = "all" | NewsImpact;
@@ -90,9 +91,7 @@ export function NewsFeed({ onSelectEvent }: NewsFeedProps) {
 
       {loading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 bg-surface-container rounded-lg animate-pulse" />
-          ))}
+          <Skeleton count={3} height="h-24" />
         </div>
       ) : groups.length === 0 ? (
         <div className="bg-surface-container rounded-lg p-8 text-center">

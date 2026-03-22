@@ -5,6 +5,9 @@ import { formatPair, formatTime } from "../../../shared/lib/format";
 import { hexToRgba, theme } from "../../../shared/theme";
 import { useSignalsByDate } from "../hooks/useSignalsByDate";
 import type { CalendarDay, CalendarResponse, Signal } from "../types";
+import { MetricCard } from "../../../shared/components/MetricCard";
+import { Badge } from "../../../shared/components/Badge";
+import { Skeleton } from "../../../shared/components/Skeleton";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -96,27 +99,15 @@ export function CalendarView() {
     <div className="p-3 space-y-3">
       {/* Monthly summary */}
       {summary && summary.total_signals > 0 && (
-        <div className="bg-surface-container rounded-lg p-3">
-          <div className="grid grid-cols-4 gap-2 text-center text-xs">
-            <div>
-              <div className="font-mono font-bold text-on-surface tabular-nums">{summary.total_signals}</div>
-              <div className="text-on-surface-variant">Signals</div>
-            </div>
-            <div>
-              <div className={`font-mono font-bold tabular-nums ${summary.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
-                {summary.net_pnl >= 0 ? "+" : ""}{summary.net_pnl.toFixed(1)}%
-              </div>
-              <div className="text-on-surface-variant">Net P&L</div>
-            </div>
-            <div>
-              <div className="font-mono font-bold tabular-nums text-tertiary-dim">{summary.best_day?.slice(8) ?? "—"}</div>
-              <div className="text-on-surface-variant">Best Day</div>
-            </div>
-            <div>
-              <div className="font-mono font-bold tabular-nums text-error">{summary.worst_day?.slice(8) ?? "—"}</div>
-              <div className="text-on-surface-variant">Worst Day</div>
-            </div>
-          </div>
+        <div className="grid grid-cols-4 gap-2">
+          <MetricCard label="Signals" value={summary.total_signals} />
+          <MetricCard
+            label="Net P&L"
+            value={`${summary.net_pnl >= 0 ? "+" : ""}${summary.net_pnl.toFixed(1)}%`}
+            color={summary.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}
+          />
+          <MetricCard label="Best Day" value={summary.best_day?.slice(8) ?? "—"} color="text-tertiary-dim" />
+          <MetricCard label="Worst Day" value={summary.worst_day?.slice(8) ?? "—"} color="text-error" />
         </div>
       )}
 
@@ -128,7 +119,7 @@ export function CalendarView() {
       </div>
 
       {loading ? (
-        <div className="h-64 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none" />
+        <Skeleton height="h-64" />
       ) : error ? (
         <div className="text-center py-8">
           <p className="text-on-surface-variant text-sm mb-2">Failed to load calendar</p>
@@ -231,9 +222,7 @@ function DayDetail({ date, dayData }: { date: string; dayData?: CalendarDay }) {
       {/* Signal cards */}
       {signalsLoading ? (
         <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none" />
-          ))}
+          <Skeleton count={3} height="h-16" />
         </div>
       ) : signalsError ? (
         <div className="bg-surface-container rounded-lg p-3 text-center">
@@ -257,13 +246,12 @@ function SignalDayCard({ signal }: { signal: Signal }) {
   const isLong = signal.direction === "LONG";
 
   const outcomeBadge = signal.outcome !== "PENDING" ? (
-    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-      (signal.outcome === "TP1_HIT" || signal.outcome === "TP2_HIT") ? "bg-long/10 text-long" :
-      signal.outcome === "EXPIRED" ? "bg-outline-variant/20 text-on-surface-variant" :
-      "bg-short/10 text-short"
-    }`}>
+    <Badge
+      color={(signal.outcome === "TP1_HIT" || signal.outcome === "TP2_HIT") ? "long" : signal.outcome === "EXPIRED" ? "muted" : "short"}
+      className="text-[10px]"
+    >
       {signal.outcome.replace("_", " ")}
-    </span>
+    </Badge>
   ) : null;
 
   return (

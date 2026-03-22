@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { formatDuration, formatPair } from "../../../shared/lib/format";
 import { Button } from "../../../shared/components/Button";
+import { PillSelect } from "../../../shared/components/PillSelect";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
+import { Card } from "../../../shared/components/Card";
+import { Badge } from "../../../shared/components/Badge";
+import { MetricCard } from "../../../shared/components/MetricCard";
+import { ProgressBar } from "../../../shared/components/ProgressBar";
+import { ParamRow } from "../../../shared/components/ParamRow";
 import {
   createChart,
   LineSeries,
@@ -18,9 +25,7 @@ export function BacktestResults() {
   if (runLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant">
-        <div className="w-48 h-2 bg-surface-container-lowest rounded-full overflow-hidden mb-3">
-          <div className="h-full bg-primary rounded-full animate-pulse motion-reduce:animate-none" style={{ width: "60%" }} />
-        </div>
+        <ProgressBar value={60} className="w-48 mb-3 animate-pulse motion-reduce:animate-none" />
         <p className="text-sm">Running backtest...</p>
       </div>
     );
@@ -95,27 +100,28 @@ function ResultsContent({ run }: { run: BacktestRun }) {
 }
 
 function StatsStrip({ stats }: { stats: BacktestStats }) {
-  const items = [
-    { label: "Trades", value: String(stats.total_trades), border: "border-primary" },
-    { label: "Win Rate", value: `${stats.win_rate.toFixed(1)}%`, color: stats.win_rate >= 50 ? "text-long" : "text-error", border: "border-long" },
-    { label: "Net P&L", value: `${stats.net_pnl >= 0 ? "+" : ""}${stats.net_pnl.toFixed(2)}%`, color: stats.net_pnl >= 0 ? "text-long" : "text-error", border: "border-long" },
-    { label: "Max DD", value: `${stats.max_drawdown.toFixed(2)}%`, color: "text-error", border: "border-error" },
-    { label: "Sharpe", value: stats.sharpe_ratio != null ? stats.sharpe_ratio.toFixed(2) : "—", border: "border-primary" },
-    { label: "PF", value: stats.profit_factor != null ? stats.profit_factor.toFixed(2) : "—", border: "border-outline-variant/30" },
-  ];
-
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Summary</h3>
+      <SectionLabel>Summary</SectionLabel>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {items.map((item) => (
-          <div key={item.label} className={`bg-surface-container p-4 rounded border-l-2 ${item.border}`}>
-            <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{item.label}</div>
-            <div className={`text-2xl font-headline font-bold tabular-nums mt-0.5 ${item.color || "text-on-surface"}`}>
-              {item.value}
-            </div>
-          </div>
-        ))}
+        <MetricCard label="Trades" value={String(stats.total_trades)} size="lg" accent="primary" />
+        <MetricCard
+          label="Win Rate"
+          value={`${stats.win_rate.toFixed(1)}%`}
+          size="lg"
+          color={stats.win_rate >= 50 ? "text-long" : "text-error"}
+          accent="long"
+        />
+        <MetricCard
+          label="Net P&L"
+          value={`${stats.net_pnl >= 0 ? "+" : ""}${stats.net_pnl.toFixed(2)}%`}
+          size="lg"
+          color={stats.net_pnl >= 0 ? "text-long" : "text-error"}
+          accent="long"
+        />
+        <MetricCard label="Max DD" value={`${stats.max_drawdown.toFixed(2)}%`} size="lg" color="text-error" accent="error" />
+        <MetricCard label="Sharpe" value={stats.sharpe_ratio != null ? stats.sharpe_ratio.toFixed(2) : "—"} size="lg" accent="primary" />
+        <MetricCard label="PF" value={stats.profit_factor != null ? stats.profit_factor.toFixed(2) : "—"} size="lg" />
       </div>
     </div>
   );
@@ -154,22 +160,16 @@ function PairBreakdown({ trades }: { trades: BacktestTrade[] }) {
 
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Per-Pair Breakdown</h3>
+      <SectionLabel>Per-Pair Breakdown</SectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {pairs.map((p) => (
-          <div key={p.pair} className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
-            <div className="text-sm font-medium text-on-surface mb-1">{formatPair(p.pair)}/USDT</div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-              <span className="text-on-surface-variant">Trades</span>
-              <span className="text-right text-on-surface font-mono tabular-nums">{p.total}</span>
-              <span className="text-on-surface-variant">Win Rate</span>
-              <span className={`text-right font-mono tabular-nums ${p.win_rate >= 50 ? "text-long" : "text-short"}`}>{p.win_rate.toFixed(1)}%</span>
-              <span className="text-on-surface-variant">Net P&L</span>
-              <span className={`text-right font-mono tabular-nums ${p.net_pnl >= 0 ? "text-long" : "text-short"}`}>{p.net_pnl >= 0 ? "+" : ""}{p.net_pnl.toFixed(2)}%</span>
-              <span className="text-on-surface-variant">Avg R:R</span>
-              <span className="text-right text-on-surface font-mono tabular-nums">{p.avg_rr.toFixed(2)}</span>
-            </div>
-          </div>
+          <Card key={p.pair} padding="none">
+            <div className="text-sm font-medium text-on-surface px-3 pt-2 pb-1">{formatPair(p.pair)}/USDT</div>
+            <ParamRow label="Trades" value={String(p.total)} />
+            <ParamRow label="Win Rate" value={<span className={p.win_rate >= 50 ? "text-long" : "text-short"}>{p.win_rate.toFixed(1)}%</span>} />
+            <ParamRow label="Net P&L" value={<span className={p.net_pnl >= 0 ? "text-long" : "text-short"}>{p.net_pnl >= 0 ? "+" : ""}{p.net_pnl.toFixed(2)}%</span>} />
+            <ParamRow label="Avg R:R" value={p.avg_rr.toFixed(2)} last />
+          </Card>
         ))}
       </div>
     </div>
@@ -236,10 +236,10 @@ function EquityCurve({ data }: { data: { time: string; cumulative_pnl: number }[
 
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Equity Curve</h3>
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden">
+      <SectionLabel>Equity Curve</SectionLabel>
+      <Card padding="none" className="overflow-hidden">
         <div ref={containerRef} />
-      </div>
+      </Card>
     </div>
   );
 }
@@ -250,8 +250,8 @@ function MonthlyPnl({ data }: { data: Record<string, number> }) {
 
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Monthly P&L</h3>
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
+      <SectionLabel>Monthly P&L</SectionLabel>
+      <Card padding="sm">
         <div className="grid grid-cols-4 gap-1.5">
           {months.map(([month, pnl]) => (
             <div
@@ -265,7 +265,7 @@ function MonthlyPnl({ data }: { data: Record<string, number> }) {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -307,48 +307,45 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
     setExpanded(null);
   };
 
-  const pill = (active: boolean) =>
-    active
-      ? "bg-primary/15 text-primary border-primary/30"
-      : "bg-transparent text-on-surface-variant border-outline-variant/30";
-
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">
+      <SectionLabel>
         Trades ({filtered.length}{filtered.length !== trades.length ? ` of ${trades.length}` : ""})
-      </h3>
+      </SectionLabel>
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2 mb-2 items-center">
         {/* Pair filters */}
-        <button onClick={() => { setPairFilter("all"); setExpanded(null); }}
-          className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${pill(pairFilter === "all")}`}>
-          All Pairs
-        </button>
-        {allPairs.map((p) => (
-          <button key={p} onClick={() => { setPairFilter(p); setExpanded(null); }}
-            className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${pill(pairFilter === p)}`}>
-            {formatPair(p)}
-          </button>
-        ))}
+        <PillSelect
+          options={["all", ...allPairs] as const}
+          selected={pairFilter}
+          onToggle={(v) => { setPairFilter(v); setExpanded(null); }}
+          renderLabel={(v) => v === "all" ? "All Pairs" : formatPair(v)}
+          size="sm"
+          wrap
+        />
         <div className="border-r border-outline-variant/20 h-6 self-center" />
 
         {/* Direction filters */}
-        {(["both", "LONG", "SHORT"] as const).map((d) => (
-          <button key={d} onClick={() => { setDirFilter(d); setExpanded(null); }}
-            className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${pill(dirFilter === d)}`}>
-            {d === "both" ? "Both" : d === "LONG" ? "Long" : "Short"}
-          </button>
-        ))}
+        <PillSelect
+          options={["both", "LONG", "SHORT"] as const}
+          selected={dirFilter}
+          onToggle={(v) => { setDirFilter(v); setExpanded(null); }}
+          renderLabel={(v) => v === "both" ? "Both" : v === "LONG" ? "Long" : "Short"}
+          size="sm"
+          wrap
+        />
         <div className="border-r border-outline-variant/20 h-6 self-center" />
 
         {/* Outcome filters */}
-        {(["all", "wins", "losses"] as const).map((o) => (
-          <button key={o} onClick={() => { setOutcomeFilter(o); setExpanded(null); }}
-            className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${pill(outcomeFilter === o)}`}>
-            {o === "all" ? "All" : o === "wins" ? "Wins" : "Losses"}
-          </button>
-        ))}
+        <PillSelect
+          options={["all", "wins", "losses"] as const}
+          selected={outcomeFilter}
+          onToggle={(v) => { setOutcomeFilter(v); setExpanded(null); }}
+          renderLabel={(v) => v === "all" ? "All" : v === "wins" ? "Wins" : "Losses"}
+          size="sm"
+          wrap
+        />
         <div className="border-r border-outline-variant/20 h-6 self-center" />
 
         {/* Sort dropdown */}
@@ -368,7 +365,7 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
       </div>
 
       {/* Trade list */}
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden divide-y divide-outline-variant/10">
+      <Card padding="none" className="overflow-hidden divide-y divide-outline-variant/10">
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-on-surface-variant">
             <p className="text-sm">No trades match filters</p>
@@ -384,13 +381,9 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
                 className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-surface-container-high transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      trade.direction === "LONG" ? "bg-long/15 text-long" : "bg-error/15 text-error"
-                    }`}
-                  >
+                  <Badge color={trade.direction === "LONG" ? "long" : "error"} className="uppercase text-[10px]">
                     {trade.direction}
-                  </span>
+                  </Badge>
                   <span className="text-sm text-on-surface">{formatPair(trade.pair)}</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -409,7 +402,7 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
             );
           })
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -430,14 +423,9 @@ function TradeDetail({ trade }: { trade: BacktestTrade }) {
       {trade.detected_patterns.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
           {trade.detected_patterns.map((p) => (
-            <span
-              key={p}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                trade.direction === "LONG" ? "bg-long/10 text-long" : "bg-error/10 text-error"
-              }`}
-            >
+            <Badge key={p} color={trade.direction === "LONG" ? "long" : "error"} weight="medium" className="text-[10px]">
               {p}
-            </span>
+            </Badge>
           ))}
         </div>
       )}
@@ -448,13 +436,9 @@ function TradeDetail({ trade }: { trade: BacktestTrade }) {
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const isWin = outcome.includes("TP") || outcome === "WIN";
   return (
-    <span
-      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-        isWin ? "bg-long/10 text-long" : "bg-error/10 text-error"
-      }`}
-    >
+    <Badge color={isWin ? "long" : "error"} className="text-[10px]">
       {outcome.replace("_", " ")}
-    </span>
+    </Badge>
   );
 }
 

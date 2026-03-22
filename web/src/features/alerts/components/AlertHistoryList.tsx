@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useAlertStore } from "../store";
 import { CheckCircle, XCircle, Clock } from "lucide-react";
+import { Skeleton } from "../../../shared/components/Skeleton";
 
 const STATUS_STYLES: Record<string, string> = {
   delivered: "text-tertiary-dim",
@@ -39,9 +40,7 @@ export function AlertHistoryList() {
   if (historyLoading) {
     return (
       <div className="space-y-2">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-14 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none border border-outline-variant/10" />
-        ))}
+        <Skeleton count={4} height="h-14" />
       </div>
     );
   }

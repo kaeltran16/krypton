@@ -4,6 +4,7 @@ import { Button } from "../../../shared/components/Button";
 import { formatRelativeTime } from "../../../shared/lib/format";
 import { StatusBadge } from "./shared";
 import type { MLTrainJobWithMeta } from "../types";
+import { Card } from "../../../shared/components/Card";
 
 interface HistoryTabProps {
   history: MLTrainJob[];
@@ -17,13 +18,13 @@ export function HistoryTab({ history, onViewDetails, onRetrain, onDelete }: Hist
 
   if (history.length === 0) {
     return (
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-6 text-center">
+      <Card className="text-center" padding="lg">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-on-surface-variant mx-auto mb-3">
           <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <p className="text-sm text-on-surface-variant mb-4">No training history yet</p>
         <p className="text-xs text-on-surface-variant">Completed training jobs will appear here</p>
-      </div>
+      </Card>
     );
   }
 
@@ -53,7 +54,7 @@ export function HistoryTab({ history, onViewDetails, onRetrain, onDelete }: Hist
           : "";
 
         return (
-          <div key={job.job_id} className="bg-surface-container rounded-lg border border-outline-variant/10 px-3 py-2.5">
+          <Card key={job.job_id} padding="none" className="px-3 py-2.5">
             {/* Row 1: Status + job ID + time */}
             <div className="flex items-center gap-2 mb-1">
               <StatusBadge status={job.status} />
@@ -131,7 +132,7 @@ export function HistoryTab({ history, onViewDetails, onRetrain, onDelete }: Hist
                 </div>
               </div>
             )}
-          </div>
+          </Card>
         );
       })}
     </div>

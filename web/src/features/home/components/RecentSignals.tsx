@@ -4,13 +4,17 @@ import { Zap } from "lucide-react";
 import { useSignalStore } from "../../signals/store";
 import { formatScore, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import type { Signal } from "../../signals/types";
+import { Badge } from "../../../shared/components/Badge";
+import type { ComponentProps } from "react";
 
-const OUTCOME_BADGE: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: "PENDING", cls: "bg-accent/15 text-primary" },
-  TP1_HIT: { label: "TP1", cls: "bg-long/15 text-long" },
-  TP2_HIT: { label: "TP2", cls: "bg-long/15 text-long" },
-  SL_HIT: { label: "SL", cls: "bg-short/15 text-short" },
-  EXPIRED: { label: "EXP", cls: "bg-outline-variant/20 text-on-surface-variant" },
+type BadgeColor = ComponentProps<typeof Badge>["color"];
+
+const OUTCOME_BADGE: Record<string, { label: string; color: BadgeColor }> = {
+  PENDING: { label: "PENDING", color: "accent" },
+  TP1_HIT: { label: "TP1",     color: "long" },
+  TP2_HIT: { label: "TP2",     color: "long" },
+  SL_HIT:  { label: "SL",      color: "short" },
+  EXPIRED: { label: "EXP",     color: "muted" },
 };
 
 export function RecentSignals() {
@@ -65,9 +69,7 @@ function SignalRow({ signal }: { signal: Signal }) {
         <span className={`text-xs font-mono tabular ${isLong ? "text-long" : "text-short"}`}>
           {formatScore(signal.final_score)}
         </span>
-        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${badge.cls}`}>
-          {badge.label}
-        </span>
+        <Badge color={badge.color} weight="medium">{badge.label}</Badge>
       </div>
       <span className="text-xs text-outline tabular flex-shrink-0 ml-2">{formatRelativeTime(signal.created_at)}</span>
     </button>

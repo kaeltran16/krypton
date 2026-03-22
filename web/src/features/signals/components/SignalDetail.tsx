@@ -6,6 +6,7 @@ import { PatternDetailRow } from "./PatternBadges";
 import { IndicatorAudit } from "./IndicatorAudit";
 import { ReasoningChain } from "./ReasoningChain";
 import { Button } from "../../../shared/components/Button";
+import { ProgressBar } from "../../../shared/components/ProgressBar";
 
 interface SignalDetailProps {
   signal: Signal | null;
@@ -74,9 +75,9 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       {/* Score Breakdown */}
       <div className="p-5 border-b border-outline-variant/10 space-y-4">
         <h2 className="text-xs uppercase tracking-widest text-on-surface-variant">Intelligence Components</h2>
-        <ScoreBar label="Technical Analysis" value={Math.abs(signal.traditional_score)} />
+        <ScoreBarRow label="Technical Analysis" value={Math.abs(signal.traditional_score)} />
         {signal.llm_contribution != null && (
-          <ScoreBar label="LLM Consensus" value={Math.min(Math.abs(signal.llm_contribution), 100)} />
+          <ScoreBarRow label="LLM Consensus" value={Math.min(Math.abs(signal.llm_contribution), 100)} />
         )}
         {signal.llm_factors && signal.llm_factors.length > 0 && (
           <div className="mt-2 space-y-1">
@@ -157,16 +158,14 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
   );
 }
 
-function ScoreBar({ label, value }: { label: string; value: number }) {
+function ScoreBarRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between text-xs font-medium uppercase tracking-wide">
         <span className="text-on-surface">{label}</span>
         <span className="text-primary tabular">{Math.round(value)}%</span>
       </div>
-      <div className="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
-        <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(value, 100)}%` }} />
-      </div>
+      <ProgressBar value={value} height="sm" track="bg-surface-container-highest" />
     </div>
   );
 }

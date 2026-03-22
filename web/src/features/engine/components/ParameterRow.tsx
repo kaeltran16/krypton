@@ -1,5 +1,6 @@
 import SourceBadge from "./SourceBadge";
 import ParamInfoPopup from "./ParamInfoPopup";
+import { ParamRow } from "../../../shared/components/ParamRow";
 
 interface Props {
   name: string;
@@ -17,19 +18,20 @@ export default function ParameterRow({ name, value, source, last, descriptions }
       : String(value);
 
   return (
-    <div
-      className={`flex items-center justify-between px-3 py-2 ${
-        last ? "" : "border-b border-border/50"
-      }`}
-    >
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-muted">{name}</span>
-        <ParamInfoPopup name={name} descriptions={descriptions} />
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-mono text-foreground">{display}</span>
-        <SourceBadge source={source} />
-      </div>
-    </div>
+    <ParamRow
+      label={
+        <span className="flex items-center gap-1">
+          <span>{name}</span>
+          <ParamInfoPopup name={name} descriptions={descriptions} />
+        </span>
+      }
+      value={
+        <span className="flex items-center gap-2">
+          <span>{display}</span>
+          <SourceBadge source={source} />
+        </span>
+      }
+      last={last}
+    />
   );
 }

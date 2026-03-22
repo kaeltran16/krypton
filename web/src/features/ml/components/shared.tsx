@@ -1,4 +1,7 @@
 import type { MLTrainJob } from "../../../shared/lib/api";
+import { Card } from "../../../shared/components/Card";
+import { Badge } from "../../../shared/components/Badge";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
 
 export const TIMEFRAMES = ["15m", "1h", "4h"] as const;
 
@@ -9,10 +12,10 @@ export function formatPairSlug(slug: string) {
 export function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-2 px-1 text-on-surface-variant">{title}</h2>
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden">
+      <SectionLabel as="h2">{title}</SectionLabel>
+      <Card padding="none" className="overflow-hidden">
         {children}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -63,15 +66,15 @@ export function Slider({ min, max, step = 1, value = 0, onChange, format }: {
 }
 
 export function StatusBadge({ status }: { status: MLTrainJob["status"] }) {
-  const colors =
-    status === "completed" ? "bg-tertiary-dim/15 text-tertiary-dim" :
-    status === "failed" ? "bg-error/15 text-error" :
-    status === "cancelled" ? "bg-outline/15 text-on-surface-variant" :
-    "bg-primary/15 text-primary";
+  const color =
+    status === "completed" ? "tertiary" :
+    status === "failed" ? "error" :
+    status === "cancelled" ? "muted" :
+    "primary";
 
   return (
-    <span className={`text-xs px-2 py-0.5 rounded ${colors}`}>
+    <Badge color={color} weight="medium" className="px-2">
       {status}
-    </span>
+    </Badge>
   );
 }

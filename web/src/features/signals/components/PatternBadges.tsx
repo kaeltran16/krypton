@@ -1,4 +1,5 @@
 import type { DetectedPattern } from "../types";
+import { Badge } from "../../../shared/components/Badge";
 
 interface PatternBadgesProps {
   patterns: DetectedPattern[];
@@ -11,18 +12,14 @@ export function PatternBadges({ patterns }: PatternBadgesProps) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {visible.map((p) => (
-        <span
+        <Badge
           key={p.name}
-          className={`flex items-center gap-1 whitespace-nowrap bg-surface-container-highest px-2 py-1 rounded text-xs font-medium ${
-            p.bias === "bullish"
-              ? "text-long"
-              : p.bias === "bearish"
-                ? "text-short"
-                : "text-on-surface"
-          }`}
+          color={p.bias === "bullish" ? "long" : p.bias === "bearish" ? "short" : "muted"}
+          weight="medium"
+          className="whitespace-nowrap px-2 py-1 gap-1"
         >
           {p.name}
-        </span>
+        </Badge>
       ))}
     </div>
   );
@@ -42,17 +39,13 @@ export function PatternDetailRow({ patterns }: PatternDetailRowProps) {
         {patterns.map((p) => (
           <div key={p.name} className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xs px-2 py-0.5 rounded ${
-                  p.bias === "bullish"
-                    ? "bg-long/10 text-long"
-                    : p.bias === "bearish"
-                      ? "bg-short/10 text-short"
-                      : "bg-surface-container-highest text-on-surface-variant"
-                }`}
+              <Badge
+                color={p.bias === "bullish" ? "long" : p.bias === "bearish" ? "short" : "muted"}
+                weight="medium"
+                className="px-2"
               >
                 {p.bias}
-              </span>
+              </Badge>
               <span className="text-on-surface">{p.name}</span>
             </div>
             <span className="text-xs text-on-surface-variant font-mono tabular">+{p.strength}pts</span>

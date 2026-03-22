@@ -5,6 +5,9 @@ import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { Toggle } from "../../../shared/components/Toggle";
 import { LossChart } from "./LossChart";
 import { formatPairSlug } from "./shared";
+import { Card } from "../../../shared/components/Card";
+import { MetricCard } from "../../../shared/components/MetricCard";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
 
 interface ResultsTabProps {
   history: MLTrainJob[];
@@ -33,12 +36,12 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
 
   if (!runA) {
     return (
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-6 text-center">
+      <Card className="text-center" padding="lg">
         <p className="text-sm text-on-surface-variant mb-4">No training results yet</p>
         <Button onClick={onSwitchToSetup}>
           Go to Setup
         </Button>
-      </div>
+      </Card>
     );
   }
 
@@ -73,11 +76,11 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
       {/* Compare mode: run selectors */}
       {compareMode && (
         <div className="flex gap-2">
-          <div className="flex-1 bg-surface-container rounded-lg border-2 border-primary/30 p-2">
+          <Card border={false} padding="sm" className="flex-1 border-2 border-primary/30">
             <p className="text-[10px] text-primary font-medium mb-1">Run A (Latest)</p>
             <p className="text-xs font-mono text-on-surface-variant">{runA.job_id}</p>
-          </div>
-          <div className="flex-1 bg-surface-container rounded-lg border-2 border-purple/30 p-2">
+          </Card>
+          <Card border={false} padding="sm" className="flex-1 border-2 border-purple/30">
             <p className="text-[10px] text-purple font-medium mb-1">Run B</p>
             <select
               value={compareBId}
@@ -88,7 +91,7 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
                 <option key={r.job_id} value={r.job_id}>{r.job_id}</option>
               ))}
             </select>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -108,21 +111,14 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
         <>
           {/* Performance summary */}
           <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Val Loss", value: pairA.best_val_loss?.toFixed(4) ?? "—" },
-              { label: "Dir. Accuracy", value: pairA.direction_accuracy != null ? `${(pairA.direction_accuracy * 100).toFixed(1)}%` : "—" },
-              { label: "Samples", value: pairA.total_samples?.toLocaleString() ?? "—" },
-            ].map((m) => (
-              <div key={m.label} className="bg-surface-container rounded-lg border border-outline-variant/10 p-3 text-center">
-                <p className="text-[10px] text-on-surface-variant mb-1">{m.label}</p>
-                <p className="text-sm font-mono text-on-surface">{m.value}</p>
-              </div>
-            ))}
+            <MetricCard label="Val Loss" value={pairA.best_val_loss?.toFixed(4) ?? "—"} />
+            <MetricCard label="Dir. Accuracy" value={pairA.direction_accuracy != null ? `${(pairA.direction_accuracy * 100).toFixed(1)}%` : "—"} />
+            <MetricCard label="Samples" value={pairA.total_samples?.toLocaleString() ?? "—"} />
           </div>
 
           {/* Classification metrics table */}
           {pairA.precision_per_class && pairA.recall_per_class && (
-            <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden">
+            <Card padding="none" className="overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-outline-variant/10">
@@ -152,13 +148,13 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
 
           {/* Config used */}
           {runA.params && (
-            <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
-              <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-2 text-on-surface-variant">Config Used</h3>
+            <Card padding="sm">
+              <SectionLabel>Config Used</SectionLabel>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                 {Object.entries(runA.params).map(([key, val]) => (
                   <div key={key} className="flex justify-between">
@@ -178,15 +174,15 @@ export function ResultsTab({ history, onSwitchToSetup, selectedJobId }: ResultsT
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant">v{pairA.version}</span>
                 )}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Loss curve from completed result */}
           {pairA.loss_history && pairA.loss_history.length > 0 && (
-            <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
-              <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-2 text-on-surface-variant">Loss Curve</h3>
+            <Card padding="sm">
+              <SectionLabel>Loss Curve</SectionLabel>
               <LossChart data={pairA.loss_history} bestEpoch={pairA.best_epoch} height={180} />
-            </div>
+            </Card>
           )}
         </>
       ) : compareMode && runB ? (
@@ -259,7 +255,7 @@ function CompareView({ runA, runB, pair }: { runA: MLTrainJob; runB: MLTrainJob;
   return (
     <div className="space-y-4">
       {/* Metrics comparison table */}
-      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-hidden">
+      <Card padding="none" className="overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-outline-variant/10">
@@ -282,12 +278,12 @@ function CompareView({ runA, runB, pair }: { runA: MLTrainJob; runB: MLTrainJob;
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Config diff */}
       {diffs.length > 0 && (
-        <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-3">
-          <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-2 text-on-surface-variant">Config Differences</h3>
+        <Card padding="sm">
+          <SectionLabel>Config Differences</SectionLabel>
           <div className="space-y-1 text-xs">
             {diffs.map((key) => (
               <div key={key} className="flex justify-between">
@@ -300,7 +296,7 @@ function CompareView({ runA, runB, pair }: { runA: MLTrainJob; runB: MLTrainJob;
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Summary */}

@@ -4,6 +4,8 @@ import { useAlertStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 import { Dropdown } from "../../../shared/components/Dropdown";
 import { Button } from "../../../shared/components/Button";
+import { PillSelect } from "../../../shared/components/PillSelect";
+import { FormField, INPUT_STYLES } from "../../../shared/components/FormField";
 import type { Alert, AlertType, AlertUrgency, AlertCreateRequest } from "../types";
 
 const ALERT_TYPES: { value: AlertType; label: string }[] = [
@@ -37,8 +39,6 @@ const PORTFOLIO_CONDITIONS = [
 
 const URGENCIES: AlertUrgency[] = ["critical", "normal", "silent"];
 
-const inputCls = "w-full bg-surface-container-lowest border border-outline-variant/20 rounded px-3 py-2 text-sm min-h-[44px] focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none";
-const labelCls = "text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5 mt-1 block";
 
 export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boolean) => void; alert?: Alert | null }) {
   const [type, setType] = useState<AlertType>(editAlert?.type as AlertType ?? "price");
@@ -120,34 +120,25 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {!editAlert && (
-        <div className="flex flex-wrap gap-1.5">
-          {ALERT_TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => { setType(t.value); setCondition(""); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors min-h-[36px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                type === t.value
-                  ? "bg-primary/15 text-primary border-primary/30"
-                  : "bg-transparent text-on-surface-variant border-outline-variant/30"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <PillSelect
+          options={ALERT_TYPES.map((t) => t.value)}
+          selected={type}
+          onToggle={(v) => { setType(v); setCondition(""); }}
+          renderLabel={(v) => ALERT_TYPES.find((t) => t.value === v)?.label ?? v}
+          size="sm"
+          wrap
+        />
       )}
 
-      <label>
-        <span className={labelCls}>Name</span>
+      <FormField label="Name">
         <input
           type="text"
           placeholder="e.g. BTC breakout alert"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          className={inputCls}
+          className={INPUT_STYLES}
         />
-      </label>
+      </FormField>
 
       {type !== "portfolio" && (
         <Dropdown
@@ -176,34 +167,32 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
       )}
 
       {type !== "signal" && (
-        <label>
-          <span className={labelCls}>Threshold</span>
+        <FormField label="Threshold">
           <input
             type="number"
             placeholder="Enter value"
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
-            className={inputCls}
+            className={INPUT_STYLES}
             required
             step="any"
           />
-        </label>
+        </FormField>
       )}
 
       {type === "price" && condition === "pct_move" && (
-        <label>
-          <span className={labelCls}>Window (minutes)</span>
+        <FormField label="Window (minutes)">
           <input
             type="number"
             placeholder="5–60"
             value={secondaryThreshold}
             onChange={(e) => setSecondaryThreshold(e.target.value)}
-            className={inputCls}
+            className={INPUT_STYLES}
             min={5}
             max={60}
             required
           />
-        </label>
+        </FormField>
       )}
 
       {type === "signal" && (
@@ -219,18 +208,17 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
             ]}
             ariaLabel="Filter direction"
           />
-          <label>
-            <span className={labelCls}>Min Score</span>
+          <FormField label="Min Score">
             <input
               type="number"
               placeholder="0–100"
               value={filterMinScore}
               onChange={(e) => setFilterMinScore(e.target.value)}
-              className={inputCls}
+              className={INPUT_STYLES}
               min={0}
               max={100}
             />
-          </label>
+          </FormField>
           <Dropdown
             value={filterTimeframe}
             onChange={setFilterTimeframe}
@@ -246,38 +234,28 @@ export function AlertForm({ onClose, alert: editAlert }: { onClose: (saved?: boo
         </div>
       )}
 
-      <div>
-        <div className={labelCls}>Urgency</div>
-        <div className="flex flex-wrap gap-1.5">
-          {URGENCIES.map((u) => (
-            <button
-              key={u}
-              type="button"
-              onClick={() => setUrgency(u)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors min-h-[36px] capitalize focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                urgency === u
-                  ? "bg-primary/15 text-primary border-primary/30"
-                  : "bg-transparent text-on-surface-variant border-outline-variant/30"
-              }`}
-            >
-              {u}
-            </button>
-          ))}
-        </div>
-      </div>
+      <FormField label="Urgency">
+        <PillSelect
+          options={URGENCIES}
+          selected={urgency}
+          onToggle={setUrgency}
+          renderLabel={(u) => u.charAt(0).toUpperCase() + u.slice(1)}
+          size="sm"
+          wrap
+        />
+      </FormField>
 
-      <label>
-        <span className={labelCls}>Cooldown (minutes)</span>
+      <FormField label="Cooldown (minutes)">
         <input
           type="number"
           placeholder="15"
           value={cooldown}
           onChange={(e) => setCooldown(e.target.value)}
-          className={inputCls}
+          className={INPUT_STYLES}
           min={1}
           max={1440}
         />
-      </label>
+      </FormField>
 
       {error && (
         <p className="text-error text-xs bg-error/10 rounded-lg p-2">{error}</p>

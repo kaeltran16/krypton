@@ -8,6 +8,10 @@ import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { api, type Portfolio, type Position } from "../../../shared/lib/api";
 import { Button } from "../../../shared/components/Button";
+import { Badge } from "../../../shared/components/Badge";
+import { MetricCard } from "../../../shared/components/MetricCard";
+import { Skeleton } from "../../../shared/components/Skeleton";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
 
@@ -48,7 +52,7 @@ export function HomeView() {
 }
 
 function AccountHeader({ portfolio, loading, equityCurve = [] }: { portfolio: Portfolio | null; loading: boolean; equityCurve?: number[] }) {
-  if (loading) return <div className="h-24 bg-surface-container rounded-lg animate-pulse" />;
+  if (loading) return <Skeleton height="h-24" />;
   if (!portfolio) return null;
 
   const pnl = portfolio.unrealized_pnl;
@@ -63,11 +67,9 @@ function AccountHeader({ portfolio, loading, equityCurve = [] }: { portfolio: Po
         <span className={`font-headline font-bold text-lg tabular ${isPositive ? "text-long" : "text-short"}`}>
           {isPositive ? "+" : ""}${formatPrice(Math.abs(pnl))}
         </span>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded tabular ${
-          isPositive ? "bg-long/10 text-long" : "bg-short/10 text-short"
-        }`}>
+        <Badge color={isPositive ? "long" : "short"} className="px-2 tabular">
           {isPositive ? "+" : ""}{pct.toFixed(1)}%
-        </span>
+        </Badge>
         {equityCurve.length >= 2 && (
           <MiniSparkline data={equityCurve} className="ml-auto opacity-80" />
         )}
@@ -84,27 +86,25 @@ function PortfolioStrip({ portfolio, positions, loading }: { portfolio: Portfoli
     : 0;
 
   return (
-    <div className="bg-surface-container-low rounded-lg p-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div>
-          <span className="text-xs text-on-surface-variant uppercase tracking-widest block">Positions</span>
-          <span className={`font-headline font-bold text-sm tabular ${positions.length > 0 ? "text-primary" : ""}`}>{positions.length}</span>
-        </div>
-        <div>
-          <span className="text-on-surface-variant text-xs uppercase tracking-widest block">Available</span>
-          <span className="font-headline font-bold text-sm tabular">${formatPrice(portfolio.available_balance)}</span>
-        </div>
-        <div>
-          <span className="text-on-surface-variant text-xs uppercase tracking-widest block">Margin</span>
-          <span className="font-headline font-bold text-sm tabular">{portfolio.margin_utilization.toFixed(1)}%</span>
-        </div>
-        <div>
-          <span className="text-on-surface-variant text-xs uppercase tracking-widest block">Exposure</span>
-          <span className={`font-headline font-bold text-sm tabular ${exposurePct > 100 ? "text-primary" : ""}`}>
-            {exposurePct.toFixed(0)}%
-          </span>
-        </div>
-      </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <MetricCard
+        label="Positions"
+        value={positions.length}
+        color={positions.length > 0 ? "text-primary" : "text-on-surface"}
+      />
+      <MetricCard
+        label="Available"
+        value={`$${formatPrice(portfolio.available_balance)}`}
+      />
+      <MetricCard
+        label="Margin"
+        value={`${portfolio.margin_utilization.toFixed(1)}%`}
+      />
+      <MetricCard
+        label="Exposure"
+        value={`${exposurePct.toFixed(0)}%`}
+        color={exposurePct > 100 ? "text-primary" : "text-on-surface"}
+      />
     </div>
   );
 }
@@ -113,14 +113,12 @@ function OpenPositions({ positions, loading, onRefresh }: { positions: Position[
   const [expanded, setExpanded] = useState<string | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
 
-  if (loading) return <div className="h-20 bg-surface-container rounded-lg animate-pulse" />;
+  if (loading) return <Skeleton height="h-20" />;
 
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-baseline px-1">
-        <h2 className="text-xs font-bold tracking-widest uppercase text-on-surface-variant">
-          Open Positions ({positions.length})
-        </h2>
+        <SectionLabel as="h2">Open Positions ({positions.length})</SectionLabel>
       </div>
       {positions.length === 0 ? (
         <p className="px-1 text-sm text-outline">No open positions &mdash; the engine is monitoring for opportunities</p>
@@ -147,11 +145,9 @@ function OpenPositions({ positions, loading, onRefresh }: { positions: Position[
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-headline font-bold text-sm">{formatPair(pos.pair)}</span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
-                          isLong ? "bg-long/20 text-long" : "bg-short/20 text-short"
-                        }`}>
+                        <Badge color={isLong ? "long" : "short"}>
                           {pos.side.toUpperCase()} {pos.leverage}x
-                        </span>
+                        </Badge>
                       </div>
                       <span className="text-xs text-on-surface-variant tabular">Size: {pos.size}</span>
                     </div>
@@ -234,13 +230,11 @@ const SENTIMENT_COLOR: Record<string, string> = {
 };
 
 function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean }) {
-  if (loading) return <div className="h-24 bg-surface-container rounded-lg animate-pulse" />;
+  if (loading) return <Skeleton height="h-24" />;
 
   return (
     <div className="space-y-3">
-      <h2 className="text-xs font-bold tracking-widest uppercase text-on-surface-variant px-1">
-        Latest News
-      </h2>
+      <SectionLabel as="h2">Latest News</SectionLabel>
       {news.length === 0 ? (
         <p className="px-1 text-sm text-outline">No recent news &mdash; feeds are being monitored</p>
       ) : (
@@ -279,7 +273,7 @@ function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean
 }
 
 function PerformanceCard({ stats, loading }: { stats: SignalStats | null; loading: boolean }) {
-  if (loading) return <div className="h-28 bg-surface-container rounded-lg animate-pulse" />;
+  if (loading) return <Skeleton height="h-28" />;
   if (!stats || stats.total_resolved === 0) return null;
 
   const netPnl = stats.equity_curve.length > 0

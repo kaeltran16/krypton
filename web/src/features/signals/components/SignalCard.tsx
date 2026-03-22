@@ -3,6 +3,8 @@ import type { Signal } from "../types";
 import { formatScore, formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import { PatternBadges } from "./PatternBadges";
 import { Button } from "../../../shared/components/Button";
+import { Badge } from "../../../shared/components/Badge";
+import { ProgressBar } from "../../../shared/components/ProgressBar";
 
 interface SignalCardProps {
   signal: Signal;
@@ -27,13 +29,9 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
         <div>
           <div className="flex items-center gap-2">
             <span className="font-headline text-lg font-bold tracking-tight">{formatPair(signal.pair)}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
-              isLong
-                ? "bg-long/20 text-long border-long/30"
-                : "bg-short/20 text-short border-short/30"
-            }`}>
+            <Badge color={isLong ? "long" : "short"} border pill className="px-2">
               {signal.direction} {signal.timeframe}
-            </span>
+            </Badge>
           </div>
           <span className="text-on-surface-variant text-xs uppercase tracking-widest mt-1 block">
             {formatRelativeTime(signal.created_at)}
@@ -43,12 +41,7 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
           <div className="text-xl font-headline font-bold text-primary tabular">
             {formatScore(signal.final_score)}<span className="text-xs text-on-surface-variant font-medium">/100</span>
           </div>
-          <div className="w-16 h-1 bg-surface-container-lowest mt-1 rounded-full overflow-hidden ml-auto">
-            <div
-              className="h-full bg-primary rounded-full shadow-[0_0_8px_rgba(105,218,255,0.4)]"
-              style={{ width: `${Math.min(Math.max(signal.final_score, 0), 100)}%` }}
-            />
-          </div>
+          <ProgressBar value={signal.final_score} height="sm" glow className="w-16 mt-1 ml-auto" />
           {!isPending && <OutcomeBadge outcome={signal.outcome} />}
         </div>
       </div>
@@ -139,23 +132,25 @@ function RRFallback({ levels }: { levels: Signal["levels"] }) {
   );
 }
 
-function OutcomeBadge({ outcome }: { outcome: string }) {
-  const styles: Record<string, string> = {
-    TP1_HIT: "bg-long/20 text-long",
-    TP2_HIT: "bg-long/20 text-long",
-    SL_HIT: "bg-short/20 text-short",
-    EXPIRED: "bg-surface-container-highest text-outline",
-  };
-  const labels: Record<string, string> = {
-    TP1_HIT: "TP1 Hit",
-    TP2_HIT: "TP2 Hit",
-    SL_HIT: "SL Hit",
-    EXPIRED: "Expired",
-  };
+const OUTCOME_COLOR: Record<string, "long" | "short" | "muted"> = {
+  TP1_HIT: "long",
+  TP2_HIT: "long",
+  SL_HIT:  "short",
+  EXPIRED: "muted",
+};
 
+const OUTCOME_LABEL: Record<string, string> = {
+  TP1_HIT: "TP1 Hit",
+  TP2_HIT: "TP2 Hit",
+  SL_HIT:  "SL Hit",
+  EXPIRED: "Expired",
+};
+
+function OutcomeBadge({ outcome }: { outcome: string }) {
+  const color = OUTCOME_COLOR[outcome] ?? "muted";
   return (
-    <span className={`text-xs px-1.5 py-0.5 rounded font-medium mt-1 inline-block ${styles[outcome] ?? ""}`}>
-      {labels[outcome] ?? outcome}
-    </span>
+    <Badge color={color} weight="medium" className="mt-1">
+      {OUTCOME_LABEL[outcome] ?? outcome}
+    </Badge>
   );
 }

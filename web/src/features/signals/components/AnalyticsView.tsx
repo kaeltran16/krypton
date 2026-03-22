@@ -6,6 +6,11 @@ import { formatPair, formatDuration } from "../../../shared/lib/format";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { EmptyState } from "../../../shared/components/EmptyState";
 import type { SignalStats, PerformanceMetrics } from "../types";
+import { Card } from "../../../shared/components/Card";
+import { Badge } from "../../../shared/components/Badge";
+import { MetricCard } from "../../../shared/components/MetricCard";
+import { Skeleton } from "../../../shared/components/Skeleton";
+import { SectionLabel } from "../../../shared/components/SectionLabel";
 
 type Period = "7" | "30" | "365";
 
@@ -22,9 +27,7 @@ export function AnalyticsView() {
   if (loading) {
     return (
       <div className="p-3 space-y-3">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="h-24 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none" />
-        ))}
+        <Skeleton count={6} height="h-24" border={false} />
       </div>
     );
   }
@@ -47,17 +50,17 @@ export function AnalyticsView() {
 
       <SummaryBento stats={stats} />
 
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Equity & Risk</h3>
+      <SectionLabel>Equity & Risk</SectionLabel>
       <EquityCurve data={stats.equity_curve} />
       <DrawdownChart data={stats.drawdown_series} maxDd={stats.performance.max_drawdown_pct} />
 
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Breakdowns</h3>
+      <SectionLabel>Breakdowns</SectionLabel>
       <PairBreakdown data={stats.by_pair} />
       <TimeframeBreakdown data={stats.by_timeframe} />
       <HourlyHeatmap data={stats.hourly_performance} />
       <DirectionBreakdown data={stats.by_direction} />
 
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Distribution & Streaks</h3>
+      <SectionLabel>Distribution & Streaks</SectionLabel>
       <PnlDistribution data={stats.pnl_distribution} />
       <StreakTracker streaks={stats.streaks} />
       <NotableTrades perf={stats.performance} />
@@ -81,67 +84,53 @@ function SummaryBento({ stats }: { stats: SignalStats }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {/* Net P&L — col-span-2 */}
-      <div className="col-span-2 bg-surface-container rounded-lg p-4 border-l-4 border-tertiary-dim">
+      <Card border={false} className="col-span-2 border-l-4 border-tertiary-dim">
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Net P&L</div>
         <div className={`font-headline text-3xl font-bold tabular-nums ${netPnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
           {netPnl >= 0 ? "+" : ""}{netPnl.toFixed(1)}%
         </div>
-      </div>
+      </Card>
 
       {/* Win Rate */}
-      <div className="bg-surface-container rounded-lg p-4">
+      <Card border={false}>
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Win Rate</div>
         <div className={`font-headline text-2xl font-bold tabular-nums ${stats.win_rate >= 50 ? "text-tertiary-dim" : "text-error"}`}>
           {stats.win_rate}%
         </div>
-      </div>
+      </Card>
 
       {/* Expectancy */}
-      <div className="bg-surface-container rounded-lg p-4">
+      <Card border={false}>
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Expectancy</div>
         <div className={`font-headline text-2xl font-bold tabular-nums ${
           showDash || expectancy == null ? "text-on-surface" : expectancy >= 0 ? "text-tertiary-dim" : "text-error"
         }`}>
           {showDash || expectancy == null ? "—" : `${expectancy >= 0 ? "+" : ""}${expectancy}%`}
         </div>
-      </div>
+      </Card>
 
       {/* Sharpe */}
-      <div className="bg-surface-container rounded-lg p-4">
+      <Card border={false}>
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Sharpe</div>
         <div className={`font-headline text-2xl font-bold tabular-nums ${
           showDash || sharpe == null ? "text-on-surface" : sharpe > 0 ? "text-tertiary-dim" : "text-error"
         }`}>
           {showDash || sharpe == null ? "—" : sharpe}
         </div>
-      </div>
+      </Card>
 
       {/* Avg R:R */}
-      <div className="bg-surface-container rounded-lg p-4">
+      <Card border={false}>
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Avg R:R</div>
         <div className="font-headline text-2xl font-bold tabular-nums text-on-surface">{stats.avg_rr}</div>
-      </div>
+      </Card>
 
       {/* Row 4: Resolved | Wins | Losses | Expired */}
-      <div className="col-span-2 bg-surface-container rounded-lg p-4">
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <div>
-            <div className="font-headline text-lg font-bold tabular-nums text-on-surface">{stats.total_resolved}</div>
-            <div className="text-xs text-on-surface-variant">Resolved</div>
-          </div>
-          <div>
-            <div className="font-headline text-lg font-bold tabular-nums text-tertiary-dim">{stats.total_wins}</div>
-            <div className="text-xs text-on-surface-variant">Wins</div>
-          </div>
-          <div>
-            <div className="font-headline text-lg font-bold tabular-nums text-error">{stats.total_losses}</div>
-            <div className="text-xs text-on-surface-variant">Losses</div>
-          </div>
-          <div>
-            <div className="font-headline text-lg font-bold tabular-nums text-on-surface">{stats.total_expired ?? 0}</div>
-            <div className="text-xs text-on-surface-variant">Expired</div>
-          </div>
-        </div>
+      <div className="col-span-2 grid grid-cols-4 gap-2">
+        <MetricCard label="Resolved" value={stats.total_resolved} />
+        <MetricCard label="Wins" value={stats.total_wins} color="text-tertiary-dim" />
+        <MetricCard label="Losses" value={stats.total_losses} color="text-error" />
+        <MetricCard label="Expired" value={stats.total_expired ?? 0} />
       </div>
     </div>
   );
@@ -183,8 +172,8 @@ function EquityCurve({ data }: { data: SignalStats["equity_curve"] }) {
   const fillPath = `${pad.left},${pad.top + h} ${areaPoints.join(" ")} ${pad.left + w},${pad.top + h}`;
 
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Equity Curve</h3>
+    <Card border={false}>
+      <SectionLabel>Equity Curve</SectionLabel>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={`Equity curve, current P&L ${lastVal >= 0 ? "+" : ""}${lastVal.toFixed(1)}%`}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -195,7 +184,7 @@ function EquityCurve({ data }: { data: SignalStats["equity_curve"] }) {
         <polygon fill={`url(#${gradientId})`} points={fillPath} />
         <polyline fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" points={points} />
       </svg>
-    </div>
+    </Card>
   );
 }
 
@@ -227,9 +216,9 @@ function DrawdownChart({ data, maxDd }: { data: SignalStats["drawdown_series"]; 
   const fillPoints = `${firstX},${pad.top} ${points} ${lastX},${pad.top}`;
 
   return (
-    <div className="bg-surface-container rounded-lg p-4 relative">
+    <Card border={false} className="relative">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Drawdown</h3>
+        <SectionLabel className="mb-0">Drawdown</SectionLabel>
         <span className="text-xs font-mono font-bold tabular-nums text-on-surface">
           {maxDd > 0 ? `-${maxDd}%` : "0%"}
         </span>
@@ -238,7 +227,7 @@ function DrawdownChart({ data, maxDd }: { data: SignalStats["drawdown_series"]; 
         <polygon fill={theme.colors.short + "15"} points={fillPoints} />
         <polyline fill="none" stroke={theme.colors.short} strokeWidth="1.5" strokeLinejoin="round" points={points} />
       </svg>
-    </div>
+    </Card>
   );
 }
 
@@ -251,7 +240,7 @@ function PairBreakdown({ data }: { data: SignalStats["by_pair"] }) {
   return (
     <div className="space-y-3">
       {pairs.map(([pair, stats]) => (
-        <div key={pair} className="bg-surface-container rounded-lg p-4 hover:bg-surface-container-high transition-colors">
+        <Card key={pair} border={false} className="hover:bg-surface-container-high transition-colors">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center">
               <span className="font-headline font-bold text-xs text-primary">{formatPair(pair).slice(0, 3)}</span>
@@ -269,7 +258,7 @@ function PairBreakdown({ data }: { data: SignalStats["by_pair"] }) {
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       ))}
     </div>
   );
@@ -285,20 +274,19 @@ function TimeframeBreakdown({ data }: { data: SignalStats["by_timeframe"] }) {
   if (sorted.length === 0) return null;
 
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">By Timeframe</h3>
-      <div className="grid grid-cols-3 gap-2 text-center">
+    <Card border={false}>
+      <SectionLabel className="mb-3">By Timeframe</SectionLabel>
+      <div className="grid grid-cols-3 gap-2">
         {sorted.map(({ tf, win_rate, total }) => (
-          <div key={tf}>
-            <div className="text-sm font-headline font-bold text-on-surface mb-1">{tf}</div>
-            <div className={`text-lg font-headline font-bold tabular-nums ${win_rate >= 50 ? "text-tertiary-dim" : "text-error"}`}>
-              {win_rate}%
-            </div>
-            <div className="text-xs text-on-surface-variant">{total} trades</div>
-          </div>
+          <MetricCard
+            key={tf}
+            label={`${tf} · ${total} trades`}
+            value={`${win_rate}%`}
+            color={win_rate >= 50 ? "text-tertiary-dim" : "text-error"}
+          />
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -316,8 +304,8 @@ function HourlyHeatmap({ data }: { data: SignalStats["hourly_performance"] }) {
   const worstHour = data.reduce((worst, d) => d.avg_pnl < worst.avg_pnl ? d : worst, data[0]);
 
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Best Hours to Trade</h3>
+    <Card border={false}>
+      <SectionLabel className="mb-3">Best Hours to Trade</SectionLabel>
       <div
         className="grid grid-cols-6 gap-1"
         role="img"
@@ -358,7 +346,7 @@ function HourlyHeatmap({ data }: { data: SignalStats["hourly_performance"] }) {
         </div>
         <span className="text-xs text-on-surface-variant">Profit</span>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -377,9 +365,10 @@ function DirectionBreakdown({ data }: { data: SignalStats["by_direction"] }) {
         const d = data[dir];
         const isLong = dir === "LONG";
         return (
-          <div
+          <Card
             key={dir}
-            className={`bg-surface-container rounded-lg p-4 border-l-[3px] ${isLong ? "border-tertiary-dim" : "border-error"}`}
+            border={false}
+            className={`border-l-[3px] ${isLong ? "border-tertiary-dim" : "border-error"}`}
           >
             <div className={`text-sm font-headline font-bold mb-2 ${isLong ? "text-tertiary-dim" : "text-error"}`}>
               {dir}
@@ -391,7 +380,7 @@ function DirectionBreakdown({ data }: { data: SignalStats["by_direction"] }) {
             <div className={`text-xs font-mono tabular-nums mt-0.5 ${d.avg_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
               {d.avg_pnl >= 0 ? "+" : ""}{d.avg_pnl.toFixed(2)}% avg
             </div>
-          </div>
+          </Card>
         );
       })}
     </div>
@@ -412,8 +401,8 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
   const barWidth = Math.max(w / data.length - 2, 4);
 
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">P&L Distribution</h3>
+    <Card border={false}>
+      <SectionLabel>P&L Distribution</SectionLabel>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={`P&L distribution across ${data.length} buckets`}>
         {data.map((d, i) => {
           const barH = (d.count / maxCount) * h;
@@ -433,7 +422,7 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
           );
         })()}
       </svg>
-    </div>
+    </Card>
   );
 }
 
@@ -441,8 +430,8 @@ function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
 
 function StreakTracker({ streaks }: { streaks: SignalStats["streaks"] }) {
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Streaks</h3>
+    <Card border={false}>
+      <SectionLabel className="mb-3">Streaks</SectionLabel>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
           <div className={`text-lg font-headline font-bold tabular-nums ${streaks.current >= 0 ? "text-tertiary-dim" : "text-error"}`}>
@@ -459,7 +448,7 @@ function StreakTracker({ streaks }: { streaks: SignalStats["streaks"] }) {
           <div className="text-xs text-on-surface-variant">Worst Loss</div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -469,13 +458,13 @@ function NotableTrades({ perf }: { perf: PerformanceMetrics }) {
   if (!perf.best_trade && !perf.worst_trade) return null;
 
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Notable Trades</h3>
+    <Card border={false}>
+      <SectionLabel className="mb-3">Notable Trades</SectionLabel>
       <div className="space-y-1.5">
         {perf.best_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-long bg-long/10 px-1.5 py-0.5 rounded font-bold">BEST</span>
+              <Badge color="long">BEST</Badge>
               <span className="text-on-surface-variant">
                 {formatPair(perf.best_trade.pair)} {perf.best_trade.timeframe} {perf.best_trade.direction}
               </span>
@@ -486,7 +475,7 @@ function NotableTrades({ perf }: { perf: PerformanceMetrics }) {
         {perf.worst_trade && (
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-short bg-short/10 px-1.5 py-0.5 rounded font-bold">WORST</span>
+              <Badge color="short">WORST</Badge>
               <span className="text-on-surface-variant">
                 {formatPair(perf.worst_trade.pair)} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
               </span>
@@ -495,7 +484,7 @@ function NotableTrades({ perf }: { perf: PerformanceMetrics }) {
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -505,8 +494,8 @@ function RiskProfile({ perf, totalResolved }: { perf: PerformanceMetrics; totalR
   const showDash = totalResolved < 5;
 
   return (
-    <div className="bg-surface-container rounded-lg p-4">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Risk Profile</h3>
+    <Card border={false}>
+      <SectionLabel className="mb-3">Risk Profile</SectionLabel>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
           <div className={`text-base font-headline font-bold tabular-nums ${
@@ -529,7 +518,7 @@ function RiskProfile({ perf, totalResolved }: { perf: PerformanceMetrics; totalR
           <div className="text-xs text-on-surface-variant">Avg Hold Time</div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 

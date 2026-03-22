@@ -3,6 +3,7 @@ import { api, type MLTrainRequest, type MLStatus, type MLTrainJob, type MLBackfi
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { Button } from "../../../shared/components/Button";
 import { SettingsSection, ConfigField, Slider, TIMEFRAMES, formatPairSlug } from "./shared";
+import { Card } from "../../../shared/components/Card";
 import { PRESETS, DEFAULT_CONFIG, CANDLES_PER_DAY, type PresetName } from "../presets";
 import type { DataReadinessMap } from "../types";
 
@@ -294,7 +295,7 @@ export function SetupTab({
       {/* Confirmation Dialog */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-container rounded-lg border border-outline-variant/10 p-4 max-w-sm w-full">
+          <Card className="max-w-sm w-full">
             <h3 className="text-sm font-semibold mb-2">Confirm Training</h3>
             <p className="text-xs text-on-surface-variant mb-4">
               This will overwrite existing models for selected pairs. Are you sure you want to proceed?
@@ -314,7 +315,7 @@ export function SetupTab({
                 Start
               </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </div>
