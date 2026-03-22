@@ -1,15 +1,13 @@
 import { useState } from "react";
 import { AnalyticsView } from "./AnalyticsView";
 import { CalendarView } from "./CalendarView";
-import { DeepDiveView } from "./DeepDiveView";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 
-type JournalTab = "analytics" | "calendar" | "deepdive";
+type JournalTab = "analytics" | "calendar";
 
 const TABS: { value: JournalTab; label: string }[] = [
   { value: "analytics", label: "Analytics" },
   { value: "calendar", label: "Calendar" },
-  { value: "deepdive", label: "Deep Dive" },
 ];
 
 export function JournalView() {
@@ -28,7 +26,6 @@ export function JournalView() {
 
       {tab === "analytics" && <AnalyticsView />}
       {tab === "calendar" && <CalendarView />}
-      {tab === "deepdive" && <DeepDiveView />}
     </div>
   );
 }

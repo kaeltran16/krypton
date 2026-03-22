@@ -26,6 +26,7 @@ export interface MLTrainProgress {
   total_epochs: number;
   train_loss: number;
   val_loss: number;
+  direction_acc?: number;
 }
 
 export interface MLTrainResult {
@@ -35,6 +36,10 @@ export interface MLTrainResult {
   total_samples: number;
   flow_data_used: boolean;
   version?: string;
+  direction_accuracy?: number;
+  precision_per_class?: { long: number; short: number; neutral: number };
+  recall_per_class?: { long: number; short: number; neutral: number };
+  loss_history?: { epoch: number; train_loss: number; val_loss: number | null }[];
 }
 
 export interface MLTrainJob {
@@ -254,6 +259,9 @@ export const api = {
   getSignalCalendar: (month: string) =>
     request<CalendarResponse>(`/api/signals/calendar?month=${month}`),
 
+  getSignalsByDate: (date: string) =>
+    request<Signal[]>(`/api/signals/by-date?date=${date}`),
+
   placeOrder: (order: OrderRequest) =>
     request<OrderResult>("/api/account/order", {
       method: "POST",
@@ -335,19 +343,12 @@ export const api = {
   getMLStatus: () =>
     request<{ ml_enabled: boolean; loaded_pairs: string[] }>("/api/ml/status"),
 
-  startMLTraining: (params: {
-    timeframe?: string;
-    epochs?: number;
-    lookback_days?: number;
-    batch_size?: number;
-    hidden_size?: number;
-    num_layers?: number;
-    lr?: number;
-    seq_len?: number;
-    dropout?: number;
-    label_horizon?: number;
-    label_threshold_pct?: number;
-  }) =>
+  getMLDataReadiness: (timeframe: string) =>
+    request<Record<string, { count: number; oldest: string | null; sufficient: boolean }>>(
+      `/api/ml/data-readiness?timeframe=${encodeURIComponent(timeframe)}`,
+    ),
+
+  startMLTraining: (params: MLTrainRequest) =>
     request<{ job_id: string; status: string }>("/api/ml/train", {
       method: "POST",
       body: JSON.stringify(params),

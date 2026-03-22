@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import { api } from "../../../shared/lib/api";
-import type { CalendarDay, CalendarResponse } from "../types";
+import { formatPair, formatTime } from "../../../shared/lib/format";
+import { hexToRgba, theme } from "../../../shared/theme";
+import { useSignalsByDate } from "../hooks/useSignalsByDate";
+import type { CalendarDay, CalendarResponse, Signal } from "../types";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -34,11 +38,18 @@ export function CalendarView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [prevFetchKey, setPrevFetchKey] = useState("");
+
+  const fetchKey = `${year}-${month}-${retryCount}`;
+  if (fetchKey !== prevFetchKey) {
+    setPrevFetchKey(fetchKey);
+    setLoading(true);
+    setError(false);
+  }
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(false);
     api
       .getSignalCalendar(formatMonth(year, month))
       .then((res) => {
@@ -54,7 +65,7 @@ export function CalendarView() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [year, month]);
+  }, [year, month, retryCount]);
 
   const prevMonth = () => {
     if (month === 1) { setYear(year - 1); setMonth(12); }
@@ -72,6 +83,14 @@ export function CalendarView() {
   const startDay = getStartDay(year, month);
   const today = todayStr();
   const summary = data?.monthly_summary;
+
+  const pnlMagnitudes = data?.days
+    .map((d) => Math.abs(d.net_pnl))
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b) ?? [];
+  const p90 = pnlMagnitudes.length > 0
+    ? pnlMagnitudes[Math.floor(pnlMagnitudes.length * 0.9)] || pnlMagnitudes[pnlMagnitudes.length - 1]
+    : 1;
 
   return (
     <div className="p-3 space-y-3">
@@ -113,23 +132,23 @@ export function CalendarView() {
       ) : error ? (
         <div className="text-center py-8">
           <p className="text-on-surface-variant text-sm mb-2">Failed to load calendar</p>
-          <button onClick={() => { setLoading(true); setError(false); api.getSignalCalendar(formatMonth(year, month)).then(setData).catch(() => setError(true)).finally(() => setLoading(false)); }} className="text-xs text-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">Retry</button>
+          <button onClick={() => setRetryCount((c) => c + 1)} className="text-xs text-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">Retry</button>
         </div>
       ) : (
         <>
           {/* Calendar grid */}
           <div className="bg-surface-container rounded-lg p-2">
             {/* Weekday headers */}
-            <div className="grid grid-cols-7 gap-0.5 mb-1">
+            <div className="grid grid-cols-7 gap-1 mb-1">
               {WEEKDAYS.map((d) => (
                 <div key={d} className="text-center text-xs text-on-surface-variant font-bold uppercase py-1">{d}</div>
               ))}
             </div>
 
             {/* Day cells */}
-            <div className="grid grid-cols-7 gap-0.5">
+            <div className="grid grid-cols-7 gap-1">
               {Array.from({ length: startDay }).map((_, i) => (
-                <div key={`empty-${i}`} />
+                <div key={`empty-${i}`} className="aspect-square rounded-lg bg-surface-container-highest/30" />
               ))}
 
               {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -139,30 +158,39 @@ export function CalendarView() {
                 const isToday = dateStr === today;
                 const isSelected = dateStr === selectedDay;
 
-                let bgTint = "";
-                if (dayData) {
-                  if (dayData.net_pnl > 0) bgTint = "bg-tertiary-dim/10";
-                  else if (dayData.net_pnl < 0) bgTint = "bg-error/10";
+                // P&L tinting with intensity scaled to magnitude, capped at p90
+                let bgStyle: React.CSSProperties | undefined;
+                if (dayData && dayData.net_pnl !== 0) {
+                  const intensity = Math.min(Math.abs(dayData.net_pnl) / p90, 1);
+                  const opacity = 0.05 + intensity * 0.15;
+                  bgStyle = {
+                    backgroundColor: dayData.net_pnl > 0
+                      ? hexToRgba(theme.colors.long, opacity)
+                      : hexToRgba(theme.colors.short, opacity),
+                  };
                 }
 
                 return (
                   <button
                     key={dayNum}
                     onClick={() => setSelectedDay(isSelected ? null : dateStr)}
-                    className={`aspect-square rounded-md flex flex-col items-center justify-center p-0.5 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${bgTint} ${
-                      isSelected ? "ring-1 ring-primary" : ""
-                    } ${isToday ? "border border-outline-variant/10" : ""}`}
+                    className={`aspect-square rounded-lg flex flex-col items-center justify-center p-1 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
+                      !dayData && !isToday ? "bg-surface-container-highest/30" : ""
+                    } ${
+                      isSelected ? "ring-2 ring-primary" : ""
+                    } ${isToday ? "border border-primary/40" : ""}`}
+                    style={bgStyle}
                   >
                     <span className={`text-xs ${isToday ? "text-primary font-bold" : "text-on-surface-variant"}`}>
                       {dayNum}
                     </span>
+                    {isToday && (
+                      <span className="text-[8px] text-primary font-bold leading-none">TODAY</span>
+                    )}
                     {dayData && (
-                      <>
-                        <span className="text-xs text-on-surface-variant">{dayData.signal_count}s</span>
-                        <span className={`text-xs font-mono tabular-nums ${dayData.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
-                          {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(1)}
-                        </span>
-                      </>
+                      <span className={`text-[10px] font-mono tabular-nums leading-none ${dayData.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
+                        {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(1)}
+                      </span>
                     )}
                   </button>
                 );
@@ -170,42 +198,100 @@ export function CalendarView() {
             </div>
           </div>
 
-          {/* Selected day signals list */}
-          {selectedDay && <DaySignalsList date={selectedDay} dayData={dayMap.get(selectedDay)} />}
+          {/* Selected day detail with signal cards */}
+          {selectedDay && <DayDetail date={selectedDay} dayData={dayMap.get(selectedDay)} />}
         </>
       )}
     </div>
   );
 }
 
-function DaySignalsList({ date, dayData }: { date: string; dayData?: CalendarDay }) {
-  if (!dayData || dayData.signal_count === 0) {
-    return (
-      <div className="bg-surface-container rounded-lg p-3 text-center">
-        <p className="text-on-surface-variant text-sm">No signals on {date}</p>
-      </div>
-    );
-  }
+// ─── DayDetail ───────────────────────────────────────────────────
+
+function DayDetail({ date, dayData }: { date: string; dayData?: CalendarDay }) {
+  const { signals, loading: signalsLoading, error: signalsError, retry } = useSignalsByDate(date);
 
   return (
-    <div className="bg-surface-container rounded-lg p-3">
-      <h3 className="text-xs text-on-surface-variant mb-2">{date}</h3>
-      <div className="grid grid-cols-3 gap-2 text-center text-sm">
-        <div>
-          <div className="font-mono font-bold text-on-surface tabular-nums">{dayData.signal_count}</div>
-          <div className="text-xs text-on-surface-variant">Signals</div>
+    <div className="max-h-[400px] overflow-y-auto space-y-3">
+      {/* Summary bar */}
+      {dayData && dayData.signal_count > 0 && (
+        <div className="bg-surface-container rounded-lg p-3">
+          <div className="flex items-center justify-center gap-4 text-sm">
+            <span className={`font-mono font-bold tabular-nums ${dayData.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
+              {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(2)}% P&L
+            </span>
+            <span className="text-outline-variant">|</span>
+            <span className="font-mono font-bold text-tertiary-dim tabular-nums">{dayData.wins}W</span>
+            <span className="text-outline-variant">|</span>
+            <span className="font-mono font-bold text-error tabular-nums">{dayData.losses}L</span>
+          </div>
         </div>
-        <div>
-          <div className="font-mono font-bold text-tertiary-dim tabular-nums">{dayData.wins}W</div>
-          <div className="text-xs text-on-surface-variant">Wins</div>
+      )}
+
+      {/* Signal cards */}
+      {signalsLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none" />
+          ))}
         </div>
-        <div>
-          <div className="font-mono font-bold text-error tabular-nums">{dayData.losses}L</div>
-          <div className="text-xs text-on-surface-variant">Losses</div>
+      ) : signalsError ? (
+        <div className="bg-surface-container rounded-lg p-3 text-center">
+          <p className="text-on-surface-variant text-sm mb-2">Failed to load signals</p>
+          <button onClick={retry} className="text-xs text-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded">Retry</button>
+        </div>
+      ) : signals.length === 0 ? (
+        <div className="bg-surface-container rounded-lg p-3 text-center">
+          <p className="text-on-surface-variant text-sm">No signals on {date}</p>
+        </div>
+      ) : (
+        signals.map((signal) => <SignalDayCard key={signal.id} signal={signal} />)
+      )}
+    </div>
+  );
+}
+
+// ─── SignalDayCard ────────────────────────────────────────────────
+
+function SignalDayCard({ signal }: { signal: Signal }) {
+  const isLong = signal.direction === "LONG";
+
+  const outcomeBadge = signal.outcome !== "PENDING" ? (
+    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+      (signal.outcome === "TP1_HIT" || signal.outcome === "TP2_HIT") ? "bg-long/10 text-long" :
+      signal.outcome === "EXPIRED" ? "bg-outline-variant/20 text-on-surface-variant" :
+      "bg-short/10 text-short"
+    }`}>
+      {signal.outcome.replace("_", " ")}
+    </span>
+  ) : null;
+
+  return (
+    <div className={`bg-surface-container rounded-lg p-3 flex items-center gap-3 border-l-[3px] ${isLong ? "border-tertiary-dim" : "border-error"}`}>
+      {/* Direction icon */}
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isLong ? "bg-long/10" : "bg-short/10"}`}>
+        {isLong ? <TrendingUp size={16} className="text-long" /> : <TrendingDown size={16} className="text-short" />}
+      </div>
+
+      {/* Middle: pair, direction, timeframe, score, time */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-headline font-bold text-sm">{formatPair(signal.pair)}/USDT</span>
+          <span className={`text-[10px] font-bold uppercase ${isLong ? "text-long" : "text-short"}`}>{signal.direction}</span>
+        </div>
+        <div className="text-xs text-on-surface-variant mt-0.5">
+          {signal.timeframe} &middot; Score {Math.abs(signal.final_score).toFixed(0)} &middot; {formatTime(signal.created_at)}
         </div>
       </div>
-      <div className={`text-center mt-2 font-mono font-bold tabular-nums ${dayData.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
-        {dayData.net_pnl >= 0 ? "+" : ""}{dayData.net_pnl.toFixed(2)}% P&L
+
+      {/* Right: P&L, outcome */}
+      <div className="text-right shrink-0">
+        {signal.outcome_pnl_pct != null && (
+          <div className={`font-mono font-bold text-sm tabular-nums ${signal.outcome_pnl_pct >= 0 ? "text-long" : "text-short"}`}>
+            {signal.outcome_pnl_pct >= 0 ? "+" : ""}{signal.outcome_pnl_pct.toFixed(2)}%
+          </div>
+        )}
+        {outcomeBadge}
       </div>
     </div>
   );

@@ -1,19 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import type { Signal, UserStatus } from "../types";
+import type { Signal } from "../types";
 import { formatPrice, formatScore } from "../../../shared/lib/format";
-import { api } from "../../../shared/lib/api";
-import { useSignalStore } from "../store";
 import { PatternDetailRow } from "./PatternBadges";
 import { IndicatorAudit } from "./IndicatorAudit";
 import { ReasoningChain } from "./ReasoningChain";
 import ParameterRow from "../../engine/components/ParameterRow";
-
-const USER_STATUSES: { value: UserStatus; label: string }[] = [
-  { value: "OBSERVED", label: "Observed" },
-  { value: "TRADED", label: "Traded" },
-  { value: "SKIPPED", label: "Skipped" },
-];
 
 interface SignalDetailProps {
   signal: Signal | null;
@@ -162,8 +154,6 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
         </div>
       )}
 
-      <JournalSection signal={signal} />
-
       {signal.engine_snapshot ? (
         <SnapshotSection snapshot={signal.engine_snapshot} />
       ) : (
@@ -216,103 +206,3 @@ function SnapshotSection({ snapshot }: { snapshot: Record<string, unknown> }) {
   );
 }
 
-function JournalSection({ signal }: { signal: Signal }) {
-  const updateSignal = useSignalStore((s) => s.updateSignal);
-  const [note, setNote] = useState(signal.user_note ?? "");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    setNote(signal.user_note ?? "");
-  }, [signal.id, signal.user_note]);
-
-  useEffect(() => {
-    return () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  const saveNote = useCallback(
-    (value: string) => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        setSaveState("saving");
-        try {
-          await api.patchSignalJournal(signal.id, { note: value });
-          updateSignal(signal.id, { user_note: value || null });
-          setSaveState("saved");
-          if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-          savedTimerRef.current = setTimeout(() => setSaveState("idle"), 2000);
-        } catch {
-          setSaveState("idle");
-        }
-      }, 800);
-    },
-    [signal.id, updateSignal],
-  );
-
-  const [savingStatus, setSavingStatus] = useState<UserStatus | null>(null);
-
-  const handleStatusChange = async (status: UserStatus) => {
-    setSavingStatus(status);
-    setSaveState("saving");
-    try {
-      await api.patchSignalJournal(signal.id, { status });
-      updateSignal(signal.id, { user_status: status });
-      setSaveState("saved");
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = setTimeout(() => setSaveState("idle"), 2000);
-    } catch {
-      setSaveState("idle");
-    } finally {
-      setSavingStatus(null);
-    }
-  };
-
-  return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs uppercase tracking-widest text-on-surface-variant">Your Notes</h3>
-        {saveState === "saving" && <span className="text-xs text-on-surface-variant">Saving...</span>}
-        {saveState === "saved" && <span className="text-xs text-long">Saved</span>}
-      </div>
-
-      <div className="flex gap-1.5 mb-3">
-        {USER_STATUSES.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => handleStatusChange(value)}
-            disabled={savingStatus !== null}
-            className={`flex-1 min-h-[44px] text-xs font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-              savingStatus === value ? "opacity-60" : ""
-            } ${
-              signal.user_status === value
-                ? value === "TRADED"
-                  ? "bg-long/20 text-long border border-long/40"
-                  : "bg-surface-container-highest text-on-surface border border-outline-variant/15"
-                : "text-on-surface-variant border border-outline-variant/10"
-            }`}
-          >
-            {savingStatus === value ? "..." : label}
-          </button>
-        ))}
-      </div>
-
-      <textarea
-        value={note}
-        onChange={(e) => {
-          const v = e.target.value;
-          setNote(v);
-          saveNote(v);
-        }}
-        maxLength={500}
-        rows={3}
-        placeholder="Add a note about this signal..."
-        className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-lg p-2.5 text-sm text-on-surface placeholder-outline resize-none focus:outline-none focus:border-primary/50"
-      />
-      <div className="text-xs text-outline text-right mt-1">{note.length}/500</div>
-    </div>
-  );
-}

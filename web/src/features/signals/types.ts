@@ -126,6 +126,7 @@ export interface SignalStats {
   total_expired?: number;
   by_pair: Record<string, { wins: number; losses: number; total: number; win_rate: number; avg_pnl: number }>;
   by_timeframe: Record<string, { wins: number; total: number; win_rate: number }>;
+  by_direction: Record<string, { wins: number; losses: number; total: number; win_rate: number; avg_pnl: number }>;
   equity_curve: { date: string; cumulative_pnl: number }[];
   hourly_performance: { hour: number; avg_pnl: number; count: number }[];
   streaks: { current: number; best_win: number; worst_loss: number };

@@ -1,10 +1,11 @@
 import { useState, useId } from "react";
 import { BarChart3 } from "lucide-react";
 import { useSignalStats } from "../../home/hooks/useSignalStats";
-import { theme } from "../../../shared/theme";
+import { theme, hexToRgba } from "../../../shared/theme";
+import { formatPair, formatDuration } from "../../../shared/lib/format";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { EmptyState } from "../../../shared/components/EmptyState";
-import type { SignalStats } from "../types";
+import type { SignalStats, PerformanceMetrics } from "../types";
 
 type Period = "7" | "30" | "365";
 
@@ -21,7 +22,7 @@ export function AnalyticsView() {
   if (loading) {
     return (
       <div className="p-3 space-y-3">
-        {[1, 2, 3].map((i) => (
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div key={i} className="h-24 bg-surface-container rounded-lg animate-pulse motion-reduce:animate-none" />
         ))}
       </div>
@@ -42,52 +43,111 @@ export function AnalyticsView() {
 
   return (
     <div className="p-3 space-y-3 overflow-y-auto">
-      {/* Period selector */}
-      <SegmentedControl
-        options={PERIODS}
-        value={period}
-        onChange={setPeriod}
-      />
+      <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} />
 
       <SummaryBento stats={stats} />
+
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Equity & Risk</h3>
       <EquityCurve data={stats.equity_curve} />
+      <DrawdownChart data={stats.drawdown_series} maxDd={stats.performance.max_drawdown_pct} />
+
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Breakdowns</h3>
       <PairBreakdown data={stats.by_pair} />
+      <TimeframeBreakdown data={stats.by_timeframe} />
+      <HourlyHeatmap data={stats.hourly_performance} />
+      <DirectionBreakdown data={stats.by_direction} />
+
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Distribution & Streaks</h3>
+      <PnlDistribution data={stats.pnl_distribution} />
       <StreakTracker streaks={stats.streaks} />
+      <NotableTrades perf={stats.performance} />
+
+      <RiskProfile perf={stats.performance} totalResolved={stats.total_resolved} />
     </div>
   );
 }
+
+// ─── SummaryBento ────────────────────────────────────────────────
 
 function SummaryBento({ stats }: { stats: SignalStats }) {
   const netPnl = stats.equity_curve.length > 0
     ? stats.equity_curve[stats.equity_curve.length - 1].cumulative_pnl
     : 0;
 
+  const expectancy = stats.performance.expectancy;
+  const sharpe = stats.performance.sharpe_ratio;
+  const showDash = stats.total_resolved < 5;
+
   return (
     <div className="grid grid-cols-2 gap-3">
-      {/* P&L card — spans 2 cols */}
+      {/* Net P&L — col-span-2 */}
       <div className="col-span-2 bg-surface-container rounded-lg p-4 border-l-4 border-tertiary-dim">
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Net P&L</div>
         <div className={`font-headline text-3xl font-bold tabular-nums ${netPnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
           {netPnl >= 0 ? "+" : ""}{netPnl.toFixed(1)}%
         </div>
       </div>
+
+      {/* Win Rate */}
       <div className="bg-surface-container rounded-lg p-4">
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Win Rate</div>
         <div className={`font-headline text-2xl font-bold tabular-nums ${stats.win_rate >= 50 ? "text-tertiary-dim" : "text-error"}`}>
           {stats.win_rate}%
         </div>
       </div>
+
+      {/* Expectancy */}
+      <div className="bg-surface-container rounded-lg p-4">
+        <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Expectancy</div>
+        <div className={`font-headline text-2xl font-bold tabular-nums ${
+          showDash || expectancy == null ? "text-on-surface" : expectancy >= 0 ? "text-tertiary-dim" : "text-error"
+        }`}>
+          {showDash || expectancy == null ? "—" : `${expectancy >= 0 ? "+" : ""}${expectancy}%`}
+        </div>
+      </div>
+
+      {/* Sharpe */}
+      <div className="bg-surface-container rounded-lg p-4">
+        <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Sharpe</div>
+        <div className={`font-headline text-2xl font-bold tabular-nums ${
+          showDash || sharpe == null ? "text-on-surface" : sharpe > 0 ? "text-tertiary-dim" : "text-error"
+        }`}>
+          {showDash || sharpe == null ? "—" : sharpe}
+        </div>
+      </div>
+
+      {/* Avg R:R */}
       <div className="bg-surface-container rounded-lg p-4">
         <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Avg R:R</div>
         <div className="font-headline text-2xl font-bold tabular-nums text-on-surface">{stats.avg_rr}</div>
       </div>
-      <div className="bg-surface-container rounded-lg p-4 col-span-2">
-        <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Signals Resolved</div>
-        <div className="font-headline text-2xl font-bold tabular-nums text-on-surface">{stats.total_resolved}</div>
+
+      {/* Row 4: Resolved | Wins | Losses | Expired */}
+      <div className="col-span-2 bg-surface-container rounded-lg p-4">
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <div>
+            <div className="font-headline text-lg font-bold tabular-nums text-on-surface">{stats.total_resolved}</div>
+            <div className="text-xs text-on-surface-variant">Resolved</div>
+          </div>
+          <div>
+            <div className="font-headline text-lg font-bold tabular-nums text-tertiary-dim">{stats.total_wins}</div>
+            <div className="text-xs text-on-surface-variant">Wins</div>
+          </div>
+          <div>
+            <div className="font-headline text-lg font-bold tabular-nums text-error">{stats.total_losses}</div>
+            <div className="text-xs text-on-surface-variant">Losses</div>
+          </div>
+          <div>
+            <div className="font-headline text-lg font-bold tabular-nums text-on-surface">{stats.total_expired ?? 0}</div>
+            <div className="text-xs text-on-surface-variant">Expired</div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
+// ─── EquityCurve ─────────────────────────────────────────────────
 
 function EquityCurve({ data }: { data: SignalStats["equity_curve"] }) {
   const gradientId = useId();
@@ -115,13 +175,11 @@ function EquityCurve({ data }: { data: SignalStats["equity_curve"] }) {
   const lastVal = values[values.length - 1];
   const lineColor = lastVal >= 0 ? theme.colors.long : theme.colors.short;
 
-  // Build area fill points
-  const areaPoints = data
-    .map((d, i) => {
-      const x = pad.left + (i / (data.length - 1)) * w;
-      const y = pad.top + h - ((d.cumulative_pnl - minVal) / range) * h;
-      return `${x},${y}`;
-    });
+  const areaPoints = data.map((d, i) => {
+    const x = pad.left + (i / (data.length - 1)) * w;
+    const y = pad.top + h - ((d.cumulative_pnl - minVal) / range) * h;
+    return `${x},${y}`;
+  });
   const fillPath = `${pad.left},${pad.top + h} ${areaPoints.join(" ")} ${pad.left + w},${pad.top + h}`;
 
   return (
@@ -141,21 +199,65 @@ function EquityCurve({ data }: { data: SignalStats["equity_curve"] }) {
   );
 }
 
+// ─── DrawdownChart ───────────────────────────────────────────────
+
+function DrawdownChart({ data, maxDd }: { data: SignalStats["drawdown_series"]; maxDd: number }) {
+  if (data.length < 2) return null;
+
+  const width = 320;
+  const height = 100;
+  const pad = { top: 5, right: 10, bottom: 15, left: 10 };
+  const w = width - pad.left - pad.right;
+  const h = height - pad.top - pad.bottom;
+
+  const values = data.map((d) => d.drawdown);
+  const minVal = Math.min(...values, 0);
+  const range = Math.abs(minVal) || 1;
+
+  const points = data
+    .map((d, i) => {
+      const x = pad.left + (i / (data.length - 1)) * w;
+      const y = pad.top + (Math.abs(d.drawdown) / range) * h;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const firstX = pad.left;
+  const lastX = pad.left + w;
+  const fillPoints = `${firstX},${pad.top} ${points} ${lastX},${pad.top}`;
+
+  return (
+    <div className="bg-surface-container rounded-lg p-4 relative">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Drawdown</h3>
+        <span className="text-xs font-mono font-bold tabular-nums text-on-surface">
+          {maxDd > 0 ? `-${maxDd}%` : "0%"}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={`Drawdown chart, max drawdown ${minVal.toFixed(1)}%`}>
+        <polygon fill={theme.colors.short + "15"} points={fillPoints} />
+        <polyline fill="none" stroke={theme.colors.short} strokeWidth="1.5" strokeLinejoin="round" points={points} />
+      </svg>
+    </div>
+  );
+}
+
+// ─── PairBreakdown ───────────────────────────────────────────────
+
 function PairBreakdown({ data }: { data: SignalStats["by_pair"] }) {
   const pairs = Object.entries(data);
   if (pairs.length === 0) return null;
 
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">Pair Breakdown</h3>
       {pairs.map(([pair, stats]) => (
         <div key={pair} className="bg-surface-container rounded-lg p-4 hover:bg-surface-container-high transition-colors">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center">
-              <span className="font-headline font-bold text-xs text-primary">{pair.replace("-USDT-SWAP", "").slice(0, 3)}</span>
+              <span className="font-headline font-bold text-xs text-primary">{formatPair(pair).slice(0, 3)}</span>
             </div>
             <div className="flex-1">
-              <span className="font-headline font-bold text-sm">{pair.replace("-USDT-SWAP", "")}/USDT</span>
+              <span className="font-headline font-bold text-sm">{formatPair(pair)}/USDT</span>
               <div className="flex items-center gap-3 text-xs font-mono mt-0.5">
                 <span className={stats.win_rate >= 50 ? "text-tertiary-dim" : "text-error"}>
                   {stats.win_rate}% WR
@@ -172,6 +274,170 @@ function PairBreakdown({ data }: { data: SignalStats["by_pair"] }) {
     </div>
   );
 }
+
+// ─── TimeframeBreakdown ──────────────────────────────────────────
+
+function TimeframeBreakdown({ data }: { data: SignalStats["by_timeframe"] }) {
+  const order = ["15m", "1h", "4h"];
+  const sorted = order
+    .filter((tf) => data[tf])
+    .map((tf) => ({ tf, ...data[tf] }));
+  if (sorted.length === 0) return null;
+
+  return (
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">By Timeframe</h3>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        {sorted.map(({ tf, win_rate, total }) => (
+          <div key={tf}>
+            <div className="text-sm font-headline font-bold text-on-surface mb-1">{tf}</div>
+            <div className={`text-lg font-headline font-bold tabular-nums ${win_rate >= 50 ? "text-tertiary-dim" : "text-error"}`}>
+              {win_rate}%
+            </div>
+            <div className="text-xs text-on-surface-variant">{total} trades</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── HourlyHeatmap ──────────────────────────────────────────────
+
+function HourlyHeatmap({ data }: { data: SignalStats["hourly_performance"] }) {
+  if (!data || data.length === 0 || data.every((d) => d.count === 0)) return null;
+
+  const magnitudes = data.filter((d) => d.count > 0).map((d) => Math.abs(d.avg_pnl));
+  const sorted = [...magnitudes].sort((a, b) => a - b);
+  const p90Idx = Math.floor(sorted.length * 0.9);
+  const maxMag = sorted[p90Idx] || sorted[sorted.length - 1] || 1;
+
+  const bestHour = data.reduce((best, d) => d.avg_pnl > best.avg_pnl ? d : best, data[0]);
+  const worstHour = data.reduce((worst, d) => d.avg_pnl < worst.avg_pnl ? d : worst, data[0]);
+
+  return (
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Best Hours to Trade</h3>
+      <div
+        className="grid grid-cols-6 gap-1"
+        role="img"
+        aria-label={`Hourly heatmap. Best hour: ${bestHour.hour}:00 (${bestHour.avg_pnl >= 0 ? "+" : ""}${bestHour.avg_pnl.toFixed(2)}%). Worst hour: ${worstHour.hour}:00 (${worstHour.avg_pnl >= 0 ? "+" : ""}${worstHour.avg_pnl.toFixed(2)}%)`}
+      >
+        {data.map((d) => {
+          const intensity = d.count > 0 ? Math.min(Math.abs(d.avg_pnl) / maxMag, 1) : 0;
+          const opacity = 0.1 + intensity * 0.5;
+          const bgColor = d.count === 0
+            ? "transparent"
+            : d.avg_pnl >= 0
+              ? hexToRgba(theme.colors.long, opacity)
+              : hexToRgba(theme.colors.short, opacity);
+
+          return (
+            <div
+              key={d.hour}
+              className="aspect-square rounded flex flex-col items-center justify-center"
+              style={{ backgroundColor: bgColor }}
+            >
+              <span className="text-[10px] text-on-surface-variant leading-none">{d.hour}</span>
+              {d.count > 0 && (
+                <span className={`text-[9px] font-mono tabular-nums leading-none mt-0.5 ${d.avg_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
+                  {d.avg_pnl >= 0 ? "+" : ""}{d.avg_pnl.toFixed(1)}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend */}
+      <div className="mt-2 flex items-center gap-1">
+        <span className="text-xs text-on-surface-variant">Loss</span>
+        <div className="flex-1 h-3 rounded-sm relative" style={{
+          background: `linear-gradient(to right, ${hexToRgba(theme.colors.short, 0.6)}, ${hexToRgba(theme.colors.short, 0.1)}, transparent, ${hexToRgba(theme.colors.long, 0.1)}, ${hexToRgba(theme.colors.long, 0.6)})`,
+        }}>
+          <span className="absolute left-1/2 -translate-x-1/2 top-0 text-xs text-on-surface-variant leading-3">0</span>
+        </div>
+        <span className="text-xs text-on-surface-variant">Profit</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── DirectionBreakdown ──────────────────────────────────────────
+
+function DirectionBreakdown({ data }: { data: SignalStats["by_direction"] }) {
+  if (!data || Object.keys(data).length === 0) return null;
+
+  const directions = ["LONG", "SHORT"] as const;
+  const available = directions.filter((d) => data[d]);
+  if (available.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {available.map((dir) => {
+        const d = data[dir];
+        const isLong = dir === "LONG";
+        return (
+          <div
+            key={dir}
+            className={`bg-surface-container rounded-lg p-4 border-l-[3px] ${isLong ? "border-tertiary-dim" : "border-error"}`}
+          >
+            <div className={`text-sm font-headline font-bold mb-2 ${isLong ? "text-tertiary-dim" : "text-error"}`}>
+              {dir}
+            </div>
+            <div className={`text-2xl font-headline font-bold tabular-nums ${d.win_rate >= 50 ? "text-tertiary-dim" : "text-error"}`}>
+              {d.win_rate}%
+            </div>
+            <div className="text-xs text-on-surface-variant mt-1">{d.total} trades</div>
+            <div className={`text-xs font-mono tabular-nums mt-0.5 ${d.avg_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
+              {d.avg_pnl >= 0 ? "+" : ""}{d.avg_pnl.toFixed(2)}% avg
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── PnlDistribution ────────────────────────────────────────────
+
+function PnlDistribution({ data }: { data: SignalStats["pnl_distribution"] }) {
+  if (data.length === 0) return null;
+
+  const maxCount = Math.max(...data.map((d) => d.count));
+  const width = 320;
+  const height = 80;
+  const pad = { top: 5, right: 10, bottom: 15, left: 10 };
+  const w = width - pad.left - pad.right;
+  const h = height - pad.top - pad.bottom;
+  const barWidth = Math.max(w / data.length - 2, 4);
+
+  return (
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">P&L Distribution</h3>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={`P&L distribution across ${data.length} buckets`}>
+        {data.map((d, i) => {
+          const barH = (d.count / maxCount) * h;
+          const x = pad.left + (i / data.length) * w;
+          const y = pad.top + h - barH;
+          const fill = d.bucket >= 0 ? theme.colors.long : theme.colors.short;
+          return (
+            <rect key={i} x={x} y={y} width={barWidth} height={barH} fill={fill} opacity={0.7} rx={1} />
+          );
+        })}
+        {(() => {
+          const zeroIdx = data.findIndex((d) => d.bucket >= 0);
+          if (zeroIdx < 0 || !data.some((d) => d.bucket < 0)) return null;
+          const x = pad.left + (zeroIdx / data.length) * w;
+          return (
+            <line x1={x} y1={pad.top} x2={x} y2={pad.top + h} stroke={theme.colors["outline-variant"]} strokeWidth="0.5" strokeDasharray="3" />
+          );
+        })()}
+      </svg>
+    </div>
+  );
+}
+
+// ─── StreakTracker ────────────────────────────────────────────────
 
 function StreakTracker({ streaks }: { streaks: SignalStats["streaks"] }) {
   return (
@@ -196,3 +462,74 @@ function StreakTracker({ streaks }: { streaks: SignalStats["streaks"] }) {
     </div>
   );
 }
+
+// ─── NotableTrades ───────────────────────────────────────────────
+
+function NotableTrades({ perf }: { perf: PerformanceMetrics }) {
+  if (!perf.best_trade && !perf.worst_trade) return null;
+
+  return (
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Notable Trades</h3>
+      <div className="space-y-1.5">
+        {perf.best_trade && (
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-long bg-long/10 px-1.5 py-0.5 rounded font-bold">BEST</span>
+              <span className="text-on-surface-variant">
+                {formatPair(perf.best_trade.pair)} {perf.best_trade.timeframe} {perf.best_trade.direction}
+              </span>
+            </div>
+            <span className="font-mono text-long tabular-nums">+{perf.best_trade.pnl_pct}%</span>
+          </div>
+        )}
+        {perf.worst_trade && (
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-short bg-short/10 px-1.5 py-0.5 rounded font-bold">WORST</span>
+              <span className="text-on-surface-variant">
+                {formatPair(perf.worst_trade.pair)} {perf.worst_trade.timeframe} {perf.worst_trade.direction}
+              </span>
+            </div>
+            <span className="font-mono text-short tabular-nums">{perf.worst_trade.pnl_pct}%</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── RiskProfile ─────────────────────────────────────────────────
+
+function RiskProfile({ perf, totalResolved }: { perf: PerformanceMetrics; totalResolved: number }) {
+  const showDash = totalResolved < 5;
+
+  return (
+    <div className="bg-surface-container rounded-lg p-4">
+      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Risk Profile</h3>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div className={`text-base font-headline font-bold tabular-nums ${
+            showDash || perf.profit_factor == null ? "text-on-surface" : perf.profit_factor > 1 ? "text-tertiary-dim" : "text-error"
+          }`}>
+            {showDash || perf.profit_factor == null ? "—" : perf.profit_factor}
+          </div>
+          <div className="text-xs text-on-surface-variant">Profit Factor</div>
+        </div>
+        <div>
+          <div className={`text-base font-headline font-bold tabular-nums ${perf.max_drawdown_pct > 3 ? "text-error" : "text-on-surface"}`}>
+            {perf.max_drawdown_pct > 0 ? `-${perf.max_drawdown_pct}%` : "0%"}
+          </div>
+          <div className="text-xs text-on-surface-variant">Max Drawdown</div>
+        </div>
+        <div>
+          <div className="text-base font-headline font-bold tabular-nums text-on-surface">
+            {formatDuration(perf.avg_hold_time_minutes)}
+          </div>
+          <div className="text-xs text-on-surface-variant">Avg Hold Time</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

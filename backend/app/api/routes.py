@@ -326,7 +326,7 @@ def create_router() -> APIRouter:
                 stats = {
                     "win_rate": 0, "avg_rr": 0, "total_resolved": 0,
                     "total_wins": 0, "total_losses": 0, "total_expired": 0,
-                    "by_pair": {}, "by_timeframe": {},
+                    "by_pair": {}, "by_timeframe": {}, "by_direction": {},
                     "equity_curve": [], "hourly_performance": _compute_hourly_performance([]),
                     "streaks": {"current": 0, "best_win": 0, "worst_loss": 0},
                     "performance": _compute_performance_metrics([]),
@@ -370,6 +370,25 @@ def create_router() -> APIRouter:
                 for t in by_timeframe.values():
                     t["win_rate"] = round(t["wins"] / t["total"] * 100, 1)
 
+                by_direction: dict[str, dict] = {}
+                for s in resolved:
+                    d = by_direction.setdefault(s.direction, {"wins": 0, "losses": 0, "total": 0, "pnl_sum": 0.0})
+                    d["total"] += 1
+                    pnl = float(s.outcome_pnl_pct or 0)
+                    d["pnl_sum"] += pnl
+                    if s.outcome in ("TP1_HIT", "TP2_HIT"):
+                        d["wins"] += 1
+                    elif s.outcome == "SL_HIT":
+                        d["losses"] += 1
+                for d in by_direction.values():
+                    if d["total"] > 0:
+                        d["win_rate"] = round(d["wins"] / d["total"] * 100, 1)
+                        d["avg_pnl"] = round(d["pnl_sum"] / d["total"], 4)
+                    else:
+                        d["win_rate"] = 0.0
+                        d["avg_pnl"] = 0.0
+                    del d["pnl_sum"]
+
                 stats = {
                     "win_rate": win_rate,
                     "avg_rr": avg_rr,
@@ -379,6 +398,7 @@ def create_router() -> APIRouter:
                     "total_expired": len(expired),
                     "by_pair": by_pair,
                     "by_timeframe": by_timeframe,
+                    "by_direction": by_direction,
                     "equity_curve": _compute_equity_curve(resolved, downsample=days > 90),
                     "hourly_performance": _compute_hourly_performance(resolved),
                     "streaks": _compute_streaks(resolved),
@@ -389,6 +409,27 @@ def create_router() -> APIRouter:
 
             await redis.set(cache_key, json.dumps(stats), ex=300)
             return stats
+
+    @router.get("/signals/by-date")
+    async def get_signals_by_date(
+        request: Request,
+        _key: str = auth,
+        date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ):
+        year, mon, day = map(int, date.split("-"))
+        start = datetime(year, mon, day, tzinfo=timezone.utc)
+        end = start + timedelta(days=1)
+
+        db = request.app.state.db
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(Signal)
+                .where(Signal.created_at >= start)
+                .where(Signal.created_at < end)
+                .order_by(Signal.created_at.asc())
+            )
+            signals = result.scalars().all()
+            return [_signal_to_dict(s) for s in signals]
 
     @router.get("/signals/calendar")
     async def get_signal_calendar(
