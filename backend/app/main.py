@@ -11,6 +11,9 @@ logging.basicConfig(
     format="%(levelname)s %(name)s: %(message)s",
 )
 
+_direction_counts = {"LONG": 0, "SHORT": 0}
+_direction_lifetime = {"LONG": 0, "SHORT": 0}
+
 import httpx
 import pandas as pd
 import redis.asyncio as aioredis
@@ -391,7 +394,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     flow_metrics = order_flow.get(pair, {})
     # Inject price direction for direction-aware OI scoring
-    flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] >= candle["open"] else -1}
+    flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] > candle["open"] else (-1 if candle["close"] < candle["open"] else 0)}
 
     # Query flow history for contrarian bias RoC detection
     flow_history = []
@@ -768,6 +771,20 @@ def _log_pipeline_evaluation(
         "emitted": emitted,
     }
     logger.info(f"Pipeline evaluation: {json.dumps(log_data)}")
+
+    if emitted:
+        direction = "LONG" if final_score > 0 else "SHORT"
+        _direction_counts[direction] += 1
+        _direction_lifetime[direction] += 1
+        total = _direction_counts["LONG"] + _direction_counts["SHORT"]
+        if total >= 20:
+            long_c, short_c = _direction_counts["LONG"], _direction_counts["SHORT"]
+            lt_long, lt_short = _direction_lifetime["LONG"], _direction_lifetime["SHORT"]
+            lt_total = lt_long + lt_short
+            logger.info(f"Direction split (last {total}): LONG={long_c} ({round(long_c*100/total)}%) SHORT={short_c} ({round(short_c*100/total)}%)")
+            logger.info(f"Direction split (lifetime {lt_total}): LONG={lt_long} ({round(lt_long*100/lt_total)}%) SHORT={lt_short} ({round(lt_short*100/lt_total)}%)")
+            _direction_counts["LONG"] = 0
+            _direction_counts["SHORT"] = 0
 
 
 async def handle_candle(app: FastAPI, candle: dict):

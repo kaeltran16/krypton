@@ -268,3 +268,107 @@ class TestLevelProximityBoost:
                    "bb_pos": bb, "close": 100}
             score = compute_pattern_score(patterns, ctx)
             assert score >= 12  # never penalized
+
+
+class TestTrendAwarePatterns:
+    """Hammer/Inverted Hammer shape → different name depending on prior trend."""
+
+    def _downtrend_candles(self, final: dict) -> pd.DataFrame:
+        """10 padding candles forming a downtrend, then the final candle."""
+        rows = [
+            {"open": 120 - i * 2, "high": 121 - i * 2, "low": 118 - i * 2,
+             "close": 119 - i * 2, "volume": 50}
+            for i in range(10)
+        ]
+        rows.append(final)
+        return pd.DataFrame(rows)
+
+    def _uptrend_candles(self, final: dict) -> pd.DataFrame:
+        """10 padding candles forming an uptrend, then the final candle."""
+        rows = [
+            {"open": 90 + i * 2, "high": 91 + i * 2, "low": 88 + i * 2,
+             "close": 89 + i * 2, "volume": 50}
+            for i in range(10)
+        ]
+        rows.append(final)
+        return pd.DataFrame(rows)
+
+    def _flat_candles(self, final: dict) -> pd.DataFrame:
+        """10 padding candles with identical close, then the final candle."""
+        rows = [
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 50}
+            for _ in range(10)
+        ]
+        rows.append(final)
+        return pd.DataFrame(rows)
+
+    # -- Hammer shape (long lower shadow, small body at top, no upper shadow)
+    HAMMER_SHAPE = {"open": 100.3, "high": 100.5, "low": 90, "close": 100.5, "volume": 50}
+
+    # -- Inverted Hammer shape (long upper shadow, small body at bottom, no lower shadow)
+    INV_HAMMER_SHAPE = {"open": 100, "high": 110, "low": 100, "close": 100.2, "volume": 50}
+
+    def test_hammer_after_downtrend(self):
+        candles = self._downtrend_candles(self.HAMMER_SHAPE)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Hammer" in names
+        hammer = next(p for p in patterns if p["name"] == "Hammer")
+        assert hammer["bias"] == "bullish"
+        assert hammer["strength"] == 12
+
+    def test_hanging_man_after_uptrend(self):
+        candles = self._uptrend_candles(self.HAMMER_SHAPE)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Hanging Man" in names
+        hm = next(p for p in patterns if p["name"] == "Hanging Man")
+        assert hm["bias"] == "bearish"
+        assert hm["strength"] == 12
+
+    def test_inverted_hammer_after_downtrend(self):
+        candles = self._downtrend_candles(self.INV_HAMMER_SHAPE)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Inverted Hammer" in names
+        ih = next(p for p in patterns if p["name"] == "Inverted Hammer")
+        assert ih["bias"] == "bullish"
+        assert ih["strength"] == 10
+
+    def test_shooting_star_after_uptrend(self):
+        candles = self._uptrend_candles(self.INV_HAMMER_SHAPE)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Shooting Star" in names
+        ss = next(p for p in patterns if p["name"] == "Shooting Star")
+        assert ss["bias"] == "bearish"
+        assert ss["strength"] == 10
+
+    def test_hammer_shape_flat_market_suppressed(self):
+        candles = self._flat_candles(self.HAMMER_SHAPE)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Hammer" not in names
+        assert "Hanging Man" not in names
+
+    def test_inverted_hammer_shape_flat_market_suppressed(self):
+        candles = self._flat_candles(self.INV_HAMMER_SHAPE)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Inverted Hammer" not in names
+        assert "Shooting Star" not in names
+
+    def test_insufficient_lookback_suppressed(self):
+        """Fewer than 6 candles total → can't determine trend → no hammer patterns."""
+        rows = [
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 50}
+            for _ in range(2)
+        ]
+        rows.append(self.HAMMER_SHAPE)
+        candles = pd.DataFrame(rows)
+        patterns = detect_candlestick_patterns(candles)
+        names = [p["name"] for p in patterns]
+        assert "Hammer" not in names
+        assert "Hanging Man" not in names
+        assert "Inverted Hammer" not in names
+        assert "Shooting Star" not in names

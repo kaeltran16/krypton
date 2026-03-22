@@ -36,21 +36,29 @@ def _avg_body(df: pd.DataFrame, n: int = 10) -> float:
 # Single-candle patterns
 # ---------------------------------------------------------------------------
 
-def _detect_hammer(c, avg_b: float) -> dict | None:
+def _detect_hammer(c, avg_b: float, trend_dir: int) -> dict | None:
     body = _body(c)
     lower = _lower_shadow(c)
     upper = _upper_shadow(c)
     if body < avg_b * 0.5 and lower >= body * 2 and upper < body * 0.5:
-        return {"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12}
+        if trend_dir == 0:
+            return None
+        if trend_dir < 0:
+            return {"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12}
+        return {"name": "Hanging Man", "type": "candlestick", "bias": "bearish", "strength": 12}
     return None
 
 
-def _detect_inverted_hammer(c, avg_b: float) -> dict | None:
+def _detect_inverted_hammer(c, avg_b: float, trend_dir: int) -> dict | None:
     body = _body(c)
     upper = _upper_shadow(c)
     lower = _lower_shadow(c)
     if body < avg_b * 0.5 and upper >= body * 2 and lower < body * 0.5:
-        return {"name": "Inverted Hammer", "type": "candlestick", "bias": "bullish", "strength": 10}
+        if trend_dir == 0:
+            return None
+        if trend_dir < 0:
+            return {"name": "Inverted Hammer", "type": "candlestick", "bias": "bullish", "strength": 10}
+        return {"name": "Shooting Star", "type": "candlestick", "bias": "bearish", "strength": 10}
     return None
 
 
@@ -184,9 +192,26 @@ def detect_candlestick_patterns(candles: pd.DataFrame) -> list[dict]:
     prev = df.iloc[-2]
     third = df.iloc[-3] if len(df) >= 3 else None
 
-    # Single-candle
-    for detector in (_detect_hammer, _detect_inverted_hammer, _detect_doji,
-                     _detect_spinning_top, _detect_marubozu):
+    # Compute trend direction for hammer-family patterns
+    if len(df) >= 6:
+        trend_change = curr["close"] - float(df.iloc[-6]["close"])
+        if trend_change > 0:
+            trend_dir = 1
+        elif trend_change < 0:
+            trend_dir = -1
+        else:
+            trend_dir = 0
+    else:
+        trend_dir = 0
+
+    # Trend-aware single-candle (hammer family)
+    for detector in (_detect_hammer, _detect_inverted_hammer):
+        result = detector(curr, avg_b, trend_dir)
+        if result:
+            patterns.append(result)
+
+    # Uniform single-candle (no trend context needed)
+    for detector in (_detect_doji, _detect_spinning_top, _detect_marubozu):
         result = detector(curr, avg_b)
         if result:
             patterns.append(result)

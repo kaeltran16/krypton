@@ -86,9 +86,11 @@ PATTERN_STRENGTHS = {
     "three_black_crows": 15,
     "marubozu": 13,
     "hammer": 12,
+    "hanging_man": 12,
     "piercing_line": 12,
     "dark_cloud_cover": 12,
     "inverted_hammer": 10,
+    "shooting_star": 10,
     "doji": 8,
     "spinning_top": 5,
 }

@@ -27,7 +27,7 @@ Indicator-ML Agreement: {agreement}
 {candles}
 
 ## Instructions
-The quantitative signals already flagged a {direction} setup. Your job is to identify specific factors that support or undermine this trade.
+The quantitative signals produced a {direction} bias with score {blended_score}. Your job is to independently evaluate whether the data supports this direction, or if factors suggest caution or contradiction.
 
 Analyze the data and return 1-5 factors from the following types:
 
@@ -61,7 +61,7 @@ Also provide:
 - "explanation": 2-3 sentence overall analysis
 - "levels": object with "entry", "stop_loss", "take_profit_1", "take_profit_2" as numbers. Base these on the price action, support/resistance from the candles, and ATR. Do NOT just copy the current price +/- a fixed offset.
 
-Only report factors you actually see evidence for in the data. Do not invent factors. If you see no clear factors against the trade, report supporting factors only.
+Only report factors you actually see evidence for in the data. Do not invent factors. Report all factors you see evidence for, whether they support or undermine the setup.
 
 Respond ONLY with the JSON object, no other text.
 
