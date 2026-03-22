@@ -1,29 +1,59 @@
 import { useState } from "react";
 import ParameterRow from "./ParameterRow";
 
+type Variant = "hero" | "standard" | "sub";
+
+const VARIANT_STYLES: Record<Variant, { container: string; header: string; indent: string }> = {
+  hero: {
+    container: "border-l-2 border-primary bg-surface-container",
+    header: "text-on-surface font-semibold",
+    indent: "",
+  },
+  standard: {
+    container: "border border-outline-variant/50 bg-surface-container-low",
+    header: "text-on-surface font-medium",
+    indent: "",
+  },
+  sub: {
+    container: "border border-outline-variant/30 bg-surface-container/30",
+    header: "text-on-surface-variant text-sm",
+    indent: "ml-2",
+  },
+};
+
 interface Props {
   title: string;
+  variant?: Variant;
   defaultOpen?: boolean;
   children?: React.ReactNode;
   params?: Record<string, { value: unknown; source: "hardcoded" | "configurable" }>;
 }
 
-export default function ParameterCategory({ title, defaultOpen = false, children, params }: Props) {
+export default function ParameterCategory({
+  title,
+  variant = "standard",
+  defaultOpen = false,
+  children,
+  params,
+}: Props) {
   const [open, setOpen] = useState(defaultOpen);
-
+  const styles = VARIANT_STYLES[variant];
   const entries = params ? Object.entries(params) : [];
 
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden mb-2">
+    <div className={`rounded-lg overflow-hidden ${styles.indent} ${styles.container}`}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2.5 bg-surface/50 hover:bg-surface transition-colors"
+        aria-expanded={open}
+        className={`w-full flex items-center justify-between px-3 py-3 hover:bg-surface-container-high/30 transition-colors text-sm ${styles.header}`}
       >
-        <span className="text-sm font-medium text-foreground">{title}</span>
-        <span className="text-muted text-xs">{open ? "\u2212" : "+"}</span>
+        <span>{title}</span>
+        <span className="text-on-surface-variant text-xs">{open ? "\u2212" : "+"}</span>
       </button>
-      {open && (
-        <div>
+      <div
+        className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="overflow-hidden">
           {params &&
             entries.map(([key, param], i) => (
               <ParameterRow
@@ -31,12 +61,12 @@ export default function ParameterCategory({ title, defaultOpen = false, children
                 name={key}
                 value={param.value}
                 source={param.source}
-                last={i === entries.length - 1}
+                last={i === entries.length - 1 && !children}
               />
             ))}
           {children}
         </div>
-      )}
+      </div>
     </div>
   );
 }

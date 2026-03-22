@@ -21,12 +21,19 @@ import { LoginScreen } from "./features/auth/components/LoginScreen";
 export default function App() {
   const { isLoading, isAuthenticated, login } = useAuth();
 
+  useEffect(() => {
+    if (!isLoading) {
+      const splash = document.getElementById("splash");
+      if (splash) {
+        splash.classList.add("hide");
+        const timer = setTimeout(() => splash.remove(), 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoading]);
+
   if (isLoading) {
-    return (
-      <div className="min-h-dvh flex items-center justify-center bg-[#0a0f14]">
-        <div className="w-8 h-8 border-2 border-[#69daff] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null; // index.html splash is still visible
   }
 
   if (!isAuthenticated) {

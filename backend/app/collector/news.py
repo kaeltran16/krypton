@@ -334,16 +334,6 @@ class NewsCollector:
                     result = await session.execute(stmt)
                     await session.flush()
 
-                    # Alert for high impact
-                    if h.get("impact") == "high" and result.rowcount > 0:
-                        # Get the inserted row ID
-                        row = await session.execute(
-                            select(NewsEvent).where(NewsEvent.url == h["url"])
-                        )
-                        news_event = row.scalar_one_or_none()
-                        if news_event and news_event.alerted_at is None:
-                            await self._broadcast_alert(news_event)
-                            news_event.alerted_at = datetime.now(timezone.utc)
                 except Exception as e:
                     logger.error(f"Failed to persist news: {h.get('headline', '?')}: {e}")
 

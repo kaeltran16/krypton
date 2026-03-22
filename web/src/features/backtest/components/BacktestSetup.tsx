@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useBacktestStore } from "../store";
 import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
+import { formatPair } from "../../../shared/lib/format";
 import ParameterOverridePanel from "./ParameterOverridePanel";
 import { Toggle } from "../../../shared/components/Toggle";
 
@@ -46,7 +47,7 @@ export function BacktestSetup() {
                   : "bg-surface-container-lowest border-outline-variant/20"
               }`}
             >
-              <span className="text-sm font-medium text-on-surface">{pair.replace("-USDT-SWAP", "")}/USDT</span>
+              <span className="text-sm font-medium text-on-surface">{formatPair(pair)}/USDT</span>
               {config.pairs.includes(pair) && (
                 <span className="text-primary text-xs font-bold">&#10003;</span>
               )}
@@ -99,7 +100,7 @@ export function BacktestSetup() {
       </Section>
 
       {/* Scoring Weights */}
-      <Section title="Scoring Weights">
+      <Section title="Scoring Weights" collapsible summary={`Tech ${config.tech_weight}% / Pattern ${config.pattern_weight}%`}>
         <WeightSlider
           label="Technical"
           value={config.tech_weight}
@@ -133,7 +134,7 @@ export function BacktestSetup() {
       </Section>
 
       {/* Thresholds */}
-      <Section title="Thresholds">
+      <Section title="Thresholds" collapsible summary={`Signal \u2265 ${config.signal_threshold}`}>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-on-surface">Signal Threshold</span>
           <span className="text-sm font-mono text-primary font-bold">{config.signal_threshold}</span>
@@ -153,7 +154,7 @@ export function BacktestSetup() {
       </Section>
 
       {/* ML Blending */}
-      <Section title="ML Blending">
+      <Section title="ML Blending" collapsible summary={config.ml_enabled ? `On \u00b7 \u2265 ${config.ml_confidence_threshold}%` : "Off"}>
         <div className="flex items-center justify-between">
           <span className="text-sm text-on-surface">Blend ML predictions</span>
           <Toggle checked={config.ml_enabled} onChange={() => updateConfig({ ml_enabled: !config.ml_enabled })} />
@@ -184,7 +185,7 @@ export function BacktestSetup() {
       </Section>
 
       {/* Indicators */}
-      <Section title="Indicators">
+      <Section title="Indicators" collapsible summary={`ADX RSI BB OBV${config.enable_patterns ? " + Patterns" : ""}`}>
         <div className="flex gap-1.5 flex-wrap">
           {INDICATORS.map(({ key, label }) => (
             <button
@@ -208,7 +209,7 @@ export function BacktestSetup() {
       </Section>
 
       {/* Risk / Levels */}
-      <Section title="Risk & Levels">
+      <Section title="Risk & Levels" collapsible summary={`SL ${config.sl_atr_multiplier}x \u00b7 TP1 ${config.tp1_atr_multiplier}x \u00b7 TP2 ${config.tp2_atr_multiplier}x \u00b7 Max ${config.max_concurrent_positions}`}>
         <NumberInput
           label="SL (ATR x)"
           value={config.sl_atr_multiplier}
@@ -244,7 +245,7 @@ export function BacktestSetup() {
       </Section>
 
       {/* Import Data */}
-      <Section title="Historical Data">
+      <Section title="Historical Data" collapsible summary={importStatus ? `${importStatus.total_imported} candles imported` : "No data imported"}>
         <button
           onClick={() => setShowImport(!showImport)}
           className="text-sm text-primary underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
@@ -323,11 +324,70 @@ export function BacktestSetup() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  collapsible,
+  defaultOpen = false,
+  summary,
+}: {
+  title: string;
+  children: React.ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  summary?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(!collapsible || defaultOpen);
+  const contentId = useId();
+
+  if (!collapsible) {
+    return (
+      <div>
+        <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">
+          {title}
+        </h3>
+        <div className="bg-surface-container p-5 rounded">{children}</div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">{title}</h3>
-      <div className="bg-surface-container p-5 rounded">{children}</div>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-controls={contentId}
+        className="w-full flex items-center gap-2 mb-1.5 px-1 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          className={`text-on-surface-variant transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+        >
+          <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider text-on-surface-variant flex-1">
+          {title}
+        </h3>
+        {!isOpen && summary && (
+          <span className="text-[10px] text-on-surface-variant/70 font-mono truncate max-w-[60%] text-right">
+            {summary}
+          </span>
+        )}
+      </button>
+      <div
+        id={contentId}
+        role="region"
+        className={`grid motion-reduce:transition-none transition-[grid-template-rows] duration-200 ease-out ${
+          isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="bg-surface-container p-5 rounded">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }

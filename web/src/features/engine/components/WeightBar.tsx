@@ -5,28 +5,30 @@ interface Props {
 }
 
 export default function WeightBar({ weights }: Props) {
-  const entries = Object.entries(weights);
+  const items = Object.entries(weights).map(([name, w], i) => ({
+    name,
+    pct: Number(w.value) * 100,
+    color: COLORS[i % COLORS.length],
+  }));
+
+  const ariaLabel = "Source weights: " +
+    items.map((it) => `${it.name} ${it.pct.toFixed(0)}%`).join(", ");
+
   return (
     <div className="px-3 py-2">
-      <div className="flex h-5 rounded overflow-hidden">
-        {entries.map(([name, w], i) => {
-          const v = Number(w.value);
-          return (
-            <div
-              key={name}
-              style={{ width: `${v * 100}%`, backgroundColor: COLORS[i % COLORS.length] }}
-              className="flex items-center justify-center text-[9px] font-medium text-black"
-              title={`${name}: ${(v * 100).toFixed(0)}%`}
-            >
-              {(v * 100).toFixed(0)}%
-            </div>
-          );
-        })}
+      <div className="flex h-5 rounded overflow-hidden" role="img" aria-label={ariaLabel}>
+        {items.map((it) => (
+          <div
+            key={it.name}
+            style={{ width: `${it.pct}%`, backgroundColor: it.color }}
+            className="h-full"
+          />
+        ))}
       </div>
       <div className="flex justify-between mt-1">
-        {entries.map(([name], i) => (
-          <span key={name} className="text-[10px] text-muted" style={{ color: COLORS[i % COLORS.length] }}>
-            {name}
+        {items.map((it) => (
+          <span key={it.name} className="text-[10px]" style={{ color: it.color }}>
+            {it.name} ({it.pct.toFixed(0)}%)
           </span>
         ))}
       </div>

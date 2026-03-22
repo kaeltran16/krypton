@@ -8,19 +8,17 @@ import { BacktestView } from "../../backtest/components/BacktestView";
 import { MLTrainingView } from "../../ml/components/MLTrainingView";
 import { AlertsPage } from "../../alerts/components/AlertsPage";
 import { JournalView } from "../../signals/components/JournalView";
-import { EngineDashboard } from "../../engine/components/EngineDashboard";
 import { SystemDiagnostics } from "../../system/components/SystemDiagnostics";
 import { hapticTap } from "../../../shared/lib/haptics";
 
-type SubPage = "engine" | "engine-dashboard" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | null;
+type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | null;
 
 const CLUSTERS = [
   {
     label: "Execution Layer",
     items: [
       { key: "engine" as SubPage, icon: Cpu, label: "Engine", desc: "Pipeline parameters & weights", color: "text-primary" },
-      { key: "engine-dashboard" as SubPage, icon: Activity, label: "Engine Dashboard", desc: "Live parameter monitoring", color: "text-primary" },
-      { key: "backtest" as SubPage, icon: LineChart, label: "Backtest", desc: "Historical simulation hub", color: "text-tertiary-dim" },
+      { key: "backtest" as SubPage, icon: LineChart, label: "Backtest", desc: "Historical simulation hub", color: "text-primary" },
     ],
   },
   {
@@ -35,7 +33,7 @@ const CLUSTERS = [
     label: "Safety & Security",
     items: [
       { key: "risk" as SubPage, icon: Shield, label: "Risk", desc: "Exposure limits & controls", color: "text-primary" },
-      { key: "system" as SubPage, icon: Activity, label: "System", desc: "Health & diagnostics", color: "text-tertiary-dim" },
+      { key: "system" as SubPage, icon: Activity, label: "System", desc: "Health & diagnostics", color: "text-primary" },
       { key: "settings" as SubPage, icon: Settings, label: "Settings", desc: "Global system preferences", color: "text-outline" },
     ],
   },
@@ -43,7 +41,6 @@ const CLUSTERS = [
 
 const PAGE_TITLES: Record<string, string> = {
   engine: "Engine Parameters",
-  "engine-dashboard": "Engine Dashboard",
   backtest: "Backtest",
   ml: "ML Training",
   alerts: "Alerts",
@@ -60,7 +57,6 @@ export function MorePage() {
     return (
       <SubPageShell title={PAGE_TITLES[activePage] ?? ""} onBack={() => setActivePage(null)}>
         {activePage === "engine" && <EnginePage />}
-        {activePage === "engine-dashboard" && <EngineDashboard />}
         {activePage === "backtest" && <BacktestView />}
         {activePage === "ml" && <MLTrainingView />}
         {activePage === "alerts" && <AlertsPage />}

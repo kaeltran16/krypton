@@ -43,13 +43,13 @@ export default function ParameterOverridePanel({ overrides, onChange }: Props) {
   };
 
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden">
+    <div className="border border-outline-variant/30 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2.5 bg-surface/50"
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-surface-container/50"
       >
-        <span className="text-xs font-medium text-muted">Advanced: Parameter Overrides</span>
-        <span className="text-muted text-xs">{open ? "\u2212" : "+"}</span>
+        <span className="text-xs font-medium text-on-surface-variant">Advanced: Parameter Overrides</span>
+        <span className="text-on-surface-variant text-xs">{open ? "\u2212" : "+"}</span>
       </button>
       {open && (
         <div className="p-3 space-y-2">
@@ -58,15 +58,15 @@ export default function ParameterOverridePanel({ overrides, onChange }: Props) {
             const edited = path in overrides;
             return (
               <div key={path} className="flex items-center justify-between">
-                <span className={`text-xs ${edited ? "text-foreground" : "text-muted"}`}>{label}</span>
+                <span className={`text-xs ${edited ? "text-on-surface" : "text-on-surface-variant"}`}>{label}</span>
                 <input
                   type="number"
                   step="any"
                   placeholder={live?.toString() ?? ""}
                   value={overrides[path] ?? ""}
                   onChange={(e) => handleChange(path, e.target.value)}
-                  className={`w-20 text-right text-xs font-mono px-2 py-1 bg-surface border rounded ${
-                    edited ? "border-accent text-accent" : "border-border text-muted"
+                  className={`w-20 text-right text-xs font-mono px-2 py-1 bg-surface-container border rounded ${
+                    edited ? "border-primary text-primary" : "border-outline-variant text-on-surface-variant"
                   }`}
                 />
               </div>
@@ -74,7 +74,7 @@ export default function ParameterOverridePanel({ overrides, onChange }: Props) {
           })}
           <button
             onClick={() => onChange({})}
-            className="text-xs text-muted hover:text-foreground"
+            className="text-xs text-on-surface-variant hover:text-on-surface"
           >
             Reset to Live
           </button>

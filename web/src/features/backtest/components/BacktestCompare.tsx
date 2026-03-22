@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { formatDuration } from "../../../shared/lib/format";
+import { useEffect, useRef, useMemo } from "react";
+import { formatDuration, formatPair } from "../../../shared/lib/format";
 import {
   createChart,
   LineSeries,
@@ -9,9 +9,14 @@ import {
 } from "lightweight-charts";
 import { useBacktestStore } from "../store";
 import { theme } from "../../../shared/theme";
-import type { BacktestRun, BacktestStats } from "../types";
+import type { BacktestRun, BacktestStats, BacktestConfig } from "../types";
 
 const CURVE_COLORS = theme.indicators.curveColors;
+
+function configLabel(config: BacktestConfig): string {
+  const pairs = config.pairs.map(formatPair).join(", ");
+  return `${pairs} \u00b7 ${config.timeframe} \u00b7 Thresh ${config.signal_threshold} \u00b7 SL ${config.sl_atr_multiplier}x`;
+}
 
 const METRIC_ROWS: { label: string; key: keyof BacktestStats; format: (v: any) => string; higherBetter: boolean }[] = [
   { label: "Total Trades", key: "total_trades", format: (v) => String(v), higherBetter: true },
@@ -69,13 +74,13 @@ export function BacktestCompare() {
               />
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-on-surface truncate">
-                  {run.pairs.map((p) => p.replace("-USDT-SWAP", "")).join(", ")} · {run.timeframe}
+                  {run.pairs.map(formatPair).join(", ")} · {run.timeframe}
                 </div>
                 <div className="text-[10px] text-on-surface-variant">
                   {new Date(run.created_at).toLocaleDateString()} · {run.total_trades} trades · {run.win_rate.toFixed(1)}% WR
                 </div>
               </div>
-              <span className={`text-sm font-mono tabular-nums ${run.net_pnl >= 0 ? "text-tertiary-dim" : "text-error"}`}>
+              <span className={`text-sm font-mono tabular-nums ${run.net_pnl >= 0 ? "text-long" : "text-error"}`}>
                 {run.net_pnl >= 0 ? "+" : ""}{run.net_pnl.toFixed(2)}%
               </span>
               <button
@@ -106,6 +111,7 @@ export function BacktestCompare() {
       {compareResult && compareResult.length >= 2 && (
         <>
           <CompareEquityCurves runs={compareResult} />
+          <ConfigDiff runs={compareResult} />
           <CompareTable runs={compareResult} />
         </>
       )}
@@ -125,10 +131,15 @@ function CompareTable({ runs }: { runs: BacktestRun[] }) {
               {runs.map((run, i) => (
                 <th key={run.id} className="text-right px-3 py-2">
                   <div className="flex items-center justify-end gap-1.5">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CURVE_COLORS[i] }} />
-                    <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider">
-                      Run {i + 1}
-                    </span>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CURVE_COLORS[i] }} />
+                    <div className="text-right">
+                      <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider block">
+                        Run {i + 1}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant/70 font-mono block truncate max-w-[200px]">
+                        {configLabel(run.config)}
+                      </span>
+                    </div>
                   </div>
                 </th>
               ))}
@@ -238,13 +249,83 @@ function CompareEquityCurves({ runs }: { runs: BacktestRun[] }) {
         <div className="flex items-center gap-4 px-3 py-2 border-t border-outline-variant/10">
           {runs.map((run, i) => (
             <div key={run.id} className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CURVE_COLORS[i] }} />
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CURVE_COLORS[i] }} />
               <span className="text-[10px] text-on-surface-variant">
-                {run.pairs.map((p) => p.replace("-USDT-SWAP", "")).join(",")} · {run.timeframe}
+                Run {i + 1}: {configLabel(run.config)}
               </span>
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const CONFIG_DIFF_KEYS: { key: keyof BacktestConfig; label: string }[] = [
+  { key: "signal_threshold", label: "Signal Threshold" },
+  { key: "tech_weight", label: "Tech Weight" },
+  { key: "pattern_weight", label: "Pattern Weight" },
+  { key: "enable_patterns", label: "Patterns Enabled" },
+  { key: "sl_atr_multiplier", label: "SL (ATR x)" },
+  { key: "tp1_atr_multiplier", label: "TP1 (ATR x)" },
+  { key: "tp2_atr_multiplier", label: "TP2 (ATR x)" },
+  { key: "max_concurrent_positions", label: "Max Positions" },
+  { key: "ml_enabled", label: "ML Enabled" },
+  { key: "ml_confidence_threshold", label: "ML Confidence" },
+];
+
+function ConfigDiff({ runs }: { runs: BacktestRun[] }) {
+  const diffs = useMemo(() => {
+    return CONFIG_DIFF_KEYS.filter(({ key }) => {
+      const values = runs.map((r) => String(r.config[key]));
+      return new Set(values).size > 1;
+    });
+  }, [runs]);
+
+  return (
+    <div>
+      <h3 className="text-[10px] font-headline font-bold uppercase tracking-wider mb-1.5 px-1 text-on-surface-variant">Config Differences</h3>
+      <div className="bg-surface-container rounded-lg border border-outline-variant/10 overflow-x-auto">
+        {diffs.length === 0 ? (
+          <p className="px-3 py-4 text-sm text-on-surface-variant text-center">All parameters identical across runs</p>
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-outline-variant/10">
+                  <th className="text-left px-3 py-2 text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider">Parameter</th>
+                  {runs.map((run, i) => (
+                    <th key={run.id} className="text-right px-3 py-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CURVE_COLORS[i] }} />
+                        <span className="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-wider">Run {i + 1}</span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {diffs.map(({ key, label }) => (
+                  <tr key={key} className="border-b border-outline-variant/10 last:border-0">
+                    <td className="px-3 py-2 text-on-surface-variant">{label}</td>
+                    {runs.map((run, i) => (
+                      <td
+                        key={run.id}
+                        className="px-3 py-2 text-right font-mono tabular-nums font-bold"
+                        style={{ color: CURVE_COLORS[i] }}
+                      >
+                        {String(run.config[key])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="px-3 py-2 text-[10px] text-on-surface-variant border-t border-outline-variant/10">
+              {diffs.length} of {CONFIG_DIFF_KEYS.length} parameters differ — identical parameters hidden
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

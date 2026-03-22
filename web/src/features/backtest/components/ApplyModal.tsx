@@ -44,17 +44,17 @@ export default function ApplyModal({ changes, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-card rounded-xl p-4 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+      <div className="bg-surface-container rounded-xl p-4 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
         <h3 className="text-sm font-medium mb-3">
           {applied ? "Changes Applied" : "Review Parameter Changes"}
         </h3>
 
-        {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+        {error && <p className="text-xs text-error mb-2">{error}</p>}
 
         {diff && (
           <table className="w-full text-xs mb-3">
             <thead>
-              <tr className="text-muted border-b border-border">
+              <tr className="text-on-surface-variant border-b border-outline-variant">
                 <th className="text-left py-1">Parameter</th>
                 <th className="text-right py-1">Current</th>
                 <th className="text-right py-1">Proposed</th>
@@ -62,10 +62,10 @@ export default function ApplyModal({ changes, onClose }: Props) {
             </thead>
             <tbody>
               {diff.map((d) => (
-                <tr key={d.path} className="border-b border-border/30">
-                  <td className="py-1.5 text-muted font-mono">{d.path.split(".").pop()}</td>
+                <tr key={d.path} className="border-b border-outline-variant/10">
+                  <td className="py-1.5 text-on-surface-variant font-mono">{d.path.split(".").pop()}</td>
                   <td className="text-right py-1.5 font-mono">{d.current ?? "\u2014"}</td>
-                  <td className="text-right py-1.5 font-mono text-accent">{d.proposed}</td>
+                  <td className="text-right py-1.5 font-mono text-primary">{d.proposed}</td>
                 </tr>
               ))}
             </tbody>
@@ -73,14 +73,14 @@ export default function ApplyModal({ changes, onClose }: Props) {
         )}
 
         <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-muted hover:text-foreground">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">
             {applied ? "Close" : "Cancel"}
           </button>
           {!applied && diff && (
             <button
               onClick={confirm}
               disabled={loading}
-              className="px-3 py-1.5 text-xs bg-accent/20 text-accent rounded-lg hover:bg-accent/30 disabled:opacity-50"
+              className="px-3 py-1.5 text-xs bg-primary/15 text-primary rounded-lg hover:bg-primary/30 disabled:opacity-50"
             >
               {loading ? "Applying..." : "Confirm Apply"}
             </button>
