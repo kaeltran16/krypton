@@ -169,6 +169,22 @@ export interface RiskCheckResult {
   rules: RiskRule[];
 }
 
+export interface RiskState {
+  equity: number;
+  daily_pnl_pct: number;
+  open_positions_count: number;
+  total_exposure_usd: number;
+  exposure_pct: number;
+  last_sl_hit_at: string | null;
+}
+
+export interface RiskStatus {
+  settings: RiskSettings;
+  state: RiskState;
+  rules: RiskRule[];
+  overall_status: "OK" | "WARNING" | "BLOCKED";
+}
+
 export interface OrderRequest {
   pair: string;
   side: "buy" | "sell";
@@ -241,6 +257,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(params),
     }),
+
+  getRiskStatus: () => request<RiskStatus>("/api/risk/status"),
 
   getCandles: (pair: string, timeframe: string, limit = 200) => {
     const query = new URLSearchParams({ pair, timeframe, limit: String(limit) });

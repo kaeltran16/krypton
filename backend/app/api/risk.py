@@ -1,10 +1,11 @@
 """Risk management API routes: settings CRUD and risk check endpoint."""
 
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from app.api.auth import require_auth
 from app.db.models import RiskSettings, Signal
@@ -158,3 +159,202 @@ async def check_risk(
         raise
     except Exception as e:
         raise HTTPException(502, f"Risk check failed: {str(e)}")
+
+
+class RiskStateResponse(BaseModel):
+    equity: float
+    daily_pnl_pct: float
+    open_positions_count: int
+    total_exposure_usd: float
+    exposure_pct: float
+    last_sl_hit_at: str | None
+
+
+class RiskRuleResponse(BaseModel):
+    rule: str
+    status: str  # "OK" | "WARNING" | "BLOCKED"
+    reason: str
+
+
+class RiskStatusResponse(BaseModel):
+    settings: dict
+    state: RiskStateResponse
+    rules: list[RiskRuleResponse]
+    overall_status: str  # "OK" | "WARNING" | "BLOCKED"
+
+
+@router.get("/status")
+async def get_risk_status(request: Request, _user=require_auth()):
+    db = request.app.state.db
+    okx = request.app.state.okx_client
+
+    # 1. Load risk settings + daily P&L + last SL hit (single session)
+    async with db.session_factory() as session:
+        result = await session.execute(
+            select(RiskSettings).where(RiskSettings.id == 1)
+        )
+        rs = result.scalar_one_or_none()
+        if not rs:
+            raise HTTPException(500, "Risk settings not initialized")
+
+        settings_dict = _settings_to_dict(rs)
+
+        # Daily P&L from resolved signals
+        today_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        result = await session.execute(
+            select(Signal).where(
+                and_(
+                    Signal.outcome.in_(["TP1_HIT", "TP2_HIT", "SL_HIT"]),
+                    Signal.outcome_at >= today_start,
+                )
+            )
+        )
+        resolved = result.scalars().all()
+
+        # Last SL hit timestamp (for cooldown)
+        last_sl_hit_dt = None
+        if rs.cooldown_after_loss_minutes:
+            result = await session.execute(
+                select(Signal)
+                .where(Signal.outcome == "SL_HIT")
+                .order_by(Signal.outcome_at.desc())
+                .limit(1)
+            )
+            last_sl = result.scalar_one_or_none()
+            if last_sl and last_sl.outcome_at:
+                last_sl_hit_dt = last_sl.outcome_at
+
+    # 2. Compute daily P&L
+    daily_pnl_pct = 0.0
+    if resolved:
+        raw_sum = sum(
+            float(s.outcome_pnl_pct) for s in resolved if s.outcome_pnl_pct is not None
+        )
+        # DB stores percentage values (e.g. -1.5 for -1.5%), convert to decimal fraction
+        daily_pnl_pct = raw_sum / 100.0
+
+    # 3. Gather live state from OKX (zeros if unavailable)
+    equity = 0.0
+    open_positions_count = 0
+    total_exposure_usd = 0.0
+    exposure_pct = 0.0
+
+    if okx:
+        try:
+            balance, positions = await asyncio.gather(
+                okx.get_balance(), okx.get_positions()
+            )
+            equity = balance["total_equity"] if balance else 0.0
+            open_positions_count = len(positions)
+            total_exposure_usd = sum(
+                abs(p.get("size", 0) * p.get("mark_price", 0)) for p in positions
+            )
+            exposure_pct = total_exposure_usd / equity if equity > 0 else 0.0
+        except Exception:
+            pass
+
+    # 5. Evaluate rules
+    rules = []
+
+    # daily_loss_limit
+    usage_pct = abs(daily_pnl_pct) / rs.daily_loss_limit_pct if rs.daily_loss_limit_pct else 0
+    remaining_pct = (rs.daily_loss_limit_pct - abs(daily_pnl_pct)) * 100
+    if abs(daily_pnl_pct) >= rs.daily_loss_limit_pct:
+        rules.append(RiskRuleResponse(
+            rule="daily_loss_limit",
+            status="BLOCKED",
+            reason=f"Daily P&L {daily_pnl_pct*100:.1f}% hit {rs.daily_loss_limit_pct*100:.0f}% limit",
+        ))
+    elif usage_pct > 0.7:
+        rules.append(RiskRuleResponse(
+            rule="daily_loss_limit",
+            status="WARNING",
+            reason=f"Daily P&L {daily_pnl_pct*100:.1f}%, {remaining_pct:.1f}% remaining",
+        ))
+    else:
+        rules.append(RiskRuleResponse(
+            rule="daily_loss_limit",
+            status="OK",
+            reason=f"Daily P&L {daily_pnl_pct*100:.1f}%, {remaining_pct:.1f}% remaining",
+        ))
+
+    # max_concurrent
+    if open_positions_count >= rs.max_concurrent_positions:
+        rules.append(RiskRuleResponse(
+            rule="max_concurrent",
+            status="BLOCKED",
+            reason=f"{open_positions_count}/{rs.max_concurrent_positions} positions open",
+        ))
+    elif (
+        open_positions_count >= rs.max_concurrent_positions - 1
+        and rs.max_concurrent_positions >= 3
+    ):
+        rules.append(RiskRuleResponse(
+            rule="max_concurrent",
+            status="WARNING",
+            reason=f"{open_positions_count}/{rs.max_concurrent_positions} positions open",
+        ))
+    else:
+        rules.append(RiskRuleResponse(
+            rule="max_concurrent",
+            status="OK",
+            reason=f"{open_positions_count}/{rs.max_concurrent_positions} positions open",
+        ))
+
+    # max_exposure
+    exp_usage = exposure_pct / rs.max_exposure_pct if rs.max_exposure_pct else 0
+    if exposure_pct > rs.max_exposure_pct:
+        rules.append(RiskRuleResponse(
+            rule="max_exposure",
+            status="BLOCKED",
+            reason=f"Exposure {exposure_pct*100:.0f}% exceeds {rs.max_exposure_pct*100:.0f}% limit",
+        ))
+    elif exp_usage > 0.8:
+        rules.append(RiskRuleResponse(
+            rule="max_exposure",
+            status="WARNING",
+            reason=f"Exposure {exposure_pct*100:.0f}% approaching {rs.max_exposure_pct*100:.0f}% limit",
+        ))
+    else:
+        rules.append(RiskRuleResponse(
+            rule="max_exposure",
+            status="OK",
+            reason=f"Exposure {exposure_pct*100:.0f}% of {rs.max_exposure_pct*100:.0f}% limit",
+        ))
+
+    # cooldown (omitted when not configured or not triggered)
+    if rs.cooldown_after_loss_minutes and last_sl_hit_dt:
+        elapsed = (datetime.now(timezone.utc) - last_sl_hit_dt).total_seconds()
+        remaining = rs.cooldown_after_loss_minutes * 60 - elapsed
+        if remaining > 0:
+            mins_left = int(remaining // 60)
+            rules.append(RiskRuleResponse(
+                rule="cooldown",
+                status="WARNING",
+                reason=f"Cooldown active, {mins_left}min remaining",
+            ))
+
+    # 6. Overall status
+    statuses = [r.status for r in rules]
+    if "BLOCKED" in statuses:
+        overall = "BLOCKED"
+    elif "WARNING" in statuses:
+        overall = "WARNING"
+    else:
+        overall = "OK"
+
+    return RiskStatusResponse(
+        settings=settings_dict,
+        state=RiskStateResponse(
+            equity=equity,
+            daily_pnl_pct=daily_pnl_pct,
+            open_positions_count=open_positions_count,
+            total_exposure_usd=total_exposure_usd,
+            exposure_pct=exposure_pct,
+            last_sl_hit_at=last_sl_hit_dt.isoformat() if last_sl_hit_dt else None,
+        ),
+        rules=rules,
+        overall_status=overall,
+    )
