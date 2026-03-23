@@ -332,6 +332,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         tech_result = compute_technical_score(
             df, regime_weights=regime_weights,
             scoring_params=scoring_params or None,
+            timeframe=timeframe,
         )
     except Exception as e:
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
@@ -414,6 +415,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         flow_metrics,
         regime=tech_result["regime"],
         flow_history=flow_history,
+        trend_conviction=tech_result["indicators"].get("trend_conviction", 0.0),
     )
 
     # Persist order flow snapshot for ML training data

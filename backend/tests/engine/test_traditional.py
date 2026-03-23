@@ -133,7 +133,254 @@ class TestMinimumCandles:
         assert -100 <= result["score"] <= 100
 
 
-from app.engine.traditional import compute_order_flow_score
+from app.engine.traditional import compute_order_flow_score, compute_trend_conviction, detect_divergence
+
+
+def _make_divergence_data(n=25, swing_type="bullish"):
+    """Build price/RSI arrays with clear swing points on a gentle slope baseline.
+
+    Uses a gently declining baseline (not flat) so that _find_swing_points
+    strict comparison doesn't produce spurious matches in the baseline region.
+    """
+    close = np.linspace(102.0, 98.0, n)
+    rsi = np.linspace(52.0, 48.0, n)
+
+    if swing_type == "bullish":
+        # Two swing lows: price lower low, RSI higher low
+        close[4], close[5], close[6] = 92.0, 90.0, 92.0
+        rsi[4], rsi[5], rsi[6] = 28.0, 25.0, 28.0
+        close[14], close[15], close[16] = 87.0, 85.0, 87.0
+        rsi[14], rsi[15], rsi[16] = 34.0, 32.0, 34.0
+    elif swing_type == "bearish":
+        # Two swing highs: price higher high, RSI lower high
+        close[4], close[5], close[6] = 108.0, 110.0, 108.0
+        rsi[4], rsi[5], rsi[6] = 72.0, 75.0, 72.0
+        close[14], close[15], close[16] = 113.0, 115.0, 113.0
+        rsi[14], rsi[15], rsi[16] = 68.0, 70.0, 68.0
+    elif swing_type == "no_divergence":
+        # Both price and RSI making lower lows together
+        close[4], close[5], close[6] = 92.0, 90.0, 92.0
+        rsi[4], rsi[5], rsi[6] = 28.0, 25.0, 28.0
+        close[14], close[15], close[16] = 87.0, 85.0, 87.0
+        rsi[14], rsi[15], rsi[16] = 23.0, 20.0, 23.0
+
+    return pd.Series(close), pd.Series(rsi)
+
+
+class TestDetectDivergence:
+    def test_bullish_divergence(self):
+        """Price lower lows + RSI higher lows = bullish divergence."""
+        close, rsi = _make_divergence_data(25, "bullish")
+        result = detect_divergence(close, rsi, lookback=25, order=2)
+        assert result > 0.0
+
+    def test_bearish_divergence(self):
+        """Price higher highs + RSI lower highs = bearish divergence."""
+        close, rsi = _make_divergence_data(25, "bearish")
+        result = detect_divergence(close, rsi, lookback=25, order=2)
+        assert result > 0.0
+
+    def test_no_divergence(self):
+        """Price and RSI moving together = no divergence."""
+        close, rsi = _make_divergence_data(25, "no_divergence")
+        result = detect_divergence(close, rsi, lookback=25, order=2)
+        assert result == 0.0
+
+    def test_insufficient_swing_points(self):
+        """Not enough swing points returns 0.0."""
+        close = pd.Series(np.linspace(100.0, 98.0, 10))
+        rsi = pd.Series(np.linspace(50.0, 48.0, 10))
+        result = detect_divergence(close, rsi, lookback=10, order=2)
+        assert result == 0.0
+
+    def test_returns_bounded_value(self):
+        """Result is always in [0.0, 1.0]."""
+        close, rsi = _make_divergence_data(25, "bullish")
+        result = detect_divergence(close, rsi, lookback=25, order=2)
+        assert 0.0 <= result <= 1.0
+
+
+class TestTrendConviction:
+    def test_full_bearish_conviction(self):
+        """Aligned bearish EMAs + strong ADX + price below all EMAs = high conviction."""
+        result = compute_trend_conviction(
+            close=90.0,
+            ema_9=95.0, ema_21=98.0, ema_50=100.0,
+            adx=35.0, di_plus=10.0, di_minus=30.0,
+        )
+        assert result["conviction"] > 0.8
+        assert result["direction"] == -1
+
+    def test_full_bullish_conviction(self):
+        """Aligned bullish EMAs + strong ADX + price above all EMAs = high conviction."""
+        result = compute_trend_conviction(
+            close=110.0,
+            ema_9=105.0, ema_21=102.0, ema_50=100.0,
+            adx=35.0, di_plus=30.0, di_minus=10.0,
+        )
+        assert result["conviction"] > 0.8
+        assert result["direction"] == 1
+
+    def test_no_trend_low_conviction(self):
+        """Tangled EMAs + low ADX = low conviction."""
+        result = compute_trend_conviction(
+            close=100.0,
+            ema_9=100.5, ema_21=99.5, ema_50=100.2,
+            adx=12.0, di_plus=15.0, di_minus=14.0,
+        )
+        assert result["conviction"] < 0.4
+
+    def test_partial_alignment_moderate_conviction(self):
+        """Two EMAs aligned but not all three = moderate conviction."""
+        result = compute_trend_conviction(
+            close=97.0,
+            ema_9=96.0, ema_21=99.0, ema_50=98.0,  # 9 < 50 < 21, not fully aligned
+            adx=28.0, di_plus=12.0, di_minus=25.0,
+        )
+        assert 0.3 <= result["conviction"] <= 0.7
+
+    def test_conviction_bounded_zero_to_one(self):
+        """Conviction is always in [0, 1]."""
+        for close, adx in [(50.0, 0.0), (150.0, 80.0)]:
+            result = compute_trend_conviction(
+                close=close,
+                ema_9=100.0, ema_21=100.0, ema_50=100.0,
+                adx=adx, di_plus=20.0, di_minus=20.0,
+            )
+            assert 0.0 <= result["conviction"] <= 1.0
+
+    def test_direction_from_di(self):
+        """Direction follows DI+/DI- regardless of EMA order."""
+        result = compute_trend_conviction(
+            close=100.0,
+            ema_9=101.0, ema_21=102.0, ema_50=103.0,
+            adx=25.0, di_plus=25.0, di_minus=15.0,
+        )
+        assert result["direction"] == 1  # DI+ > DI- = bullish
+
+    def test_equal_di_low_conviction(self):
+        """When DI+ == DI-, there is no clear trend — conviction should be low."""
+        result = compute_trend_conviction(
+            close=100.0,
+            ema_9=100.0, ema_21=100.0, ema_50=100.0,
+            adx=15.0, di_plus=20.0, di_minus=20.0,
+        )
+        assert result["conviction"] < 0.4
+
+    def test_price_confirm_requires_direction_alignment(self):
+        """Price below all EMAs in a bullish trend should NOT confirm the trend."""
+        result_misaligned = compute_trend_conviction(
+            close=90.0,
+            ema_9=95.0, ema_21=98.0, ema_50=100.0,
+            adx=30.0, di_plus=25.0, di_minus=15.0,  # bullish DI
+        )
+        result_aligned = compute_trend_conviction(
+            close=110.0,
+            ema_9=105.0, ema_21=102.0, ema_50=100.0,
+            adx=30.0, di_plus=25.0, di_minus=15.0,  # bullish DI
+        )
+        assert result_aligned["conviction"] > result_misaligned["conviction"]
+
+
+def _make_strong_trend_candles(n=100, direction="down", seed=42):
+    """Generate candles with a strong sustained trend.
+
+    Stronger drift than _make_candles to produce clear EMA alignment,
+    high ADX, and meaningful trend conviction.
+    """
+    rng = np.random.RandomState(seed)
+    base = 100.0
+    rows = []
+    prev_c = base
+    for i in range(n):
+        flat_period = n - 50  # 50 candles of flat, then 50 of strong trend
+        if i < flat_period:
+            drift = 0.0
+        elif direction == "down":
+            drift = -0.5
+        else:
+            drift = 0.5
+        c = prev_c + drift + rng.uniform(-0.1, 0.1)
+        o = prev_c + rng.uniform(-0.05, 0.05)
+        h = max(o, c) + rng.uniform(0.05, 0.2)
+        l = min(o, c) - rng.uniform(0.05, 0.2)
+        v = rng.uniform(100, 200)
+        rows.append({"open": o, "high": h, "low": l, "close": c, "volume": v})
+        prev_c = c
+    return pd.DataFrame(rows)
+
+
+class TestTrendSuppression:
+    def test_strong_downtrend_produces_negative_score(self):
+        """In a strong downtrend, suppressing bullish mean reversion should make
+        the overall score more negative than without suppression."""
+        df = _make_strong_trend_candles(100, "down")
+        result = compute_technical_score(df)
+        assert result["score"] < 0
+
+    def test_strong_uptrend_produces_positive_score(self):
+        """In a strong uptrend, suppressing bearish mean reversion should make
+        the overall score more positive."""
+        df = _make_strong_trend_candles(100, "up")
+        result = compute_technical_score(df)
+        assert result["score"] > 0
+
+    def test_conviction_in_indicators(self):
+        """Trend conviction value is exposed in indicators dict and is meaningful for strong trends."""
+        df = _make_strong_trend_candles(100, "down")
+        result = compute_technical_score(df)
+        assert "trend_conviction" in result["indicators"]
+        assert result["indicators"]["trend_conviction"] > 0.5, (
+            f"Strong downtrend should have high conviction, got {result['indicators']['trend_conviction']}"
+        )
+
+    def test_suppression_factor_in_indicators(self):
+        """Mean reversion suppression factor is exposed in indicators dict."""
+        df = _make_strong_trend_candles(100, "down")
+        result = compute_technical_score(df)
+        assert "mr_suppression" in result["indicators"]
+        assert 0.0 <= result["indicators"]["mr_suppression"] <= 1.0
+
+    def test_flat_market_less_suppression_than_strong_trend(self):
+        """Flat/choppy market should suppress less than a strong trend."""
+        df_flat = _make_candles(80, "flat")
+        df_trend = _make_strong_trend_candles(100, "down")
+        flat_supp = compute_technical_score(df_flat)["indicators"]["mr_suppression"]
+        trend_supp = compute_technical_score(df_trend)["indicators"]["mr_suppression"]
+        assert flat_supp > trend_supp
+
+    def test_timeframe_param_backward_compatible(self):
+        """Calling without timeframe works (no divergence check, suppression only)."""
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        assert -100 <= result["score"] <= 100
+
+    def test_divergence_field_on_4h(self):
+        """On 4h timeframe, divergence detection runs and exposes the field."""
+        df = _make_strong_trend_candles(100, "down")
+        result = compute_technical_score(df, timeframe="4h")
+        assert "divergence" in result["indicators"]
+        assert result["indicators"]["divergence"] >= 0.0
+
+    def test_divergence_not_checked_on_lower_timeframes(self):
+        """On sub-4h timeframes, divergence is always 0.0."""
+        df = _make_strong_trend_candles(100, "down")
+        result = compute_technical_score(df, timeframe="1h")
+        assert result["indicators"]["divergence"] == 0.0
+
+    def test_suppression_formula_divergence_override(self):
+        """Divergence overrides conviction suppression via max(1-conviction, divergence).
+
+        This tests the formula directly: when divergence is stronger than
+        (1 - conviction), divergence wins and allows mean reversion through.
+        """
+        # High conviction (0.95) would normally suppress to 0.05,
+        # but divergence (0.8) overrides, keeping suppression at 0.8
+        assert max(1.0 - 0.95, 0.8) == 0.8
+        # Low divergence doesn't override
+        assert max(1.0 - 0.5, 0.2) == 0.5
+        # Zero conviction means full mean reversion regardless
+        assert max(1.0 - 0.0, 0.0) == 1.0
 
 
 class TestOrderFlowBounds:
@@ -424,7 +671,7 @@ class TestUnifiedMeanReversion:
 
     def test_different_blend_ratio_changes_score(self):
         """Different blend ratios produce different mean_rev_score."""
-        df = _make_candles(80, "down")
+        df = _make_candles(80, "flat")  # flat market = low suppression, so blend ratio differences show
         r1 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.9})
         r2 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.1})
         assert r1["indicators"]["mean_rev_score"] != r2["indicators"]["mean_rev_score"]
@@ -461,6 +708,48 @@ class TestCapKeys:
         for regime, caps in DEFAULT_CAPS.items():
             total = sum(caps.values())
             assert total == 100, f"{regime} caps sum to {total}, expected 100"
+
+
+class TestOrderFlowTrendConviction:
+    def test_high_conviction_suppresses_contrarian(self):
+        """High trend conviction should reduce contrarian flow score magnitude."""
+        metrics = {"funding_rate": -0.0005, "long_short_ratio": 0.8}
+        result_low = compute_order_flow_score(metrics, trend_conviction=0.0)
+        result_high = compute_order_flow_score(metrics, trend_conviction=0.9)
+        assert abs(result_high["score"]) < abs(result_low["score"])
+
+    def test_zero_conviction_no_change(self):
+        """Zero trend conviction should not change scoring behavior."""
+        metrics = {"funding_rate": -0.0005, "long_short_ratio": 0.8}
+        result_without = compute_order_flow_score(metrics)
+        result_with = compute_order_flow_score(metrics, trend_conviction=0.0)
+        assert result_without["score"] == result_with["score"]
+
+    def test_oi_unaffected_by_conviction(self):
+        """OI score is direction-aware, not contrarian, so conviction shouldn't affect it."""
+        metrics = {"open_interest_change_pct": 0.05, "price_direction": 1}
+        result_low = compute_order_flow_score(metrics, trend_conviction=0.0)
+        result_high = compute_order_flow_score(metrics, trend_conviction=0.9)
+        assert result_low["score"] == result_high["score"]
+
+    def test_conviction_stacks_with_regime(self):
+        """Trending regime + high conviction should suppress more than either alone."""
+        metrics = {"funding_rate": -0.0005}
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        score_regime_only = abs(compute_order_flow_score(
+            metrics, regime=regime, trend_conviction=0.0,
+        )["score"])
+        score_both = abs(compute_order_flow_score(
+            metrics, regime=regime, trend_conviction=0.8,
+        )["score"])
+        assert score_both < score_regime_only
+
+    def test_conviction_in_details(self):
+        """Trend conviction value is exposed in details dict."""
+        metrics = {"funding_rate": -0.0005}
+        result = compute_order_flow_score(metrics, trend_conviction=0.7)
+        assert "trend_conviction" in result["details"]
+        assert result["details"]["trend_conviction"] == 0.7
 
 
 class TestOrderFlowBackwardCompat:

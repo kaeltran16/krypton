@@ -6,6 +6,126 @@ import pandas as pd
 from app.engine.scoring import sigmoid_score, sigmoid_scale
 from app.engine.regime import compute_regime_mix, blend_caps
 
+_HTF_TIMEFRAMES = {"4h", "1D"}
+
+
+def compute_trend_conviction(
+    close: float,
+    ema_9: float,
+    ema_21: float,
+    ema_50: float,
+    adx: float,
+    di_plus: float,
+    di_minus: float,
+) -> dict:
+    """Compute trend conviction from EMA alignment, ADX strength, and price position.
+
+    Returns dict with:
+        conviction: 0.0 (no trend) to 1.0 (strong directional trend)
+        direction: +1 (bullish) or -1 (bearish), from DI+/DI-
+    """
+    direction = 1 if di_plus > di_minus else -1
+
+    # 1. EMA alignment (direction-aware): full=1.0, partial=0.5, against/equal=0.0
+    bullish_full = ema_9 > ema_21 > ema_50
+    bearish_full = ema_9 < ema_21 < ema_50
+    if bullish_full or bearish_full:
+        ema_alignment = 1.0
+    elif (direction == 1 and ema_9 > ema_21) or (direction == -1 and ema_9 < ema_21):
+        ema_alignment = 0.5
+    else:
+        ema_alignment = 0.0
+
+    # 2. ADX strength (reuses same sigmoid as regime detection)
+    adx_strength = sigmoid_scale(adx, center=20, steepness=0.25)
+
+    # 3. Price confirmation (direction-aware)
+    above_all = close > ema_9 and close > ema_21 and close > ema_50
+    below_all = close < ema_9 and close < ema_21 and close < ema_50
+    if (direction == 1 and above_all) or (direction == -1 and below_all):
+        price_confirm = 1.0
+    else:
+        price_confirm = 0.0
+
+    conviction = (ema_alignment + adx_strength + price_confirm) / 3.0
+
+    return {"conviction": conviction, "direction": direction}
+
+
+def _find_swing_points(series: np.ndarray, order: int, mode: str) -> list[int]:
+    """Find local minima or maxima indices in a series.
+
+    Uses strict comparison: the center point must be strictly less/greater
+    than all neighbors in the window. This prevents flat regions from
+    producing spurious swing points.
+
+    Args:
+        series: 1D array of values.
+        order: Number of points on each side to compare.
+        mode: "min" for swing lows, "max" for swing highs.
+    """
+    indices = []
+    for i in range(order, len(series) - order):
+        left = series[i - order : i]
+        right = series[i + 1 : i + order + 1]
+        if mode == "min" and series[i] < left.min() and series[i] < right.min():
+            indices.append(i)
+        elif mode == "max" and series[i] > left.max() and series[i] > right.max():
+            indices.append(i)
+    return indices
+
+
+def detect_divergence(
+    close: pd.Series,
+    rsi: pd.Series,
+    lookback: int = 50,
+    order: int = 3,
+) -> float:
+    """Detect RSI/price divergence over recent candles.
+
+    Checks for both bullish divergence (price lower low + RSI higher low)
+    and bearish divergence (price higher high + RSI lower high).
+    Returns the stronger divergence if both are present.
+
+    Args:
+        close: Price close series.
+        rsi: RSI series (same length as close).
+        lookback: Number of recent candles to scan.
+        order: Swing point detection window (points on each side).
+
+    Returns:
+        0.0 (no divergence) to 1.0 (strong divergence).
+    """
+    close_arr = close.values[-lookback:].astype(float)
+    rsi_arr = rsi.values[-lookback:].astype(float)
+
+    if len(close_arr) < 2 * order + 1:
+        return 0.0
+
+    best = 0.0
+
+    # Check bullish divergence (swing lows)
+    swing_lows = _find_swing_points(close_arr, order, "min")
+    if len(swing_lows) >= 2:
+        i1, i2 = swing_lows[-2], swing_lows[-1]
+        price_lower = close_arr[i2] < close_arr[i1]
+        rsi_higher = rsi_arr[i2] > rsi_arr[i1]
+        if price_lower and rsi_higher:
+            rsi_diff = rsi_arr[i2] - rsi_arr[i1]
+            best = max(best, min(1.0, rsi_diff / 15.0))
+
+    # Check bearish divergence (swing highs)
+    swing_highs = _find_swing_points(close_arr, order, "max")
+    if len(swing_highs) >= 2:
+        i1, i2 = swing_highs[-2], swing_highs[-1]
+        price_higher = close_arr[i2] > close_arr[i1]
+        rsi_lower = rsi_arr[i2] < rsi_arr[i1]
+        if price_higher and rsi_lower:
+            rsi_diff = rsi_arr[i1] - rsi_arr[i2]
+            best = max(best, min(1.0, rsi_diff / 15.0))
+
+    return best
+
 
 def _atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> pd.Series:
     prev_close = close.shift(1)
@@ -56,7 +176,7 @@ def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (direction * volume).cumsum()
 
 
-def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_params: dict | None = None) -> dict:
+def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_params: dict | None = None, timeframe: str | None = None) -> dict:
     """Compute technical analysis score using orthogonal indicator dimensions.
 
     Returns dict with 'score' (-100 to +100) and 'indicators' dict.
@@ -131,7 +251,24 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     vol_ratio = float(volume.iloc[-1]) / avg_volume if avg_volume > 0 else 1.0
     candle_direction = 1 if float(close.iloc[-1]) > float(open_.iloc[-1]) else -1
 
-    # === Regime detection ===
+    ema_9_val = float(ema_9[last])
+    ema_21_val = float(ema_21[last])
+    ema_50_val = float(ema_50[last])
+    close_val = float(close[last])
+
+    tc = compute_trend_conviction(
+        close=close_val,
+        ema_9=ema_9_val, ema_21=ema_21_val, ema_50=ema_50_val,
+        adx=adx_val, di_plus=di_plus_val, di_minus=di_minus_val,
+    )
+    trend_conviction = tc["conviction"]
+
+    divergence = 0.0
+    if timeframe in _HTF_TIMEFRAMES:
+        divergence = detect_divergence(close, rsi, lookback=50, order=3)
+
+    mr_suppression = max(1.0 - trend_conviction, divergence)
+
     trend_strength = sigmoid_scale(adx_val, center=20, steepness=0.25)
     vol_expansion = sigmoid_scale(bb_width_pct, center=50, steepness=0.08)
     regime = compute_regime_mix(trend_strength, vol_expansion)
@@ -157,6 +294,9 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     # 3. Squeeze / expansion
     mean_rev_sign = 1 if mean_rev_score > 0 else (-1 if mean_rev_score < 0 else 0)
     squeeze_score = mean_rev_sign * sigmoid_scale(50 - bb_width_pct, center=0, steepness=sq_steep) * caps["squeeze_cap"]
+
+    mean_rev_score = mean_rev_score * mr_suppression
+    squeeze_score = squeeze_score * mr_suppression
 
     # 4. Volume confirmation (60/40 split)
     obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * (caps["volume_cap"] * 0.6)
@@ -184,9 +324,12 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         "regime_trending": round(regime["trending"], 4),
         "regime_ranging": round(regime["ranging"], 4),
         "regime_volatile": round(regime["volatile"], 4),
-        "ema_9": round(float(ema_9.iloc[-1]), 2),
-        "ema_21": round(float(ema_21.iloc[-1]), 2),
-        "ema_50": round(float(ema_50.iloc[-1]), 2),
+        "ema_9": round(ema_9_val, 2),
+        "ema_21": round(ema_21_val, 2),
+        "ema_50": round(ema_50_val, 2),
+        "trend_conviction": round(trend_conviction, 2),
+        "mr_suppression": round(mr_suppression, 2),
+        "divergence": round(divergence, 2),
     }
 
     return {"score": score, "indicators": indicators, "regime": regime, "caps": caps}
@@ -221,6 +364,7 @@ def compute_order_flow_score(
     metrics: dict,
     regime: dict | None = None,
     flow_history: list | None = None,
+    trend_conviction: float = 0.0,
 ) -> dict:
     """Compute order flow score from funding rate, OI changes, and L/S ratio.
 
@@ -262,6 +406,9 @@ def compute_order_flow_score(
 
     final_mult = contrarian_mult + roc_boost * (1.0 - contrarian_mult)
 
+    conviction_dampening = 1.0 - trend_conviction
+    final_mult = final_mult * conviction_dampening
+
     # Funding rate — contrarian (max +/-35)
     funding = metrics.get("funding_rate", 0.0)
     funding_score = sigmoid_score(-funding, center=0, steepness=8000) * 35 * final_mult
@@ -296,6 +443,7 @@ def compute_order_flow_score(
         "funding_roc": round(funding_roc, 8),
         "ls_roc": round(ls_roc, 8),
         "max_roc": round(max_roc, 8),
+        "trend_conviction": round(trend_conviction, 2),
     }
 
     return {"score": score, "details": details}
