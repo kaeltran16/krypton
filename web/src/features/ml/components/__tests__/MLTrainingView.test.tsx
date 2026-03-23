@@ -13,6 +13,8 @@ vi.mock("../../../../shared/lib/api", () => ({
     cancelMLTraining: vi.fn(),
     startMLBackfill: vi.fn(),
     getMLBackfillStatus: vi.fn(),
+    getMLTrainingHistory: vi.fn(),
+    deleteMLTrainingRun: vi.fn(),
   },
 }));
 
@@ -34,6 +36,7 @@ describe("MLTrainingView", () => {
     vi.clearAllMocks();
     localStorageMock.clear();
     vi.mocked(api.getMLStatus).mockResolvedValue({ ml_enabled: true, loaded_pairs: [] });
+    vi.mocked(api.getMLTrainingHistory).mockResolvedValue([]);
     vi.mocked(api.getMLDataReadiness).mockResolvedValue({
       "BTC-USDT-SWAP": { count: 8760, oldest: "2025-03-22T00:00:00Z", sufficient: true },
       "ETH-USDT-SWAP": { count: 500, oldest: "2025-06-01T00:00:00Z", sufficient: true },
@@ -140,7 +143,7 @@ describe("MLTrainingView", () => {
       const mockHistory = [
         {
           job_id: "test-job-1",
-          status: "completed",
+          status: "completed" as const,
           result: {
             "BTC-USDT": {
               best_epoch: 10, best_val_loss: 0.5, total_epochs: 100,
@@ -152,7 +155,7 @@ describe("MLTrainingView", () => {
           params: { timeframe: "1h", lookback_days: 365, epochs: 100 },
         },
       ];
-      localStorageMock.getItem.mockReturnValue(JSON.stringify(mockHistory));
+      vi.mocked(api.getMLTrainingHistory).mockResolvedValue(mockHistory);
 
       await renderAndSettle();
 
@@ -168,7 +171,7 @@ describe("MLTrainingView", () => {
       const mockHistory = [
         {
           job_id: "test-job-1",
-          status: "completed",
+          status: "completed" as const,
           result: {
             "BTC-USDT": {
               best_epoch: 10, best_val_loss: 0.5, total_epochs: 100,
@@ -179,7 +182,7 @@ describe("MLTrainingView", () => {
           params: { timeframe: "1h", lookback_days: 365, epochs: 100 },
         },
       ];
-      localStorageMock.getItem.mockReturnValue(JSON.stringify(mockHistory));
+      vi.mocked(api.getMLTrainingHistory).mockResolvedValue(mockHistory);
 
       await renderAndSettle();
 

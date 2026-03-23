@@ -22,13 +22,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, cast, literal
+from sqlalchemy import select, cast, literal, update
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
 from app.db.database import Base, Database
-from app.db.models import Candle, NewsEvent, OrderFlowSnapshot, PipelineSettings, Signal
+from app.db.models import Candle, MLTrainingRun, NewsEvent, OrderFlowSnapshot, PipelineSettings, Signal
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
@@ -1095,6 +1095,21 @@ async def lifespan(app: FastAPI):
                 logger.info("Marked %d stale backtest run(s) as failed", len(stale))
     except Exception as e:
         logger.warning("Failed to clean up stale runs: %s", e)
+
+    try:
+        async with db.session_factory() as session:
+            await session.execute(
+                update(MLTrainingRun)
+                .where(MLTrainingRun.status == "running")
+                .values(
+                    status="failed",
+                    error="Server restarted during training",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.commit()
+    except Exception as e:
+        logger.warning("Failed to clean up stale ML training runs: %s", e)
 
     prompt_path = Path(__file__).parent / "prompts" / "signal_analysis.txt"
     app.state.prompt_template = load_prompt_template(prompt_path) if prompt_path.exists() else ""

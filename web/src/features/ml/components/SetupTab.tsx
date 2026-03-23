@@ -106,12 +106,19 @@ export function SetupTab({
       )}
 
       {/* Preset bar */}
-      <SegmentedControl
-        options={PRESETS.map((p) => ({ value: p.name, label: p.label }))}
-        value={activePreset ?? ""}
-        onChange={(v) => handlePresetChange(v as PresetName)}
-        fullWidth
-      />
+      <div>
+        <SegmentedControl
+          options={PRESETS.map((p) => ({ value: p.name, label: p.label }))}
+          value={activePreset ?? ""}
+          onChange={(v) => handlePresetChange(v as PresetName)}
+          fullWidth
+        />
+        {activePreset && (
+          <p className="text-[10px] text-on-surface-variant mt-1.5 px-1">
+            {PRESETS.find((p) => p.name === activePreset)?.description}
+          </p>
+        )}
+      </div>
 
       {/* Data readiness */}
       <SettingsSection title="Data Readiness">

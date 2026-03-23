@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api, type MLTrainRequest, type MLTrainJob, type MLStatus, type MLBackfillJob } from "../../../shared/lib/api";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { SetupTab } from "./SetupTab";
 import { TrainingTab } from "./TrainingTab";
 import { ResultsTab } from "./ResultsTab";
 import { HistoryTab } from "./HistoryTab";
-import type { MLTab, MLTrainJobWithMeta } from "../types";
+import type { MLTab } from "../types";
 
 export function MLTrainingView() {
-  const currentTrainingParamsRef = useRef<MLTrainRequest | null>(null);
   const [tab, setTab] = useState<MLTab>("setup");
   const [status, setStatus] = useState<MLStatus | null>(null);
   const [trainingJob, setTrainingJob] = useState<MLTrainJob | null>(null);
@@ -18,6 +17,7 @@ export function MLTrainingView() {
   const [restoredParams, setRestoredParams] = useState<MLTrainRequest | null>(null);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   const [activePresetLabel, setActivePresetLabel] = useState<string | null>(null);
+  const [configSummary, setConfigSummary] = useState<string | null>(null);
 
   // Handlers
   async function handleStartTraining(params: MLTrainRequest, presetLabel?: string | null) {
@@ -27,11 +27,14 @@ export function MLTrainingView() {
       if ((params.epochs ?? 0) < 1) throw new Error("Epochs must be at least 1");
       if ((params.batch_size ?? 0) < 1) throw new Error("Batch size must be at least 1");
 
-      currentTrainingParamsRef.current = params;
-      setActivePresetLabel(presetLabel ?? null);
       setError(null);
       setRestoredParams(null);
-      const response = await api.startMLTraining(params);
+      setActivePresetLabel(presetLabel ?? null);
+      setConfigSummary(params.timeframe ? `${params.timeframe} · ${params.epochs}ep` : null);
+      const response = await api.startMLTraining({
+        ...params,
+        preset_label: presetLabel ?? undefined,
+      });
       setTrainingJob({ job_id: response.job_id, status: "running" as const });
       setTab("training");
     } catch (e) {
@@ -66,13 +69,16 @@ export function MLTrainingView() {
     setBackfillJob(backfillJob ? { ...backfillJob, status: "cancelled" as const } : null);
   }
 
+  const fetchHistory = useCallback(() => {
+    api.getMLTrainingHistory()
+      .then(setHistory)
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     api.getMLStatus().then(setStatus).catch(() => {});
-    const saved = localStorage.getItem("ml_training_history");
-    if (saved) {
-      try { setHistory(JSON.parse(saved)); } catch { /* ignore */ }
-    }
-  }, []);
+    fetchHistory();
+  }, [fetchHistory]);
 
   // Poll for backfill progress
   useEffect(() => {
@@ -131,13 +137,13 @@ export function MLTrainingView() {
         <TrainingTab
           job={trainingJob}
           onCancel={handleCancelTraining}
-          onComplete={(job: MLTrainJob) => {
+          onComplete={() => {
             setTrainingJob(null);
-            saveToHistory(job, currentTrainingParamsRef.current, activePresetLabel);
+            fetchHistory();
           }}
           onSwitchToSetup={() => setTab("setup")}
           presetLabel={activePresetLabel}
-          configSummary={currentTrainingParamsRef.current ? `${currentTrainingParamsRef.current.timeframe} · ${currentTrainingParamsRef.current.epochs}ep` : null}
+          configSummary={configSummary}
         />
       )}
       {tab === "results" && (
@@ -161,28 +167,17 @@ export function MLTrainingView() {
               setTab("setup");
             }
           }}
-          onDelete={(jobId: string) => {
-            setHistory((h) => {
-              const updated = h.filter((j) => j.job_id !== jobId);
-              saveHistoryToStorage(updated);
-              return updated;
-            });
+          onDelete={async (jobId: string) => {
+            try {
+              await api.deleteMLTrainingRun(jobId);
+              setHistory((h) => h.filter((j) => j.job_id !== jobId));
+            } catch {
+              fetchHistory();
+            }
           }}
         />
       )}
     </div>
   );
 
-  function saveToHistory(job: MLTrainJob, params: MLTrainRequest | null, presetLabel?: string | null) {
-    const jobWithMeta: MLTrainJobWithMeta = { ...job, created_at: new Date().toISOString(), params: params || undefined, preset_label: presetLabel || undefined };
-    setHistory((prev) => {
-      const updated = [jobWithMeta, ...prev].slice(0, 50);
-      saveHistoryToStorage(updated);
-      return updated;
-    });
-  }
-}
-
-function saveHistoryToStorage(history: MLTrainJob[]) {
-  localStorage.setItem("ml_training_history", JSON.stringify(history));
 }

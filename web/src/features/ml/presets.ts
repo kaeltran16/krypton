@@ -5,6 +5,7 @@ export type PresetName = "quick" | "balanced" | "production";
 export interface Preset {
   name: PresetName;
   label: string;
+  description: string;
   config: Partial<MLTrainRequest>;
 }
 
@@ -12,6 +13,7 @@ export const PRESETS: Preset[] = [
   {
     name: "quick",
     label: "Quick Test",
+    description: "Small model, few epochs. Fast sanity check that training works with your data.",
     config: {
       epochs: 30,
       batch_size: 32,
@@ -25,6 +27,7 @@ export const PRESETS: Preset[] = [
   {
     name: "balanced",
     label: "Balanced",
+    description: "Mid-size model with moderate training time. Good default for most use cases.",
     config: {
       epochs: 100,
       batch_size: 64,
@@ -38,6 +41,7 @@ export const PRESETS: Preset[] = [
   {
     name: "production",
     label: "Production",
+    description: "Large model, long training, fine convergence. For the model you'll deploy to production.",
     config: {
       epochs: 300,
       batch_size: 128,

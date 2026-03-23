@@ -430,3 +430,31 @@ class ShadowResult(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class MLTrainingRun(Base):
+    __tablename__ = "ml_training_runs"
+    __table_args__ = (
+        Index("ix_ml_training_run_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    job_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default="running", server_default="running", nullable=False
+    )
+    preset_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    params: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pairs_trained: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_candles: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

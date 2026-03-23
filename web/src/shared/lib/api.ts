@@ -21,6 +21,7 @@ export interface MLTrainRequest {
   dropout?: number;
   label_horizon?: number;
   label_threshold_pct?: number;
+  preset_label?: string;
 }
 
 export interface MLTrainProgress {
@@ -51,7 +52,12 @@ export interface MLTrainJob {
   result?: Record<string, MLTrainResult>;
   error?: string;
   created_at?: string;
+  completed_at?: string;
   params?: MLTrainRequest;
+  preset_label?: string;
+  pairs_trained?: string[];
+  duration_seconds?: number;
+  total_candles?: number;
 }
 
 export interface MLStatus {
@@ -394,6 +400,14 @@ export const api = {
     request<{ job_id: string; status: string; progress: Record<string, unknown>; result?: Record<string, unknown> }>(
       `/api/ml/backfill/${jobId}`,
     ),
+
+  getMLTrainingHistory: (limit = 50, offset = 0) =>
+    request<MLTrainJob[]>(`/api/ml/train/history?limit=${limit}&offset=${offset}`),
+
+  deleteMLTrainingRun: (jobId: string) =>
+    request<{ deleted: string }>(`/api/ml/train/history/${jobId}`, {
+      method: "DELETE",
+    }),
 
   // Pipeline settings
   getPipelineSettings: () =>

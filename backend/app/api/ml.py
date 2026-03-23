@@ -3,16 +3,17 @@
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.auth import require_auth
-from app.db.models import Candle, OrderFlowSnapshot
+from app.db.models import Candle, OrderFlowSnapshot, MLTrainingRun
 from app.ml.data_loader import prepare_training_data
 from app.ml.labels import LabelConfig
 from app.ml.trainer import Trainer, TrainConfig
@@ -34,6 +35,7 @@ class TrainRequest(BaseModel):
     dropout: float = Field(default=0.3, ge=0.0, le=0.7)
     label_horizon: int = Field(default=24, ge=4, le=96)
     label_threshold_pct: float = Field(default=1.5, gt=0, le=10)
+    preset_label: str | None = None
 
 
 @router.get("/data-readiness", dependencies=[require_auth()])
@@ -86,7 +88,34 @@ async def start_training(body: TrainRequest, request: Request):
     job_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     train_jobs[job_id] = {"status": "running", "progress": {}}
 
+    params_dict = body.model_dump(exclude={"preset_label"})
+    run = MLTrainingRun(
+        job_id=job_id,
+        status="running",
+        preset_label=body.preset_label,
+        params=params_dict,
+    )
+    async with db.session_factory() as session:
+        session.add(run)
+        await session.commit()
+
     async def _run():
+        start_time = time.time()
+
+        async def _update_run(**fields):
+            fields.setdefault("duration_seconds", time.time() - start_time)
+            fields.setdefault("completed_at", datetime.now(timezone.utc))
+            try:
+                async with db.session_factory() as session:
+                    await session.execute(
+                        update(MLTrainingRun)
+                        .where(MLTrainingRun.job_id == job_id)
+                        .values(**fields)
+                    )
+                    await session.commit()
+            except Exception:
+                logger.exception(f"Failed to update training run {job_id} in DB")
+
         try:
             cutoff = datetime.now(timezone.utc).replace(
                 hour=0, minute=0, second=0
@@ -232,6 +261,10 @@ async def start_training(body: TrainRequest, request: Request):
 
             if not pair_results:
                 train_jobs[job_id] = {"status": "failed", "error": "No pair had enough data"}
+                await _update_run(
+                    status="failed",
+                    error="No pair had enough data",
+                )
                 return
 
             train_jobs[job_id] = {
@@ -239,17 +272,82 @@ async def start_training(body: TrainRequest, request: Request):
                 "result": pair_results,
             }
 
+            total_candles_count = sum(
+                r.get("total_samples", 0) for r in pair_results.values()
+            )
+            await _update_run(
+                status="completed",
+                result=pair_results,
+                pairs_trained=list(pair_results.keys()),
+                total_candles=total_candles_count,
+            )
+
             # Reload per-pair predictors if live
             _reload_predictors(request.app, settings)
 
+        except asyncio.CancelledError:
+            logger.info(f"Training job {job_id} cancelled")
+            train_jobs[job_id] = {"status": "cancelled"}
+            await _update_run(status="cancelled")
         except Exception as e:
             logger.error(f"Training failed: {e}", exc_info=True)
             train_jobs[job_id] = {"status": "failed", "error": str(e)}
+            await _update_run(status="failed", error=str(e))
 
     task = asyncio.create_task(_run())
     train_jobs[job_id]["task"] = task
     _prune_old_jobs(train_jobs)
     return {"job_id": job_id, "status": "running"}
+
+
+def _run_to_dict(r: MLTrainingRun) -> dict:
+    return {
+        "job_id": r.job_id,
+        "status": r.status,
+        "preset_label": r.preset_label,
+        "params": r.params,
+        "result": r.result,
+        "error": r.error,
+        "pairs_trained": r.pairs_trained,
+        "duration_seconds": r.duration_seconds,
+        "total_candles": r.total_candles,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+    }
+
+
+@router.get("/train/history", dependencies=[require_auth()])
+async def get_training_history(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Return training runs, newest first, with pagination."""
+    db = request.app.state.db
+    async with db.session_factory() as session:
+        result = await session.execute(
+            select(MLTrainingRun)
+            .order_by(MLTrainingRun.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        runs = result.scalars().all()
+
+    return [_run_to_dict(r) for r in runs]
+
+
+@router.delete("/train/history/{job_id}", dependencies=[require_auth()])
+async def delete_training_run(job_id: str, request: Request):
+    """Delete a training run from history."""
+    db = request.app.state.db
+    async with db.session_factory() as session:
+        result = await session.execute(
+            delete(MLTrainingRun).where(MLTrainingRun.job_id == job_id)
+        )
+        await session.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Training run not found")
+    return {"deleted": job_id}
 
 
 @router.get("/train/{job_id}", dependencies=[require_auth()])
