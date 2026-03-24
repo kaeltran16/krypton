@@ -343,7 +343,7 @@ class RegimeWeights(Base):
     pair: Mapped[str] = mapped_column(String(32), nullable=False)
     timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
 
-    # Inner caps (3 regimes x 4 caps = 12 floats)
+    # Inner caps (4 regimes x 4 caps = 16 floats)
     trending_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=38.0)
     trending_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
     trending_squeeze_cap: Mapped[float] = mapped_column(Float, nullable=False, default=12.0)
@@ -359,7 +359,12 @@ class RegimeWeights(Base):
     volatile_squeeze_cap: Mapped[float] = mapped_column(Float, nullable=False, default=22.0)
     volatile_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=25.0)
 
-    # Outer weights (3 regimes x 4 weights = 12 floats)
+    steady_trend_cap: Mapped[float] = mapped_column(Float, nullable=False, default=40.0, server_default="40.0")
+    steady_mean_rev_cap: Mapped[float] = mapped_column(Float, nullable=False, default=15.0, server_default="15.0")
+    steady_squeeze_cap: Mapped[float] = mapped_column(Float, nullable=False, default=20.0, server_default="20.0")
+    steady_volume_cap: Mapped[float] = mapped_column(Float, nullable=False, default=25.0, server_default="25.0")
+
+    # Outer weights (4 regimes x 4 weights = 16 floats)
     trending_tech_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.45)
     trending_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
     trending_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18)
@@ -374,6 +379,11 @@ class RegimeWeights(Base):
     volatile_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.20)
     volatile_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
     volatile_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+
+    steady_tech_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.48, server_default="0.48")
+    steady_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.22, server_default="0.22")
+    steady_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18, server_default="0.18")
+    steady_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12, server_default="0.12")
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

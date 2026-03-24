@@ -14,6 +14,7 @@ import math
 from typing import Any, Callable
 
 from app.engine.constants import PATTERN_STRENGTHS
+from app.engine.regime import REGIMES
 
 # ── Priority layers (lower number = optimize first) ──
 
@@ -53,7 +54,7 @@ def _thresholds_ok(c: dict[str, Any]) -> bool:
 
 
 def _regime_caps_ok(c: dict[str, Any]) -> bool:
-    for regime in ("trending", "ranging", "volatile"):
+    for regime in REGIMES:
         keys = [k for k in c if k.startswith(regime)]
         if not _sum_close_to([c[k] for k in keys], 100.0, tol=1.0):
             return False
@@ -61,7 +62,7 @@ def _regime_caps_ok(c: dict[str, Any]) -> bool:
 
 
 def _regime_outer_ok(c: dict[str, Any]) -> bool:
-    for regime in ("trending", "ranging", "volatile"):
+    for regime in REGIMES:
         keys = [k for k in c if k.startswith(regime)]
         if not _sum_close_to([c[k] for k in keys], 1.0):
             return False
@@ -142,13 +143,13 @@ PARAM_GROUPS: dict[str, dict] = {
     "regime_caps": {
         "params": {
             f"{r}_{cap}_cap": f"regime_weights.*.*.{r}_{cap}_cap"
-            for r in ("trending", "ranging", "volatile")
+            for r in REGIMES
             for cap in ("trend", "mean_rev", "squeeze", "volume")
         },
         "sweep_method": "de",
         "sweep_ranges": {
             f"{r}_{cap}_cap": (10.0, 45.0, None)
-            for r in ("trending", "ranging", "volatile")
+            for r in REGIMES
             for cap in ("trend", "mean_rev", "squeeze", "volume")
         },
         "constraints": _regime_caps_ok,
@@ -157,13 +158,13 @@ PARAM_GROUPS: dict[str, dict] = {
     "regime_outer": {
         "params": {
             f"{r}_{src}_weight": f"regime_weights.*.*.{r}_{src}_weight"
-            for r in ("trending", "ranging", "volatile")
+            for r in REGIMES
             for src in ("tech", "flow", "onchain", "pattern")
         },
         "sweep_method": "de",
         "sweep_ranges": {
             f"{r}_{src}_weight": (0.10, 0.50, None)
-            for r in ("trending", "ranging", "volatile")
+            for r in REGIMES
             for src in ("tech", "flow", "onchain", "pattern")
         },
         "constraints": _regime_outer_ok,

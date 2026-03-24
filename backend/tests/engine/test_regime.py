@@ -17,7 +17,7 @@ class TestRegimeMixSumsToOne:
     ])
     def test_sums_to_one(self, adx_strength, vol_expansion):
         regime = compute_regime_mix(adx_strength, vol_expansion)
-        total = regime["trending"] + regime["ranging"] + regime["volatile"]
+        total = regime["trending"] + regime["ranging"] + regime["volatile"] + regime["steady"]
         assert abs(total - 1.0) < 1e-9
 
     def test_all_positive(self):
@@ -25,6 +25,7 @@ class TestRegimeMixSumsToOne:
         assert regime["trending"] >= 0
         assert regime["ranging"] >= 0
         assert regime["volatile"] >= 0
+        assert regime["steady"] >= 0
 
 
 class TestRegimeMixDominance:
@@ -43,15 +44,17 @@ class TestRegimeMixDominance:
         assert regime["volatile"] > regime["trending"]
         assert regime["volatile"] > regime["ranging"]
 
-    def test_quiet_trend_is_mostly_trending(self):
-        """High ADX + low vol = ~80% trending."""
+    def test_quiet_trend_is_mostly_steady(self):
+        """High ADX + low vol = steady regime dominates."""
         regime = compute_regime_mix(0.98, 0.08)
-        assert regime["trending"] > 0.70
+        assert regime["steady"] > regime["trending"]
+        assert regime["steady"] > regime["ranging"]
+        assert regime["steady"] > regime["volatile"]
 
 
 class TestBlendCaps:
     def test_none_weights_uses_defaults(self):
-        regime = {"trending": 0.5, "ranging": 0.3, "volatile": 0.2}
+        regime = {"trending": 0.4, "ranging": 0.2, "volatile": 0.2, "steady": 0.2}
         caps = blend_caps(regime, None)
         assert "trend_cap" in caps
         assert "mean_rev_cap" in caps
@@ -59,18 +62,24 @@ class TestBlendCaps:
         assert "volume_cap" in caps
 
     def test_pure_trending_returns_trending_column(self):
-        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         caps = blend_caps(regime, None)
         assert caps["trend_cap"] == DEFAULT_CAPS["trending"]["trend_cap"]
         assert caps["mean_rev_cap"] == DEFAULT_CAPS["trending"]["mean_rev_cap"]
 
     def test_pure_ranging_returns_ranging_column(self):
-        regime = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0}
+        regime = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0, "steady": 0.0}
         caps = blend_caps(regime, None)
         assert caps["trend_cap"] == DEFAULT_CAPS["ranging"]["trend_cap"]
 
+    def test_pure_steady_returns_steady_column(self):
+        regime = {"trending": 0.0, "ranging": 0.0, "volatile": 0.0, "steady": 1.0}
+        caps = blend_caps(regime, None)
+        assert caps["trend_cap"] == DEFAULT_CAPS["steady"]["trend_cap"]
+        assert caps["mean_rev_cap"] == DEFAULT_CAPS["steady"]["mean_rev_cap"]
+
     def test_50_50_trending_ranging_returns_midpoint(self):
-        regime = {"trending": 0.5, "ranging": 0.5, "volatile": 0.0}
+        regime = {"trending": 0.5, "ranging": 0.5, "volatile": 0.0, "steady": 0.0}
         caps = blend_caps(regime, None)
         expected_trend_cap = (
             DEFAULT_CAPS["trending"]["trend_cap"] * 0.5
@@ -81,18 +90,18 @@ class TestBlendCaps:
 
 class TestBlendOuterWeights:
     def test_sums_to_one(self):
-        regime = {"trending": 0.4, "ranging": 0.35, "volatile": 0.25}
+        regime = {"trending": 0.3, "ranging": 0.25, "volatile": 0.25, "steady": 0.2}
         weights = blend_outer_weights(regime, None)
         total = weights["tech"] + weights["flow"] + weights["onchain"] + weights["pattern"]
         assert abs(total - 1.0) < 1e-9
 
     def test_pure_trending_returns_trending_weights(self):
-        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0}
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         weights = blend_outer_weights(regime, None)
         assert abs(weights["tech"] - DEFAULT_OUTER_WEIGHTS["trending"]["tech"]) < 1e-9
 
     def test_none_weights_uses_defaults(self):
-        regime = {"trending": 0.5, "ranging": 0.3, "volatile": 0.2}
+        regime = {"trending": 0.4, "ranging": 0.2, "volatile": 0.2, "steady": 0.2}
         weights = blend_outer_weights(regime, None)
         assert "tech" in weights
         assert "flow" in weights

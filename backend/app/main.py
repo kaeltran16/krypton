@@ -606,12 +606,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
             ml_confidence = ml_prediction["confidence"]
 
             # Convert ML output to -100..+100 score
+            # Center at 1/3 (uniform probability for 3-class softmax)
+            # so confidence=0.33 → 0, confidence=1.0 → 100
             if ml_direction == "NEUTRAL":
                 ml_score = 0.0
-            elif ml_direction == "LONG":
-                ml_score = ml_confidence * 100
-            else:  # SHORT
-                ml_score = -ml_confidence * 100
+            else:
+                centered = (ml_confidence - 1 / 3) / (2 / 3) * 100
+                ml_score = centered if ml_direction == "LONG" else -centered
 
             ml_available = True
         except Exception as e:

@@ -10,23 +10,15 @@ from app.engine.regime import REGIMES, CAP_KEYS
 
 logger = logging.getLogger(__name__)
 
-# 12 inner caps (3 regimes x 4 caps) + 6 outer weights (3 regimes x 2: tech + pattern)
-# Flow and onchain outer weights are not optimized (always 0 in backtester)
-N_PARAMS = 18
+_N_REGIMES = len(REGIMES)
+_N_CAPS = len(CAP_KEYS)
+_N_OUTER = 2  # tech + pattern (flow/onchain fixed at 0)
+N_PARAMS = _N_REGIMES * _N_CAPS + _N_REGIMES * _N_OUTER
 
-# Bounds: (min, max) for each parameter
 _CAP_BOUNDS = (10.0, 45.0)
 _WEIGHT_BOUNDS = (0.10, 0.50)
 
-PARAM_BOUNDS = [_CAP_BOUNDS] * 12 + [_WEIGHT_BOUNDS] * 6
-
-# Parameter layout:
-# [0-3]   trending: trend_cap, mean_rev_cap, squeeze_cap, volume_cap
-# [4-7]   ranging:  trend_cap, mean_rev_cap, squeeze_cap, volume_cap
-# [8-11]  volatile: trend_cap, mean_rev_cap, squeeze_cap, volume_cap
-# [12-13] trending: tech_weight, pattern_weight
-# [14-15] ranging:  tech_weight, pattern_weight
-# [16-17] volatile: tech_weight, pattern_weight
+PARAM_BOUNDS = [_CAP_BOUNDS] * (_N_REGIMES * _N_CAPS) + [_WEIGHT_BOUNDS] * (_N_REGIMES * _N_OUTER)
 
 MIN_TRADES = 20
 
@@ -53,15 +45,16 @@ def compute_fitness(stats: dict, min_trades: int = MIN_TRADES) -> float:
 def vector_to_regime_dict(vec: list[float]) -> dict:
     """Convert a flat parameter vector to a nested regime dict.
 
-    Returns dict with keys: trending, ranging, volatile.
+    Returns dict with one key per regime (trending, ranging, volatile, steady).
     Each has: trend_cap, mean_rev_cap, squeeze_cap, volume_cap, tech, pattern.
     Outer weights (tech + pattern) are normalized to sum to 1.0 per regime.
     """
     result = {}
+    caps_offset = _N_REGIMES * _N_CAPS
     for i, regime in enumerate(REGIMES):
-        caps = {key: vec[i * 4 + j] for j, key in enumerate(CAP_KEYS)}
-        raw_tech = vec[12 + i * 2]
-        raw_pattern = vec[12 + i * 2 + 1]
+        caps = {key: vec[i * _N_CAPS + j] for j, key in enumerate(CAP_KEYS)}
+        raw_tech = vec[caps_offset + i * 2]
+        raw_pattern = vec[caps_offset + i * 2 + 1]
         w_total = raw_tech + raw_pattern
         if w_total > 0:
             caps["tech"] = raw_tech / w_total

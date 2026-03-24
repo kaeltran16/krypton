@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.api.auth import require_auth
 from app.db.models import PipelineSettings, RegimeWeights, PerformanceTrackerRow
 from app.engine.constants import get_engine_constants, PARAMETER_DESCRIPTIONS
+from app.engine.regime import REGIMES
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ async def get_parameters(request: Request, _key: str = require_auth()):
 def _regime_row_to_dict(rw) -> dict:
     """Convert a RegimeWeights row to the API response format."""
     result = {}
-    for regime in ("trending", "ranging", "volatile"):
+    for regime in REGIMES:
         result[regime] = {
             "inner_caps": {
                 "trend": getattr(rw, f"{regime}_trend_cap"),

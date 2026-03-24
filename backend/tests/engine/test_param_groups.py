@@ -60,5 +60,7 @@ def test_regime_caps_constraint_sum_per_regime():
         "ranging_squeeze_cap": 16, "ranging_volume_cap": 26,
         "volatile_trend_cap": 25, "volatile_mean_rev_cap": 28,
         "volatile_squeeze_cap": 22, "volatile_volume_cap": 25,
+        "steady_trend_cap": 40, "steady_mean_rev_cap": 15,
+        "steady_squeeze_cap": 20, "steady_volume_cap": 25,
     }
     assert validate_candidate("regime_caps", valid) is True

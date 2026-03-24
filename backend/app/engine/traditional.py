@@ -267,8 +267,6 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     if timeframe in _HTF_TIMEFRAMES:
         divergence = detect_divergence(close, rsi, lookback=50, order=3)
 
-    mr_suppression = max(1.0 - trend_conviction, divergence)
-
     trend_strength = sigmoid_scale(adx_val, center=20, steepness=0.25)
     vol_expansion = sigmoid_scale(bb_width_pct, center=50, steepness=0.08)
     regime = compute_regime_mix(trend_strength, vol_expansion)
@@ -294,9 +292,6 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     # 3. Squeeze / expansion
     mean_rev_sign = 1 if mean_rev_score > 0 else (-1 if mean_rev_score < 0 else 0)
     squeeze_score = mean_rev_sign * sigmoid_scale(50 - bb_width_pct, center=0, steepness=sq_steep) * caps["squeeze_cap"]
-
-    mean_rev_score = mean_rev_score * mr_suppression
-    squeeze_score = squeeze_score * mr_suppression
 
     # 4. Volume confirmation (60/40 split)
     obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * (caps["volume_cap"] * 0.6)
@@ -324,11 +319,11 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         "regime_trending": round(regime["trending"], 4),
         "regime_ranging": round(regime["ranging"], 4),
         "regime_volatile": round(regime["volatile"], 4),
+        "regime_steady": round(regime["steady"], 4),
         "ema_9": round(ema_9_val, 2),
         "ema_21": round(ema_21_val, 2),
         "ema_50": round(ema_50_val, 2),
         "trend_conviction": round(trend_conviction, 2),
-        "mr_suppression": round(mr_suppression, 2),
         "divergence": round(divergence, 2),
     }
 
@@ -373,14 +368,14 @@ def compute_order_flow_score(
 
     Args:
         regime: Market regime mix from compute_technical_score().
-            {"trending": float, "ranging": float, "volatile": float}
+            {"trending": float, "ranging": float, "volatile": float, "steady": float}
             None defaults to full contrarian (mult=1.0).
         flow_history: Recent OrderFlowSnapshot rows (oldest first).
             None or < 10 rows disables RoC override.
     """
     # regime-based contrarian scaling
     if regime is not None:
-        trending = regime.get("trending", 0.0)
+        trending = regime.get("trending", 0.0) + regime.get("steady", 0.0)
         contrarian_mult = 1.0 - (trending * (1.0 - TRENDING_FLOOR))
         contrarian_mult = max(TRENDING_FLOOR, min(1.0, contrarian_mult))
     else:
@@ -407,7 +402,7 @@ def compute_order_flow_score(
     final_mult = contrarian_mult + roc_boost * (1.0 - contrarian_mult)
 
     conviction_dampening = 1.0 - trend_conviction
-    final_mult = final_mult * conviction_dampening
+    final_mult = min(final_mult, conviction_dampening)
 
     # Funding rate — contrarian (max +/-35)
     funding = metrics.get("funding_rate", 0.0)

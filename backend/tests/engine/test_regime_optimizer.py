@@ -39,8 +39,7 @@ class TestFitness:
 class TestVectorConversion:
     def test_roundtrip_with_prenormalized_weights(self):
         """vector -> dict -> vector is identity when outer weights are already normalized."""
-        # Use caps that are arbitrary + outer weights that already sum to 1.0 per regime
-        vec = [30.0, 25.0, 22.0, 18.0] * 3 + [0.6, 0.4] * 3  # 0.6+0.4=1.0
+        vec = [30.0, 25.0, 22.0, 18.0] * 4 + [0.6, 0.4] * 4  # 4 regimes
         d = vector_to_regime_dict(vec)
         vec2 = regime_dict_to_vector(d)
         assert len(vec2) == N_PARAMS
@@ -49,22 +48,20 @@ class TestVectorConversion:
 
     def test_vector_length_matches_param_count(self):
         assert N_PARAMS == len(PARAM_BOUNDS)
-        assert N_PARAMS == 18  # 12 inner caps + 6 outer weights (tech+pattern x 3 regimes)
+        assert N_PARAMS == 24  # 16 inner caps + 8 outer weights (tech+pattern x 4 regimes)
 
     def test_outer_weights_normalized(self):
         """vector_to_regime_dict should normalize outer weights per regime."""
-        vec = [30.0] * 12 + [0.5, 0.3] * 3  # 12 caps + 6 outer weights
+        vec = [30.0] * 16 + [0.5, 0.3] * 4  # 16 caps + 8 outer weights
         d = vector_to_regime_dict(vec)
-        for regime in ["trending", "ranging", "volatile"]:
+        for regime in ["trending", "ranging", "volatile", "steady"]:
             tech = d[regime]["tech"]
             pattern = d[regime]["pattern"]
-            # tech + pattern should sum to 1.0 (since flow/onchain are 0 in backtester)
             assert abs(tech + pattern - 1.0) < 1e-9
 
     def test_normalization_changes_raw_values(self):
         """Non-normalized input should be corrected by vector_to_regime_dict."""
-        vec = [30.0] * 12 + [0.3, 0.2] * 3  # 0.3+0.2=0.5, not 1.0
+        vec = [30.0] * 16 + [0.3, 0.2] * 4  # 0.3+0.2=0.5, not 1.0
         d = vector_to_regime_dict(vec)
-        # After normalization: tech=0.6, pattern=0.4
         assert abs(d["trending"]["tech"] - 0.6) < 1e-9
         assert abs(d["trending"]["pattern"] - 0.4) < 1e-9
