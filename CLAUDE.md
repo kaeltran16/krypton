@@ -10,23 +10,24 @@ Krypton is a real-time crypto trading signal engine with a mobile-first PWA fron
 
 ```
 krypton/
-├── backend/          # FastAPI async API + signal engine
+├── backend/              # FastAPI async API + signal engine
 │   ├── app/
-│   │   ├── api/      # REST endpoints + WebSocket handlers
-│   │   ├── collector/ # OKX WebSocket + REST data ingestion
-│   │   ├── db/       # SQLAlchemy models, Alembic migrations
-│   │   ├── engine/   # Signal generation, scoring, risk management
-│   │   ├── exchange/ # OKX REST API client (orders, account)
-│   │   ├── push/     # Web Push notification dispatch
-│   │   ├── prompts/  # LLM prompt templates
-│   │   ├── config.py # Pydantic-settings + optional YAML overlay
-│   │   └── main.py   # App factory, lifespan, pipeline orchestration
-│   └── tests/
-├── web/              # React PWA frontend
+│   │   ├── api/          # REST endpoints + WebSocket handlers
+│   │   ├── collector/    # OKX WebSocket + REST data ingestion
+│   │   ├── db/           # SQLAlchemy models, Alembic migrations
+│   │   ├── engine/       # Signal generation, scoring, risk management
+│   │   ├── exchange/     # OKX REST API client (orders, account)
+│   │   ├── ml/           # PyTorch LSTM training + inference pipeline
+│   │   ├── push/         # Web Push notification dispatch
+│   │   ├── prompts/      # LLM prompt templates
+│   │   ├── config.py     # Pydantic-settings + optional YAML overlay
+│   │   └── main.py       # App factory, lifespan, pipeline orchestration
+│   ├── tests/
+│   └── docker-compose.yml
+├── web/                  # React PWA frontend
 │   └── src/
-│       ├── shared/   # API client, WebSocket manager, theme, utils
-│       └── features/ # Vertical-slice feature modules
-└── docker-compose.yml
+│       ├── shared/       # API client, WebSocket manager, theme, shared UI components
+│       └── features/     # Vertical-slice feature modules
 ```
 
 ## Development Commands
@@ -34,8 +35,8 @@ krypton/
 ### Backend (runs in Docker)
 
 ```bash
-# Start all services (API + Postgres + Redis)
-docker compose up -d
+# Start all services (API + Postgres + Redis) — docker-compose.yml is in backend/
+cd backend && docker compose up -d
 
 # Run all tests
 docker exec krypton-api-1 python -m pytest
@@ -83,18 +84,22 @@ The core data flow on each confirmed candle (orchestrated in `main.py:run_pipeli
 ### Backend Key Patterns
 
 - **Auth**: All REST endpoints require `X-API-Key` header (validated against `settings.krypton_api_key`). WebSocket validates at handshake via query param or header.
-- **Shared state**: `app.state` carries settings, db, redis, WebSocket manager (`ConnectionManager`), OKX client, order flow dict, ML predictors, pipeline tasks set, and prompt template.
+- **Shared state**: `app.state` carries settings, db, redis, WebSocket manager (`ConnectionManager`), OKX client, order flow dict, ML predictors, optimizer state, pipeline tasks set, and prompt template.
 - **Config**: Two-layer system — `.env` via pydantic-settings, optional `config.yaml` overlay that flattens nested keys (e.g., `engine.signal_threshold` → `engine_signal_threshold`). `PipelineSettings` DB table can override at runtime.
-- **DB**: SQLAlchemy 2.0 async with asyncpg. 10 models: `Candle`, `Signal`, `RiskSettings`, `PushSubscription`, `NewsEvent`, `PipelineSettings`, `OrderFlowSnapshot`, `BacktestRun`, `Alert`/`AlertHistory`, `PerformanceTrackerRow`. Singleton tables use `CheckConstraint("id = 1")`.
+- **DB**: SQLAlchemy 2.0 async with asyncpg. Models in `db/models.py`: `User`, `Candle`, `Signal`, `RiskSettings`, `NewsEvent`, `PushSubscription`, `PipelineSettings`, `OrderFlowSnapshot`, `BacktestRun`, `Alert`/`AlertHistory`/`AlertSettings`, `PerformanceTrackerRow`, `RegimeWeights`, `ParameterProposal`/`ShadowResult`, `MLTrainingRun`. Singleton tables use `CheckConstraint("id = 1")`.
 - **JSONB columns**: `raw_indicators`, `risk_metrics`, `detected_patterns`, `correlated_news_ids` on Signal model — flexible schema without migrations.
 - **Order flow is ephemeral**: `app.state.order_flow` dict is updated in-place by collectors, not persisted in real-time (only `OrderFlowSnapshot` records per candle).
-- **Phase 2 ATR optimization**: `PerformanceTracker` loads learned ATR multipliers per (pair, timeframe) from DB at startup; updates when signals resolve.
-- **Tests**: pytest with `asyncio_mode = "auto"`. Custom `_test_lifespan` in `conftest.py` stubs app.state without real DB/Redis/OKX. Uses `httpx.AsyncClient` with `ASGITransport`.
+- **Regime detection**: `engine/regime.py` computes continuous regime mix (trending/ranging/volatile) from ADX + BB width, blending sub-score caps and outer weights adaptively. `RegimeWeights` DB table stores learned per-pair regime weights.
+- **Parameter optimizer**: `engine/optimizer.py` monitors signal fitness, proposes parameter changes via counterfactual backtesting, validates in shadow mode before promotion. `ParameterProposal` + `ShadowResult` models track proposals. `engine/param_groups.py` defines tunable parameter groups with priority layers.
+- **ATR optimization**: `PerformanceTracker` loads learned ATR multipliers per (pair, timeframe) from DB at startup; updates when signals resolve.
+- **ML pipeline**: `ml/` module — `features.py` (feature matrix with momentum, regime, inter-pair features), `dataset.py`/`data_loader.py` (data prep), `model.py` (SignalLSTM), `trainer.py` (training loop), `predictor.py` (inference with stale-model detection), `labels.py` (label generation). Per-pair models stored as checkpoints with JSON sidecar configs. `MLTrainingRun` persists training history.
+- **Tests**: pytest with `asyncio_mode = "auto"`. Custom `_test_lifespan` in `conftest.py` stubs app.state without real DB/Redis/OKX. Uses `httpx.AsyncClient` with `ASGITransport`. Tests organized in subdirectories mirroring app structure (`tests/engine/`, `tests/ml/`, `tests/api/`, `tests/collector/`, `tests/exchange/`).
 
 ### Frontend Key Patterns
 
 - **No router**: Navigation is `useState<Tab>` in `Layout.tsx` — tabs: home, chart, signals, news, more. Views stay mounted but hidden via CSS class toggling.
-- **Feature slices**: Each feature under `src/features/<name>/` has `components/`, `hooks/`, optionally `store.ts` (Zustand) and `types.ts`. Features: home, chart, signals, settings, alerts, news, backtest, ml.
+- **Feature slices**: Each feature under `src/features/<name>/` has `components/`, `hooks/`, optionally `store.ts` (Zustand) and `types.ts`. Features: home, chart, signals, settings, alerts, news, backtest, ml, engine, optimizer, dashboard, system, trading, auth, more.
+- **Shared UI components**: `shared/components/` contains reusable primitives (Button, Card, Badge, Toggle, PillSelect, SegmentedControl, Skeleton, ProgressBar, MetricCard, FormField, CollapsibleSection, SubPageShell, EmptyState, SplashScreen, etc.) exported via barrel `index.ts`.
 - **Three WebSocket connections**: (1) Backend `/ws/signals` for signals + candle events (via `WebSocketManager` with exponential backoff), (2) OKX public WS for live ticker prices (`useLivePrice`), (3) OKX business WS for live chart candles (`useChartData`).
 - **Chart tick bypass**: Live chart candle ticks update via `onTickRef.current()` directly on the chart instance, bypassing React state. Only confirmed candles trigger React re-render + indicator recalc.
 - **Styling**: Tailwind CSS v3, no component library. Design tokens in `src/shared/theme.ts` → consumed by `tailwind.config.ts`. Key semantic colors: `surface`, `card`, `long` (#0ECB81), `short` (#F6465D), `accent` (#F0B90B). Glass effects via `.glass-card` class with backdrop blur.
