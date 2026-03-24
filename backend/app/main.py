@@ -1031,6 +1031,13 @@ async def check_pending_signals(app: FastAPI):
 
         await session.commit()
 
+        # Notify optimizer of resolved signals
+        optimizer = getattr(app.state, "optimizer", None)
+        if optimizer is not None:
+            for signal in pending:
+                if signal.outcome != "PENDING" and signal.outcome_pnl_pct is not None:
+                    optimizer.record_resolution(signal.outcome_pnl_pct)
+
         # Phase 2: check optimization triggers after batch resolution
         tracker = getattr(app.state, "tracker", None)
         if resolved_pairs_timeframes and tracker is not None:
@@ -1329,6 +1336,10 @@ async def lifespan(app: FastAPI):
 
     alert_cleanup_task = asyncio.create_task(alert_cleanup_loop())
 
+    # Start optimizer background loop
+    from app.engine.optimizer import run_optimizer_loop
+    optimizer_task = asyncio.create_task(run_optimizer_loop(app))
+
     # Load per-pair ML predictors if enabled
     app.state.ml_predictors = {}
     if getattr(settings, "ml_enabled", False):
@@ -1342,6 +1353,7 @@ async def lifespan(app: FastAPI):
     ws_task.cancel()
     poller_task.cancel()
     outcome_task.cancel()
+    optimizer_task.cancel()
     news_collector.stop()
     news_task.cancel()
     ticker_collector.stop()
