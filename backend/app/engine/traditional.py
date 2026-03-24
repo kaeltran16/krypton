@@ -17,6 +17,7 @@ def compute_trend_conviction(
     adx: float,
     di_plus: float,
     di_minus: float,
+    atr: float = 1.0,
 ) -> dict:
     """Compute trend conviction from EMA alignment, ADX strength, and price position.
 
@@ -26,15 +27,16 @@ def compute_trend_conviction(
     """
     direction = 1 if di_plus > di_minus else -1
 
-    # 1. EMA alignment (direction-aware): full=1.0, partial=0.5, against/equal=0.0
-    bullish_full = ema_9 > ema_21 > ema_50
-    bearish_full = ema_9 < ema_21 < ema_50
-    if bullish_full or bearish_full:
-        ema_alignment = 1.0
-    elif (direction == 1 and ema_9 > ema_21) or (direction == -1 and ema_9 < ema_21):
-        ema_alignment = 0.5
+    # 1. Continuous EMA alignment: normalized distance between EMA pairs through sigmoid
+    if atr > 0:
+        ema_spread = (ema_9 - ema_21) / atr
     else:
-        ema_alignment = 0.0
+        ema_spread = 0.0
+    ema_alignment = sigmoid_scale(abs(ema_spread), center=0.5, steepness=2.0)
+    # penalize conflicting EMA/DI direction
+    spread_dir = 1 if ema_spread >= 0 else -1
+    if spread_dir != direction:
+        ema_alignment *= 0.3
 
     # 2. ADX strength (reuses same sigmoid as regime detection)
     adx_strength = sigmoid_scale(adx, center=20, steepness=0.25)
@@ -226,10 +228,10 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     bb_range = bb_upper_val - bb_lower_val
     bb_pos = (float(close[last]) - bb_lower_val) / bb_range if bb_range > 0 else 0.5
 
-    # BB width percentile over last 50 values
+    bb_pct_window = INDICATOR_PERIODS["bb_width_percentile_window"]
     bb_widths = bb_width.dropna().values
-    if len(bb_widths) >= 50:
-        recent_widths = bb_widths[-50:]
+    if len(bb_widths) >= bb_pct_window:
+        recent_widths = bb_widths[-bb_pct_window:]
         current_width = bb_widths[-1]
         bb_width_pct = float(np.sum(recent_widths < current_width) / len(recent_widths) * 100)
     else:
@@ -260,6 +262,7 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         close=close_val,
         ema_9=ema_9_val, ema_21=ema_21_val, ema_50=ema_50_val,
         adx=adx_val, di_plus=di_plus_val, di_minus=di_minus_val,
+        atr=atr_val,
     )
     trend_conviction = tc["conviction"]
 
@@ -267,7 +270,8 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     if timeframe in _HTF_TIMEFRAMES:
         divergence = detect_divergence(close, rsi, lookback=50, order=3)
 
-    trend_strength = sigmoid_scale(adx_val, center=20, steepness=0.25)
+    adx_center = getattr(regime_weights, "adx_center", 20.0) if regime_weights else 20.0
+    trend_strength = sigmoid_scale(adx_val, center=adx_center, steepness=0.25)
     vol_expansion = sigmoid_scale(bb_width_pct, center=50, steepness=0.08)
     regime = compute_regime_mix(trend_strength, vol_expansion)
     caps = blend_caps(regime, regime_weights)
@@ -327,12 +331,21 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         "divergence": round(divergence, 2),
     }
 
-    return {"score": score, "indicators": indicators, "regime": regime, "caps": caps}
+    # confidence: combine trend strength + conviction + indicator agreement
+    # indicator_conflict is high when trend and mean-rev scores cancel each other
+    indicator_conflict = 1.0 - abs(trend_score + mean_rev_score) / max(abs(trend_score) + abs(mean_rev_score), 1e-6)
+    confidence = (trend_strength * 0.4 + trend_conviction * 0.4 + (1.0 - indicator_conflict) * 0.2)
+    confidence = max(0.0, min(1.0, confidence))
+
+    return {"score": score, "indicators": indicators, "regime": regime, "caps": caps, "confidence": round(confidence, 4)}
 
 
 # --- Order flow contrarian bias constants ---
-from app.engine.constants import ORDER_FLOW
+from app.engine.constants import ORDER_FLOW, INDICATOR_PERIODS
 
+FUNDING_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["funding"]
+OI_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["oi"]
+LS_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["ls_ratio"]
 TRENDING_FLOOR = ORDER_FLOW["trending_floor"]
 RECENT_WINDOW = ORDER_FLOW["recent_window"]
 BASELINE_WINDOW = ORDER_FLOW["baseline_window"]
@@ -406,7 +419,7 @@ def compute_order_flow_score(
 
     # Funding rate — contrarian (max +/-35)
     funding = metrics.get("funding_rate", 0.0)
-    funding_score = sigmoid_score(-funding, center=0, steepness=8000) * 35 * final_mult
+    funding_score = sigmoid_score(-funding, center=0, steepness=FUNDING_STEEPNESS) * 35 * final_mult
 
     # OI change — direction-aware (max +/-20), NOT affected by regime/RoC
     oi_change = metrics.get("open_interest_change_pct", 0.0)
@@ -414,11 +427,11 @@ def compute_order_flow_score(
     if price_dir == 0:
         oi_score = 0.0
     else:
-        oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=65) * 20
+        oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=OI_STEEPNESS) * 20
 
     # L/S ratio — contrarian (max +/-35)
     ls = metrics.get("long_short_ratio", 1.0)
-    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=6) * 35 * final_mult
+    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=LS_STEEPNESS) * 35 * final_mult
 
     total = funding_score + oi_score + ls_score
     score = max(min(round(total), 100), -100)
@@ -441,4 +454,12 @@ def compute_order_flow_score(
         "trend_conviction": round(trend_conviction, 2),
     }
 
-    return {"score": score, "details": details}
+    # confidence: proportion of available inputs (3 possible: funding, OI, L/S)
+    inputs_present = sum([
+        funding != 0.0,
+        oi_change != 0.0 and price_dir != 0,
+        ls != 1.0,
+    ])
+    flow_confidence = round(inputs_present / 3.0, 4)
+
+    return {"score": score, "details": details, "confidence": flow_confidence}

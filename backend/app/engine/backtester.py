@@ -175,7 +175,7 @@ def run_backtest(
             try:
                 detected = detect_candlestick_patterns(df)
                 indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-                pat_score = compute_pattern_score(detected, indicator_ctx)
+                pat_score = compute_pattern_score(detected, indicator_ctx)["score"]
             except Exception:
                 pass
 
@@ -204,7 +204,7 @@ def run_backtest(
             onchain_weight=0.0,
             pattern_score=pat_score,
             pattern_weight=bt_pattern_w,
-        )
+        )["score"]
 
         # ── Optional ML blending ──
         ml_score = None

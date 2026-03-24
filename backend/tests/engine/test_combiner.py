@@ -20,7 +20,7 @@ def test_preliminary_score_weighted():
         technical_score=80, order_flow_score=60, onchain_score=40, pattern_score=50,
     )
     expected = round(80 * 0.40 + 60 * 0.22 + 40 * 0.23 + 50 * 0.15)
-    assert result == expected
+    assert result["score"] == expected
 
 
 def test_preliminary_score_two_way_backward_compat():
@@ -32,7 +32,7 @@ def test_preliminary_score_two_way_backward_compat():
         pattern_weight=0.0,
     )
     expected = round(80 * 0.60 + 50 * 0.40)
-    assert result == expected
+    assert result["score"] == expected
 
 
 def test_preliminary_score_auto_normalization():
@@ -41,7 +41,7 @@ def test_preliminary_score_auto_normalization():
         technical_score=100, order_flow_score=100, onchain_score=100, pattern_score=100,
         tech_weight=0.50, flow_weight=0.50, onchain_weight=0.50, pattern_weight=0.50,
     )
-    assert result == 100
+    assert result["score"] == 100
 
 
 def test_preliminary_score_custom_weights():
@@ -51,7 +51,7 @@ def test_preliminary_score_custom_weights():
         tech_weight=0.50, flow_weight=0.20, onchain_weight=0.15, pattern_weight=0.15,
     )
     expected = round(70 * 0.50 + 50 * 0.20 + 30 * 0.15 + 60 * 0.15)
-    assert result == expected
+    assert result["score"] == expected
 
 
 # ── blend_with_ml ──

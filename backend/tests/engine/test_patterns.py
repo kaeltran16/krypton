@@ -158,51 +158,50 @@ class TestPatternScoring:
 
     def test_bullish_pattern_positive_score(self):
         patterns = [{"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12}]
-        score = compute_pattern_score(patterns)
-        assert score > 0
+        result = compute_pattern_score(patterns)
+        assert result["score"] > 0
 
     def test_bearish_pattern_negative_score(self):
         patterns = [{"name": "Bearish Engulfing", "type": "candlestick", "bias": "bearish", "strength": 15}]
-        score = compute_pattern_score(patterns)
-        assert score < 0
+        result = compute_pattern_score(patterns)
+        assert result["score"] < 0
 
     def test_stacking_patterns(self):
         patterns = [
             {"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12},
             {"name": "Bullish Engulfing", "type": "candlestick", "bias": "bullish", "strength": 15},
         ]
-        score = compute_pattern_score(patterns)
-        assert score == 27  # 12 + 15
+        result = compute_pattern_score(patterns)
+        assert result["score"] == 27  # 12 + 15
 
     def test_neutral_pattern_no_score(self):
         patterns = [{"name": "Doji", "type": "candlestick", "bias": "neutral", "strength": 8}]
-        score = compute_pattern_score(patterns)
-        assert score == 0
+        result = compute_pattern_score(patterns)
+        assert result["score"] == 0
 
     def test_empty_patterns_zero_score(self):
-        assert compute_pattern_score([]) == 0
+        assert compute_pattern_score([])["score"] == 0
 
     def test_score_clamped_to_100(self):
         patterns = [
             {"name": f"Pat{i}", "type": "candlestick", "bias": "bullish", "strength": 15}
             for i in range(10)
         ]
-        score = compute_pattern_score(patterns)
-        assert score == 100
+        result = compute_pattern_score(patterns)
+        assert result["score"] == 100
 
     def test_level_proximity_boost(self):
         patterns = [{"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12}]
-        # bb_pos=0.01 puts price near lower band edge, triggering level-proximity boost
         _NEAR_LOWER_BB_CTX = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0, "bb_pos": 0.01, "close": 100}
-        score_boosted = compute_pattern_score(patterns, _NEAR_LOWER_BB_CTX)
-        score_normal = compute_pattern_score(patterns)
+        score_boosted = compute_pattern_score(patterns, _NEAR_LOWER_BB_CTX)["score"]
+        score_normal = compute_pattern_score(patterns)["score"]
         assert score_boosted > score_normal
 
     def test_near_upper_band_boost(self):
         patterns = [{"name": "Bearish Engulfing", "type": "candlestick", "bias": "bearish", "strength": 15}]
         _NEAR_UPPER_BB_CTX = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0, "bb_pos": 0.99, "close": 100}
-        score_boosted = compute_pattern_score(patterns, _NEAR_UPPER_BB_CTX)
-        score_normal = compute_pattern_score(patterns)
+        score_boosted = compute_pattern_score(patterns, _NEAR_UPPER_BB_CTX)["score"]
+        score_normal = compute_pattern_score(patterns)["score"]
         assert abs(score_boosted) > abs(score_normal)
 
 
@@ -212,9 +211,7 @@ class TestTrendAlignmentBoost:
         patterns = [{"name": "Bullish Engulfing", "type": "two_candle", "bias": "bullish", "strength": 15}]
         ctx = {"adx": 25, "di_plus": 10, "di_minus": 30, "vol_ratio": 1.0,
                "bb_pos": 0.5, "close": 100}
-        score = compute_pattern_score(patterns, ctx)
-        # 15 * 1.3 (reversal) = 19.5, rounded = 20
-        # No other boosts active (vol_ratio=1.0, bb_pos=0.5)
+        score = compute_pattern_score(patterns, ctx)["score"]
         assert score > 15  # boosted above base strength
 
     def test_weak_trend_no_boost(self):
@@ -222,7 +219,7 @@ class TestTrendAlignmentBoost:
         patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
         ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
                "bb_pos": 0.5, "close": 100}
-        score = compute_pattern_score(patterns, ctx)
+        score = compute_pattern_score(patterns, ctx)["score"]
         assert score == 12  # no boost
 
 
@@ -232,14 +229,14 @@ class TestVolumeConfirmationBoost:
         patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
         ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 2.0,
                "bb_pos": 0.5, "close": 100}
-        score = compute_pattern_score(patterns, ctx)
+        score = compute_pattern_score(patterns, ctx)["score"]
         assert score > 12
 
     def test_normal_volume_no_boost(self):
         patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
         ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
                "bb_pos": 0.5, "close": 100}
-        score = compute_pattern_score(patterns, ctx)
+        score = compute_pattern_score(patterns, ctx)["score"]
         assert score == 12
 
 
@@ -249,7 +246,7 @@ class TestLevelProximityBoost:
         patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
         ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
                "bb_pos": 0.05, "close": 100}
-        score = compute_pattern_score(patterns, ctx)
+        score = compute_pattern_score(patterns, ctx)["score"]
         assert score > 12
 
     def test_center_no_boost(self):
@@ -257,7 +254,7 @@ class TestLevelProximityBoost:
         patterns = [{"name": "Hammer", "type": "single", "bias": "bullish", "strength": 12}]
         ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
                "bb_pos": 0.5, "close": 100}
-        score = compute_pattern_score(patterns, ctx)
+        score = compute_pattern_score(patterns, ctx)["score"]
         assert score == 12
 
     def test_boost_never_below_one(self):
@@ -266,7 +263,7 @@ class TestLevelProximityBoost:
         for bb in [0.0, 0.2, 0.3, 0.5, 0.7, 0.8, 1.0]:
             ctx = {"adx": 10, "di_plus": 15, "di_minus": 10, "vol_ratio": 1.0,
                    "bb_pos": bb, "close": 100}
-            score = compute_pattern_score(patterns, ctx)
+            score = compute_pattern_score(patterns, ctx)["score"]
             assert score >= 12  # never penalized
 
 

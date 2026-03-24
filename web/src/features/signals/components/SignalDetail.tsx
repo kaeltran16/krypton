@@ -5,6 +5,7 @@ import { formatPrice, formatScore } from "../../../shared/lib/format";
 import { PatternDetailRow } from "./PatternBadges";
 import { IndicatorAudit } from "./IndicatorAudit";
 import { ReasoningChain } from "./ReasoningChain";
+import { Badge } from "../../../shared/components/Badge";
 import { Button } from "../../../shared/components/Button";
 import { ProgressBar } from "../../../shared/components/ProgressBar";
 
@@ -61,6 +62,15 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
           <div className="flex items-center gap-2 mt-1">
             <span className="font-headline font-bold text-on-surface">{signal.pair}</span>
             <span className="text-on-surface-variant text-sm">{signal.timeframe}</span>
+            {signal.confidence_tier && (
+              <Badge
+                color={signal.confidence_tier === "high" ? "long" : signal.confidence_tier === "medium" ? "accent" : "muted"}
+                pill
+                weight="medium"
+              >
+                {signal.confidence_tier}
+              </Badge>
+            )}
           </div>
         </div>
         <div className="relative z-10 h-24 w-24">

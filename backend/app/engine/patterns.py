@@ -237,7 +237,7 @@ def detect_candlestick_patterns(candles: pd.DataFrame) -> list[dict]:
 def compute_pattern_score(
     patterns: list[dict],
     indicator_ctx: dict | None = None,
-) -> int:
+) -> dict:
     """Score detected candlestick patterns with contextual boosts.
 
     Args:
@@ -246,10 +246,10 @@ def compute_pattern_score(
                        If None, no boosts are applied (base strength only).
 
     Returns:
-        Score in [-100, +100].
+        Dict with 'score' in [-100, +100] and 'confidence' in [0, 1].
     """
     if not patterns:
-        return 0
+        return {"score": 0, "confidence": 0.0}
 
     # When no context is provided, use neutral defaults (no boosts applied)
     if indicator_ctx is None:
@@ -304,4 +304,8 @@ def compute_pattern_score(
         else:  # bearish
             total -= boosted_strength
 
-    return max(min(round(total), 100), -100)
+    # confidence: based on number of non-neutral patterns detected (max ~3 meaningful)
+    non_neutral = sum(1 for p in patterns if p.get("bias", "neutral") != "neutral")
+    confidence = round(min(non_neutral / 3.0, 1.0), 4)
+
+    return {"score": max(min(round(total), 100), -100), "confidence": confidence}

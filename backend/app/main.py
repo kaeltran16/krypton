@@ -34,7 +34,7 @@ from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
-from app.engine.combiner import compute_preliminary_score, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
+from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
@@ -42,7 +42,7 @@ from app.engine.confluence import (
     TIMEFRAME_PARENT, CONFLUENCE_ONLY_TIMEFRAMES,
     TIMEFRAME_CACHE_TTL, compute_confluence_score, di_direction,
 )
-from app.engine.regime import blend_outer_weights
+from app.engine.regime import blend_outer_weights, smooth_regime_mix
 from app.engine.structure import collect_structure_levels, snap_levels_to_structure
 from app.db.models import RegimeWeights
 
@@ -191,6 +191,7 @@ async def persist_signal(db: Database, signal_data: dict):
                 detected_patterns=signal_data.get("detected_patterns"),
                 correlated_news_ids=signal_data.get("correlated_news_ids"),
                 engine_snapshot=signal_data.get("engine_snapshot"),
+                confidence_tier=signal_data.get("confidence_tier"),
             )
             session.add(row)
             await session.commit()
@@ -397,19 +398,20 @@ async def run_pipeline(app: FastAPI, candle: dict):
     # Inject price direction for direction-aware OI scoring
     flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] > candle["open"] else (-1 if candle["close"] < candle["open"] else 0)}
 
-    # Query flow history for contrarian bias RoC detection
+    # Query flow history for contrarian bias RoC detection (skip if no flow data)
     flow_history = []
-    try:
-        async with db.session_factory() as session:
-            result = await session.execute(
-                select(OrderFlowSnapshot.funding_rate, OrderFlowSnapshot.long_short_ratio)
-                .where(OrderFlowSnapshot.pair == pair)
-                .order_by(OrderFlowSnapshot.timestamp.desc())
-                .limit(10)
-            )
-            flow_history = list(reversed(result.all()))
-    except Exception as e:
-        logger.debug(f"Flow history query skipped: {e}")
+    if flow_metrics:
+        try:
+            async with db.session_factory() as session:
+                result = await session.execute(
+                    select(OrderFlowSnapshot.funding_rate, OrderFlowSnapshot.long_short_ratio)
+                    .where(OrderFlowSnapshot.pair == pair)
+                    .order_by(OrderFlowSnapshot.timestamp.desc())
+                    .limit(10)
+                )
+                flow_history = list(reversed(result.all()))
+        except Exception as e:
+            logger.debug(f"Flow history query skipped: {e}")
 
     flow_result = compute_order_flow_score(
         flow_metrics,
@@ -436,27 +438,31 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # Pattern detection
     detected_patterns = []
-    pat_score = 0
+    pat_result = {"score": 0, "confidence": 0.0}
     try:
         detected_patterns = detect_candlestick_patterns(df)
         indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-        pat_score = compute_pattern_score(detected_patterns, indicator_ctx)
+        pat_result = compute_pattern_score(detected_patterns, indicator_ctx)
     except Exception as e:
         logger.debug(f"Pattern detection skipped: {e}")
+    pat_score = pat_result["score"]
 
     # On-chain scoring (if available)
-    onchain_score = 0
+    onchain_result = {"score": 0, "confidence": 0.0}
     onchain_available = False
     if getattr(settings, "onchain_enabled", False):
         try:
             from app.engine.onchain_scorer import compute_onchain_score
-            onchain_score = await compute_onchain_score(pair, redis)
-            onchain_available = onchain_score != 0
+            onchain_result = await compute_onchain_score(pair, redis)
+            onchain_available = onchain_result["score"] != 0
         except Exception as e:
             logger.debug(f"On-chain scoring skipped: {e}")
+    onchain_score = onchain_result["score"]
 
-    # Regime-aware outer weight blending
+    # Regime-aware outer weight blending (smoothed to prevent single-candle flips)
     regime = tech_result.get("regime")
+    if regime:
+        regime = smooth_regime_mix(regime, app.state.smoothed_regime, pair, timeframe)
     outer = blend_outer_weights(regime, regime_weights)
 
     # Zero unavailable sources, then renormalize
@@ -472,7 +478,12 @@ async def run_pipeline(app: FastAPI, candle: dict):
         onchain_w /= total_w
         pattern_w /= total_w
 
-    indicator_preliminary = compute_preliminary_score(
+    tech_conf = tech_result.get("confidence", 0.5)
+    flow_conf = flow_result.get("confidence", 0.5)
+    onchain_conf = onchain_result.get("confidence", 0.0)
+    pattern_conf = pat_result.get("confidence", 0.0)
+
+    prelim_result = compute_preliminary_score(
         tech_result["score"],
         flow_result["score"],
         tech_w,
@@ -481,7 +492,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
         onchain_w,
         pat_score,
         pattern_w,
+        tech_confidence=tech_conf,
+        flow_confidence=flow_conf,
+        onchain_confidence=onchain_conf,
+        pattern_confidence=pattern_conf,
     )
+    indicator_preliminary = prelim_result["score"]
+    confidence_tier = compute_confidence_tier(prelim_result["avg_confidence"])
 
     # ── Step 2: ML scoring (when available) ──
     ml_score = None
@@ -773,7 +790,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         sl_max_atr=settings.ml_sl_max_atr,
     )
 
-    regime_mix = {
+    regime_mix = regime if regime else {
         "trending": tech_result["indicators"].get("regime_trending", 0),
         "ranging": tech_result["indicators"].get("regime_ranging", 0),
         "volatile": tech_result["indicators"].get("regime_volatile", 0),
@@ -837,6 +854,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         },
         "detected_patterns": detected_patterns or None,
         "engine_snapshot": engine_snapshot,
+        "confidence_tier": confidence_tier,
     }
 
     await _emit_signal(app, signal_data, levels, correlated_news_ids)
@@ -1148,6 +1166,8 @@ async def lifespan(app: FastAPI):
             logger.info("Loaded regime weights for %d pair/timeframe combos", len(app.state.regime_weights))
     except Exception as e:
         logger.warning("Failed to load regime weights: %s", e)
+
+    app.state.smoothed_regime = {}
 
     # Load PipelineSettings from DB and patch onto in-memory settings
     _db_to_settings = {

@@ -55,6 +55,7 @@ def _make_app(regime_weights=None):
 
     # Regime weights (the feature under test)
     app.state.regime_weights = regime_weights or {}
+    app.state.smoothed_regime = {}
 
     # Pipeline task tracking
     app.state.pipeline_tasks = set()

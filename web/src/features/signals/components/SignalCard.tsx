@@ -32,6 +32,15 @@ export function SignalCard({ signal, onSelect, onExecute }: SignalCardProps) {
             <Badge color={isLong ? "long" : "short"} border pill className="px-2">
               {signal.direction} {signal.timeframe}
             </Badge>
+            {signal.confidence_tier && (
+              <Badge
+                color={signal.confidence_tier === "high" ? "long" : signal.confidence_tier === "medium" ? "accent" : "muted"}
+                pill
+                weight="medium"
+              >
+                {signal.confidence_tier}
+              </Badge>
+            )}
           </div>
           <span className="text-on-surface-variant text-xs uppercase tracking-widest mt-1 block">
             {formatRelativeTime(signal.created_at)}

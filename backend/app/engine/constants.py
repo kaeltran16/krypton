@@ -13,7 +13,7 @@ INDICATOR_PERIODS = {
     "bb_std": 2,
     "ema_spans": [9, 21, 50],
     "obv_slope_window": 10,
-    "bb_width_percentile_window": 50,
+    "bb_width_percentile_window": 100,
 }
 
 SIGMOID_PARAMS = {
@@ -29,7 +29,7 @@ SIGMOID_PARAMS = {
 # -- Order flow scoring --
 ORDER_FLOW = {
     "max_scores": {"funding": 35, "oi": 20, "ls_ratio": 35},
-    "sigmoid_steepnesses": {"funding": 8000, "oi": 65, "ls_ratio": 6},
+    "sigmoid_steepnesses": {"funding": 400, "oi": 20, "ls_ratio": 6},
     "trending_floor": 0.3,
     "recent_window": 3,
     "baseline_window": 7,
@@ -252,12 +252,12 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "funding_steepness": {
         "description": "Sigmoid steepness for funding rate scoring. Higher = more sensitive to funding extremes",
         "pipeline_stage": "Order Flow Scoring",
-        "range": "3000-15000",
+        "range": "200-800",
     },
     "oi_steepness": {
         "description": "Sigmoid steepness for open interest change scoring",
         "pipeline_stage": "Order Flow Scoring",
-        "range": "30-120",
+        "range": "10-40",
     },
     "ls_ratio_steepness": {
         "description": "Sigmoid steepness for long/short ratio scoring",

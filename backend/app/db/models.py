@@ -98,6 +98,8 @@ class Signal(Base):
     correlated_news_ids: Mapped[list | None] = mapped_column(JSONB)
     # engine parameter snapshot at signal emission time
     engine_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # confidence tier from weighted scorer confidence
+    confidence_tier: Mapped[str | None] = mapped_column(String(8), nullable=True, server_default="medium")
 
     __table_args__ = (
         Index("ix_signal_pair_tf_created", "pair", "timeframe", "created_at"),
@@ -384,6 +386,9 @@ class RegimeWeights(Base):
     steady_flow_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.22, server_default="0.22")
     steady_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18, server_default="0.18")
     steady_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12, server_default="0.12")
+
+    # per-pair ADX center for trend strength sigmoid
+    adx_center: Mapped[float] = mapped_column(Float, nullable=False, default=20.0, server_default="20.0")
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

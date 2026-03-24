@@ -222,8 +222,8 @@ PARAM_GROUPS: dict[str, dict] = {
             "funding_max": (15, 50, None),
             "oi_max": (10, 35, None),
             "ls_ratio_max": (15, 50, None),
-            "funding_steepness": (3000, 15000, None),
-            "oi_steepness": (30, 120, None),
+            "funding_steepness": (200, 800, None),
+            "oi_steepness": (10, 40, None),
             "ls_ratio_steepness": (2, 12, None),
         },
         "constraints": lambda c: (

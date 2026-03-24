@@ -10,19 +10,49 @@ def compute_preliminary_score(
     onchain_weight: float = 0.23,
     pattern_score: int = 0,
     pattern_weight: float = 0.15,
-) -> int:
-    total = tech_weight + flow_weight + onchain_weight + pattern_weight
-    if abs(total - 1.0) > 0.01:
-        tech_weight, flow_weight, onchain_weight, pattern_weight = (
-            tech_weight / total, flow_weight / total,
-            onchain_weight / total, pattern_weight / total,
-        )
-    return round(
-        technical_score * tech_weight
-        + order_flow_score * flow_weight
-        + onchain_score * onchain_weight
-        + pattern_score * pattern_weight
+    tech_confidence: float = 0.5,
+    flow_confidence: float = 0.5,
+    onchain_confidence: float = 0.5,
+    pattern_confidence: float = 0.5,
+) -> dict:
+    # confidence-weight each source: effective_weight = base_weight * confidence
+    ew_tech = tech_weight * tech_confidence
+    ew_flow = flow_weight * flow_confidence
+    ew_onchain = onchain_weight * onchain_confidence
+    ew_pattern = pattern_weight * pattern_confidence
+    total = ew_tech + ew_flow + ew_onchain + ew_pattern
+    if total > 0:
+        ew_tech /= total
+        ew_flow /= total
+        ew_onchain /= total
+        ew_pattern /= total
+    else:
+        # fallback to equal weights
+        ew_tech = ew_flow = ew_onchain = ew_pattern = 0.25
+    score = round(
+        technical_score * ew_tech
+        + order_flow_score * ew_flow
+        + onchain_score * ew_onchain
+        + pattern_score * ew_pattern
     )
+    # weighted-average confidence (using base weights, not effective weights)
+    total_w = tech_weight + flow_weight + onchain_weight + pattern_weight
+    avg_confidence = (
+        tech_confidence * tech_weight
+        + flow_confidence * flow_weight
+        + onchain_confidence * onchain_weight
+        + pattern_confidence * pattern_weight
+    ) / total_w if total_w > 0 else 0.0
+    return {"score": score, "avg_confidence": avg_confidence}
+
+
+def compute_confidence_tier(avg_confidence: float) -> str:
+    """Map a weighted-average confidence value to a tier label."""
+    if avg_confidence >= 0.7:
+        return "high"
+    if avg_confidence >= 0.4:
+        return "medium"
+    return "low"
 
 
 def blend_with_ml(

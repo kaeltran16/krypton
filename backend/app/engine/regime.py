@@ -42,6 +42,45 @@ def compute_regime_mix(trend_strength: float, vol_expansion: float) -> dict:
     }
 
 
+def smooth_regime_mix(
+    raw: dict,
+    smoothed_state: dict,
+    pair: str,
+    timeframe: str,
+    alpha: float = 0.3,
+) -> dict:
+    """EMA-smooth regime mix to prevent single-candle regime flips.
+
+    Args:
+        raw: Raw regime mix from compute_regime_mix.
+        smoothed_state: Mutable dict holding prior smoothed values keyed by (pair, timeframe).
+        pair: Trading pair identifier.
+        timeframe: Candle timeframe.
+        alpha: EMA alpha (higher = more responsive, lower = smoother).
+
+    Returns:
+        Smoothed regime mix dict (trending/ranging/volatile/steady summing to ~1.0).
+    """
+    key = (pair, timeframe)
+    prev = smoothed_state.get(key)
+
+    if prev is None:
+        smoothed = dict(raw)
+    else:
+        smoothed = {
+            r: alpha * raw[r] + (1 - alpha) * prev[r]
+            for r in REGIMES
+        }
+
+    # renormalize to sum to 1.0
+    total = sum(smoothed.values())
+    if total > 0:
+        smoothed = {r: v / total for r, v in smoothed.items()}
+
+    smoothed_state[key] = smoothed
+    return smoothed
+
+
 def _extract_regime_dict(regime_weights, keys: list[str], suffix: str) -> dict:
     """Extract a regime-keyed dict from a RegimeWeights DB row.
 

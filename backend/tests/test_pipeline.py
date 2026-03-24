@@ -35,7 +35,7 @@ def test_full_pipeline_produces_signal():
     flow_result = compute_order_flow_score(flow_metrics)
     assert -100 <= flow_result["score"] <= 100
 
-    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
+    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])["score"]
 
     # Simulate a positive LLM contribution (e.g., from factor scoring)
     final = compute_final_score(preliminary, 14)
@@ -59,7 +59,7 @@ def test_pipeline_without_llm():
     tech_result = compute_technical_score(df)
     flow_result = compute_order_flow_score({})
 
-    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
+    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])["score"]
     final = compute_final_score(preliminary, 0)
     assert final == preliminary
 
@@ -73,7 +73,7 @@ def test_pipeline_with_empty_order_flow():
     flow_result = compute_order_flow_score({})
     assert flow_result["score"] == 0
 
-    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
+    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])["score"]
     assert preliminary != 0
 
 
@@ -105,5 +105,5 @@ def test_pipeline_with_regime_and_flow_history():
     assert "final_mult" in flow_result["details"]
     assert flow_result["details"]["contrarian_mult"] <= 1.0
 
-    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])
+    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])["score"]
     assert isinstance(preliminary, (int, float))

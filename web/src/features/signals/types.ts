@@ -105,6 +105,7 @@ export interface Signal {
   detected_patterns: DetectedPattern[] | null;
   correlated_news_ids: number[] | null;
   engine_snapshot: Record<string, unknown> | null;
+  confidence_tier: 'high' | 'medium' | 'low' | null;
 }
 
 export interface PerformanceMetrics {
