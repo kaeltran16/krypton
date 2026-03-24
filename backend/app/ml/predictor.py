@@ -6,6 +6,7 @@ import os
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from app.ml.model import SignalLSTM
 
@@ -19,14 +20,18 @@ _NEUTRAL_RESULT = {
     "sl_atr": 0.0,
     "tp1_atr": 0.0,
     "tp2_atr": 0.0,
+    "mc_variance": 0.0,
 }
+
+MC_DROPOUT_PASSES = 5
 
 
 class Predictor:
     """Loads a trained model checkpoint and runs inference."""
 
-    def __init__(self, checkpoint_path: str):
+    def __init__(self, checkpoint_path: str, max_age_days: int = 14):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._max_confidence = 1.0
 
         # Load config from JSON sidecar (avoids weights_only restrictions)
         config_path = os.path.join(os.path.dirname(checkpoint_path), "model_config.json")
@@ -38,17 +43,21 @@ class Predictor:
         self.flow_used = config.get("flow_used", False)
         self.regime_used = config.get("regime_used", False)
         self.btc_used = config.get("btc_used", False)
+        self._temperature = config.get("temperature", 1.0)
+        self._expected_features = config.get("feature_names", [])
+        self._feature_map = None
+        self._available_features = None
 
-        # Detect stale models from pre-expansion layout (input_size 16-23)
-        self._stale = False
-        if 16 <= self.input_size <= 23:
+        # Check checkpoint age
+        import time as _time
+        file_age_days = (_time.time() - os.path.getmtime(checkpoint_path)) / 86400
+        if file_age_days > max_age_days:
             logger.warning(
-                "Model %s has input_size=%d (pre-expansion layout), needs retraining",
+                "Model %s is %.1f days old (max %d), confidence capped at 0.3",
                 os.path.basename(os.path.dirname(checkpoint_path)),
-                self.input_size,
+                file_age_days, max_age_days,
             )
-            self._stale = True
-            return  # skip loading weights for stale model
+            self._max_confidence = 0.3
 
         self.model = SignalLSTM(
             input_size=config["input_size"],
@@ -57,10 +66,49 @@ class Predictor:
             dropout=config.get("dropout", 0.0),
         ).to(self.device)
 
-        # Load weights only — safe and fast
         state_dict = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
         self.model.load_state_dict(state_dict)
         self.model.eval()
+
+    def set_available_features(self, names: list[str]):
+        """Set the feature names available at inference time.
+
+        Builds a mapping from available feature columns to the model's expected layout.
+        """
+        self._available_features = names
+        expected = self._expected_features
+        if not expected:
+            self._feature_map = None
+            return
+
+        available_idx = {name: i for i, name in enumerate(names)}
+        raw_map = []
+        missing = []
+        for name in expected:
+            idx = available_idx.get(name, -1)
+            raw_map.append(idx)
+            if idx == -1:
+                missing.append(name)
+
+        if missing:
+            logger.warning("Missing features for model (filled with 0): %s", missing)
+
+        # Precompute numpy index arrays for vectorized gather in _map_features
+        self._out_idx = np.array([i for i, c in enumerate(raw_map) if c >= 0], dtype=np.intp)
+        self._in_idx = np.array([c for c in raw_map if c >= 0], dtype=np.intp)
+        self._feature_map = raw_map
+
+    def _map_features(self, features: np.ndarray) -> np.ndarray:
+        """Remap feature columns to match model's expected layout."""
+        if self._feature_map is None:
+            if features.shape[1] > self.input_size:
+                return features[:, :self.input_size]
+            return features
+
+        n_rows = features.shape[0]
+        mapped = np.zeros((n_rows, len(self._feature_map)), dtype=np.float32)
+        mapped[:, self._out_idx] = features[:, self._in_idx]
+        return mapped
 
     def predict(self, features: np.ndarray) -> dict:
         """Run inference on a feature matrix.
@@ -69,35 +117,58 @@ class Predictor:
             features: (n_candles, n_features) array. Uses last seq_len rows.
 
         Returns:
-            dict with direction, confidence, sl_atr, tp1_atr, tp2_atr.
+            dict with direction, confidence, sl_atr, tp1_atr, tp2_atr, mc_variance.
         """
-        if self._stale:
-            return dict(_NEUTRAL_RESULT)
-
         if len(features) < self.seq_len:
             return dict(_NEUTRAL_RESULT)
 
-        # Truncate features to match model's expected input_size
-        if features.shape[1] > self.input_size:
-            features = features[:, :self.input_size]
+        # Feature mapping by name (if available)
+        features = self._map_features(features)
 
         # Take last seq_len candles
         window = features[-self.seq_len:]
         x = torch.tensor(window, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        with torch.no_grad():
-            dir_logits, reg_out = self.model(x)
+        temperature = self._temperature
 
-        probs = torch.softmax(dir_logits, dim=1).squeeze(0).cpu().numpy()
-        reg = reg_out.squeeze(0).cpu().numpy()
+        # Only enable Dropout layers, NOT BatchNorm
+        self.model.eval()
+        for m in self.model.modules():
+            if isinstance(m, nn.Dropout):
+                m.train()
 
-        direction_idx = int(np.argmax(probs))
-        confidence = float(probs[direction_idx])
+        all_probs = []
+        all_regs = []
+        for _ in range(MC_DROPOUT_PASSES):
+            with torch.no_grad():
+                dir_logits, reg_out = self.model(x)
+                probs = torch.softmax(dir_logits / temperature, dim=1).squeeze(0).cpu().numpy()
+                all_probs.append(probs)
+                all_regs.append(reg_out.squeeze(0).cpu().numpy())
+
+        self.model.eval()  # restore all layers to eval
+
+        mean_probs = np.mean(all_probs, axis=0)
+        mean_reg = np.mean(all_regs, axis=0)
+
+        # Epistemic uncertainty: variance across passes
+        prob_variance = float(np.mean(np.var(all_probs, axis=0)))
+
+        direction_idx = int(np.argmax(mean_probs))
+        raw_confidence = float(mean_probs[direction_idx])
+
+        # Reduce confidence proportionally to uncertainty
+        uncertainty_penalty = min(1.0, prob_variance * 10)
+        confidence = raw_confidence * (1.0 - uncertainty_penalty)
+
+        # Cap confidence for stale models
+        confidence = min(confidence, self._max_confidence)
 
         return {
             "direction": DIRECTION_MAP[direction_idx],
             "confidence": confidence,
-            "sl_atr": float(reg[0]),
-            "tp1_atr": float(reg[1]),
-            "tp2_atr": float(reg[2]),
+            "sl_atr": float(mean_reg[0]),
+            "tp1_atr": float(mean_reg[1]),
+            "tp2_atr": float(mean_reg[2]),
+            "mc_variance": prob_variance,
         }

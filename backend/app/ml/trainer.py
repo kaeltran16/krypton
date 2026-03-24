@@ -301,6 +301,53 @@ class Trainer:
             shutil.copy2(best_pt, versioned_pt)
             logger.info(f"Versioned checkpoint saved: {versioned_pt}")
 
+        # ── Temperature scaling on validation set ──
+        temperature = 1.0
+        if val_loader is not None:
+            best_pt = os.path.join(cfg.checkpoint_dir, "best_model.pt")
+            if os.path.exists(best_pt):
+                model.load_state_dict(torch.load(best_pt, map_location=self.device, weights_only=True))
+
+            model.eval()
+            all_logits = []
+            all_labels_temp = []
+            with torch.no_grad():
+                for x, y_dir, _ in val_loader:
+                    x = x.to(self.device)
+                    dir_logits, _ = model(x)
+                    all_logits.append(dir_logits)
+                    all_labels_temp.append(y_dir.to(self.device))
+
+            if all_logits:
+                all_logits = torch.cat(all_logits, dim=0)
+                all_labels_temp = torch.cat(all_labels_temp, dim=0)
+
+                log_temp = torch.tensor(0.0, device=self.device, requires_grad=True)
+                temp_optimizer = torch.optim.LBFGS([log_temp], lr=0.01, max_iter=50)
+                nll_fn = nn.CrossEntropyLoss()
+
+                def temp_closure():
+                    temp_optimizer.zero_grad()
+                    t = log_temp.exp()
+                    loss = nll_fn(all_logits / t, all_labels_temp)
+                    loss.backward()
+                    return loss
+
+                temp_optimizer.step(temp_closure)
+                temperature = float(log_temp.exp().item())
+                temperature = max(0.1, min(10.0, temperature))
+                logger.info(f"Temperature scaling: T={temperature:.4f}")
+
+        # Re-write sidecar with calibrated temperature
+        import json as _json
+        config_path = os.path.join(cfg.checkpoint_dir, "model_config.json")
+        if os.path.exists(config_path):
+            with open(config_path) as f:
+                config_meta = _json.load(f)
+            config_meta["temperature"] = temperature
+            with open(config_path, "w") as f:
+                _json.dump(config_meta, f, indent=2)
+
         # ── Compute classification metrics on validation set at best epoch ──
         direction_accuracy = 0.0
         precision_per_class = {"long": 0.0, "short": 0.0, "neutral": 0.0}

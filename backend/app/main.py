@@ -552,7 +552,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     ml_predictors = getattr(app.state, "ml_predictors", {})
     ml_predictor = ml_predictors.get(pair_slug)
 
-    if ml_predictor is not None and not getattr(ml_predictor, "_stale", False):
+    if ml_predictor is not None:
         try:
             from app.ml.features import build_feature_matrix
             from app.ml.utils import bucket_timestamp, compute_per_candle_regime
@@ -1344,7 +1344,7 @@ async def lifespan(app: FastAPI):
 
     # Liquidation collector
     from app.collector.liquidation import LiquidationCollector
-    liq_collector = LiquidationCollector(okx_client, settings.pairs)
+    liq_collector = LiquidationCollector(app.state.okx_client, settings.pairs)
     await liq_collector.start()
     app.state.liquidation_collector = liq_collector
     app.state.learned_thresholds = {}  # populated by optimizer

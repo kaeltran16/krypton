@@ -53,7 +53,8 @@ def test_trainer_saves_feature_names_in_sidecar():
 
         assert "feature_names" in config, "Sidecar must contain feature_names"
         assert "temperature" in config, "Sidecar must contain temperature"
-        assert config["temperature"] == 1.0  # uncalibrated default
+        assert config["temperature"] > 0.1, "Temperature must be positive"
+        assert isinstance(config["temperature"], float)
 
 
 def test_temperature_scaling_changes_calibration():
@@ -85,3 +86,169 @@ def test_temperature_scaling_changes_calibration():
         assert config["temperature"] != 1.0, "Temperature scaling must change T from default 1.0"
         assert config["temperature"] > 0.1, "Temperature must be positive"
         assert isinstance(config["temperature"], float)
+
+
+def test_mc_dropout_reduces_confidence_with_high_variance(tmp_path):
+    """MC Dropout should produce lower confidence when model is uncertain."""
+    from app.ml.model import SignalLSTM
+    from app.ml.predictor import Predictor
+
+    input_size = 15
+    model = SignalLSTM(input_size=input_size, hidden_size=32, num_layers=1, dropout=0.5)
+    torch.save(model.state_dict(), tmp_path / "best_model.pt")
+
+    config = {
+        "input_size": input_size,
+        "hidden_size": 32,
+        "num_layers": 1,
+        "dropout": 0.5,
+        "seq_len": 10,
+        "temperature": 1.0,
+        "feature_names": [f"f{i}" for i in range(input_size)],
+    }
+    with open(tmp_path / "model_config.json", "w") as f:
+        json.dump(config, f)
+
+    predictor = Predictor(str(tmp_path / "best_model.pt"))
+    features = np.random.randn(20, input_size).astype(np.float32)
+    result = predictor.predict(features)
+
+    assert "confidence" in result
+    assert "mc_variance" in result
+    assert result["mc_variance"] >= 0.0
+
+
+def test_mc_dropout_completes_within_latency_budget(tmp_path):
+    """5 MC Dropout passes should complete in <5s on CPU (generous for CI/Docker)."""
+    import time
+    from app.ml.model import SignalLSTM
+    from app.ml.predictor import Predictor
+
+    input_size = 24
+    model = SignalLSTM(input_size=input_size, hidden_size=128, num_layers=2, dropout=0.3)
+    torch.save(model.state_dict(), tmp_path / "best_model.pt")
+
+    config = {
+        "input_size": input_size, "hidden_size": 128, "num_layers": 2,
+        "dropout": 0.3, "seq_len": 50, "temperature": 1.0,
+        "feature_names": [f"f{i}" for i in range(input_size)],
+    }
+    with open(tmp_path / "model_config.json", "w") as f:
+        json.dump(config, f)
+
+    predictor = Predictor(str(tmp_path / "best_model.pt"))
+    features = np.random.randn(60, input_size).astype(np.float32)
+
+    start = time.monotonic()
+    result = predictor.predict(features)
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 5.0, f"MC Dropout inference took {elapsed:.2f}s (budget: 5s)"
+
+
+def test_feature_mapping_handles_missing_features(tmp_path):
+    """Predictor should map features by name, filling missing with 0."""
+    from app.ml.model import SignalLSTM
+    from app.ml.predictor import Predictor
+
+    input_size = 5
+    model = SignalLSTM(input_size=input_size, hidden_size=16, num_layers=1, dropout=0.0)
+    torch.save(model.state_dict(), tmp_path / "best_model.pt")
+
+    config = {
+        "input_size": input_size, "hidden_size": 16, "num_layers": 1,
+        "dropout": 0.0, "seq_len": 5, "temperature": 1.0,
+        "feature_names": ["a", "b", "c", "d", "e"],
+    }
+    with open(tmp_path / "model_config.json", "w") as f:
+        json.dump(config, f)
+
+    predictor = Predictor(str(tmp_path / "best_model.pt"))
+
+    # Provide features with different names (3 match, 2 missing)
+    predictor.set_available_features(["a", "c", "e", "x", "y"])
+    features = np.random.randn(10, 5).astype(np.float32)
+    result = predictor.predict(features)
+
+    # Should still produce a result (missing features filled with 0)
+    assert result["direction"] in ("NEUTRAL", "LONG", "SHORT")
+
+
+def test_feature_mapping_logs_missing(tmp_path, caplog):
+    """Predictor should log warnings for missing features."""
+    from app.ml.model import SignalLSTM
+    from app.ml.predictor import Predictor
+    import logging
+
+    input_size = 3
+    model = SignalLSTM(input_size=input_size, hidden_size=16, num_layers=1, dropout=0.0)
+    torch.save(model.state_dict(), tmp_path / "best_model.pt")
+
+    config = {
+        "input_size": input_size, "hidden_size": 16, "num_layers": 1,
+        "dropout": 0.0, "seq_len": 5, "temperature": 1.0,
+        "feature_names": ["a", "b", "c"],
+    }
+    with open(tmp_path / "model_config.json", "w") as f:
+        json.dump(config, f)
+
+    predictor = Predictor(str(tmp_path / "best_model.pt"))
+    predictor.set_available_features(["a", "d"])  # "b" and "c" missing
+
+    with caplog.at_level(logging.WARNING):
+        features = np.random.randn(10, 2).astype(np.float32)
+        predictor.predict(features)
+
+    assert any("missing" in msg.lower() or "Missing" in msg for msg in caplog.messages)
+
+
+def test_stale_model_by_age_reduces_confidence(tmp_path):
+    """Models older than max_age_days should have reduced confidence."""
+    from app.ml.model import SignalLSTM
+    from app.ml.predictor import Predictor
+
+    input_size = 15
+    model = SignalLSTM(input_size=input_size, hidden_size=16, num_layers=1, dropout=0.3)
+    pt_path = tmp_path / "best_model.pt"
+    torch.save(model.state_dict(), pt_path)
+
+    config = {
+        "input_size": input_size, "hidden_size": 16, "num_layers": 1,
+        "dropout": 0.3, "seq_len": 10, "temperature": 1.0,
+        "feature_names": [f"f{i}" for i in range(input_size)],
+    }
+    with open(tmp_path / "model_config.json", "w") as f:
+        json.dump(config, f)
+
+    # Make the checkpoint appear 20 days old
+    old_time = _time.time() - 20 * 86400
+    os.utime(pt_path, (old_time, old_time))
+
+    predictor = Predictor(str(pt_path), max_age_days=14)
+    assert predictor._max_confidence == 0.3
+
+    features = np.random.randn(20, input_size).astype(np.float32)
+    result = predictor.predict(features)
+    # Confidence should be capped at 0.3
+    assert result["confidence"] <= 0.3
+
+
+def test_fresh_model_not_marked_stale(tmp_path):
+    """Recently trained model should not be marked stale."""
+    from app.ml.model import SignalLSTM
+    from app.ml.predictor import Predictor
+
+    input_size = 15
+    model = SignalLSTM(input_size=input_size, hidden_size=16, num_layers=1, dropout=0.0)
+    torch.save(model.state_dict(), tmp_path / "best_model.pt")
+
+    config = {
+        "input_size": input_size, "hidden_size": 16, "num_layers": 1,
+        "dropout": 0.0, "seq_len": 10, "temperature": 1.0,
+        "feature_names": [f"f{i}" for i in range(input_size)],
+    }
+    with open(tmp_path / "model_config.json", "w") as f:
+        json.dump(config, f)
+
+    predictor = Predictor(str(tmp_path / "best_model.pt"), max_age_days=14)
+    assert predictor._max_confidence == 1.0

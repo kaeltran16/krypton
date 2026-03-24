@@ -256,9 +256,16 @@ async def start_training(body: TrainRequest, request: Request):
                 def on_progress(info, _pair=pair):
                     train_jobs[job_id]["progress"][_pair] = info
 
+                from app.ml.features import get_feature_names
+                train_feature_names = get_feature_names(
+                    flow_used=flow_used,
+                    regime_used=True,
+                    btc_used=not is_btc and btc_candles_list is not None,
+                )
+
                 trainer = Trainer(train_config)
                 pair_result = await asyncio.to_thread(
-                    trainer.train, features, direction, sl, tp1, tp2, on_progress,
+                    trainer.train, features, direction, sl, tp1, tp2, on_progress, train_feature_names,
                 )
 
                 # Patch model_config.json with feature flags so inference
@@ -571,6 +578,7 @@ def _reload_predictors(app, settings):
     """Reload per-pair ML predictors from checkpoints."""
     import os
     from app.ml.predictor import Predictor
+    from app.ml.features import get_feature_names
     predictors = {}
     checkpoint_dir = getattr(settings, "ml_checkpoint_dir", "models")
     if not os.path.isdir(checkpoint_dir):
@@ -582,7 +590,14 @@ def _reload_predictors(app, settings):
         model_path = os.path.join(pair_dir, "best_model.pt")
         if os.path.isfile(model_path):
             try:
-                predictors[entry] = Predictor(model_path)
+                predictor = Predictor(model_path)
+                feature_names = get_feature_names(
+                    flow_used=predictor.flow_used,
+                    regime_used=predictor.regime_used,
+                    btc_used=predictor.btc_used,
+                )
+                predictor.set_available_features(feature_names)
+                predictors[entry] = predictor
                 logger.info(f"ML predictor loaded for {entry}")
             except Exception as e:
                 logger.error(f"Failed to load ML predictor for {entry}: {e}")
