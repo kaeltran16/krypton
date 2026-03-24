@@ -89,7 +89,7 @@ export function SetupTab({
   const anyInsufficient = readiness ? Object.values(readiness).some((r) => !r.sufficient) : false;
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4">
       {/* Model overwrite warning */}
       {status && status.loaded_pairs.length > 0 && (
         <div className="bg-error/10 border border-error/30 rounded-lg px-3 py-2 flex items-start gap-2">
@@ -293,8 +293,8 @@ export function SetupTab({
         </div>
       </SettingsSection>
 
-      {/* Sticky Action Buttons */}
-      <div className="fixed bottom-0 left-0 right-0 bg-surface/90 backdrop-blur-lg border-t border-outline-variant/10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex gap-2 z-40">
+      {/* Action Buttons */}
+      <div className="flex gap-2">
         <Button variant="secondary" size="lg" onClick={handleReset} className="flex-1">Reset to Defaults</Button>
         <Button variant="primary" size="lg" disabled={!!trainingJob} onClick={() => setShowConfirm(true)} className="flex-1">Start Training</Button>
       </div>
