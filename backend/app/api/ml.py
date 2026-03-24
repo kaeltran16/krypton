@@ -17,6 +17,7 @@ from app.db.models import Candle, OrderFlowSnapshot, MLTrainingRun
 from app.ml.data_loader import prepare_training_data
 from app.ml.labels import LabelConfig
 from app.ml.trainer import Trainer, TrainConfig
+from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime
 
 logger = logging.getLogger(__name__)
 
@@ -161,12 +162,10 @@ async def start_training(body: TrainRequest, request: Request):
 
                 flow_used = False
                 if flow_rows:
-                    # Align flow snapshots to candles by nearest timestamp
                     from datetime import datetime as _dt
                     flow_by_ts = {}
                     for f in flow_rows:
-                        # Bucket to hour to match candle timestamps
-                        ts_key = f.timestamp.replace(minute=0, second=0, microsecond=0)
+                        ts_key = bucket_timestamp(f.timestamp, body.timeframe)
                         flow_by_ts[ts_key] = {
                             "funding_rate": f.funding_rate or 0,
                             "oi_change_pct": f.oi_change_pct or 0,
@@ -177,7 +176,10 @@ async def start_training(body: TrainRequest, request: Request):
                     flow = []
                     matched = 0
                     for c in candles:
-                        c_ts = _dt.fromisoformat(c["timestamp"]).replace(minute=0, second=0, microsecond=0)
+                        c_ts = bucket_timestamp(
+                            _dt.fromisoformat(c["timestamp"]),
+                            body.timeframe,
+                        )
                         snap = flow_by_ts.get(c_ts, zero_flow)
                         if snap is not zero_flow:
                             matched += 1
@@ -197,12 +199,43 @@ async def start_training(body: TrainRequest, request: Request):
                             f"{matched}/{len(candles)} ({coverage:.0%}) candles matched"
                         )
 
+                # Compute per-candle regime and trend conviction
+                import pandas as _pd
+                candles_df = _pd.DataFrame(candles)
+                regime_list, conviction_list = compute_per_candle_regime(candles_df)
+
+                # Fetch BTC candles for non-BTC pairs (inter-pair features)
+                btc_candles_list = None
+                is_btc = pair.startswith("BTC")
+                if not is_btc:
+                    async with db.session_factory() as session:
+                        result = await session.execute(
+                            select(Candle)
+                            .where(Candle.pair == "BTC-USDT-SWAP")
+                            .where(Candle.timeframe == body.timeframe)
+                            .where(Candle.timestamp >= date_from)
+                            .order_by(Candle.timestamp)
+                        )
+                        btc_rows = result.scalars().all()
+                    if btc_rows:
+                        btc_candles_list = [{
+                            "timestamp": c.timestamp.isoformat(),
+                            "open": float(c.open), "high": float(c.high),
+                            "low": float(c.low), "close": float(c.close),
+                            "volume": float(c.volume),
+                        } for c in btc_rows]
+
                 label_config = LabelConfig(
                     horizon=body.label_horizon,
                     threshold_pct=body.label_threshold_pct,
                 )
                 features, direction, sl, tp1, tp2 = prepare_training_data(
-                    candles, order_flow=flow, label_config=label_config,
+                    candles,
+                    order_flow=flow,
+                    label_config=label_config,
+                    btc_candles=btc_candles_list,
+                    regime=regime_list,
+                    trend_conviction=conviction_list,
                 )
 
                 # Per-pair checkpoint directory
@@ -228,14 +261,16 @@ async def start_training(body: TrainRequest, request: Request):
                     trainer.train, features, direction, sl, tp1, tp2, on_progress,
                 )
 
-                # Patch model_config.json with flow_used flag so inference
-                # knows whether to include order flow features
+                # Patch model_config.json with feature flags so inference
+                # knows which optional feature groups were used
                 config_path = os.path.join(pair_checkpoint_dir, "model_config.json")
                 if os.path.isfile(config_path):
                     import json as _j
                     with open(config_path) as f:
                         meta = _j.load(f)
                     meta["flow_used"] = flow_used
+                    meta["regime_used"] = True
+                    meta["btc_used"] = not is_btc and btc_candles_list is not None
                     with open(config_path, "w") as f:
                         _j.dump(meta, f, indent=2)
 

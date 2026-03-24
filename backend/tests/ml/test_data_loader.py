@@ -49,6 +49,6 @@ class TestPrepareTrainingData:
             candles, order_flow=flow_snapshots
         )
 
-        # Should have 3 extra features for order flow
+        # Should have 6 extra features for order flow (3 base + 3 RoC)
         features_no_flow, _, _, _, _ = prepare_training_data(candles)
-        assert features.shape[1] == features_no_flow.shape[1] + 3
+        assert features.shape[1] == features_no_flow.shape[1] + 6

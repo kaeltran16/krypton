@@ -493,21 +493,113 @@ async def run_pipeline(app: FastAPI, candle: dict):
     ml_predictors = getattr(app.state, "ml_predictors", {})
     ml_predictor = ml_predictors.get(pair_slug)
 
-    if ml_predictor is not None:
+    if ml_predictor is not None and not getattr(ml_predictor, "_stale", False):
         try:
             from app.ml.features import build_feature_matrix
+            from app.ml.utils import bucket_timestamp, compute_per_candle_regime
 
+            # Compute per-candle regime if model needs it
+            ml_regime = None
+            ml_conviction = None
+            if getattr(ml_predictor, "regime_used", False):
+                ml_regime, ml_conviction = compute_per_candle_regime(df)
+
+            # Fetch BTC candles from Redis for non-BTC pairs
+            ml_btc_df = None
+            is_btc = pair.startswith("BTC")
+            if not is_btc and getattr(ml_predictor, "btc_used", False):
+                try:
+                    btc_key = f"candles:BTC-USDT-SWAP:{timeframe}"
+                    raw_btc = await redis.lrange(btc_key, -200, -1)
+                    if raw_btc:
+                        ml_btc_df = pd.DataFrame([json.loads(c) for c in raw_btc])
+                except Exception as e:
+                    logger.debug(f"BTC candle fetch for ML skipped: {e}")
+
+            # Fetch per-candle flow data
             flow_for_features = None
             if getattr(ml_predictor, "flow_used", False):
-                flow_data = order_flow.get(pair, {})
-                if flow_data:
-                    flow_for_features = [{
-                        "funding_rate": flow_data.get("funding_rate", 0),
-                        "oi_change_pct": flow_data.get("open_interest_change_pct", 0),
-                        "long_short_ratio": flow_data.get("long_short_ratio", 1.0),
-                    }] * len(df)
+                try:
+                    cache_key_flow = f"flow_matrix:{pair}:{timeframe}"
+                    cached_flow = await redis.get(cache_key_flow)
+                    if cached_flow:
+                        flow_for_features = json.loads(cached_flow)
+                    else:
+                        # Postgres fallback with timeout
+                        try:
+                            async with asyncio.timeout(0.1):
+                                async with db.session_factory() as session:
+                                    result = await session.execute(
+                                        select(OrderFlowSnapshot)
+                                        .where(OrderFlowSnapshot.pair == pair)
+                                        .order_by(OrderFlowSnapshot.timestamp.desc())
+                                        .limit(200)
+                                    )
+                                    flow_rows = list(reversed(result.scalars().all()))
 
-            feature_matrix = build_feature_matrix(df, order_flow=flow_for_features)
+                            if flow_rows:
+                                flow_by_ts = {}
+                                for f in flow_rows:
+                                    ts_key = bucket_timestamp(f.timestamp, timeframe)
+                                    flow_by_ts[ts_key] = {
+                                        "funding_rate": f.funding_rate or 0,
+                                        "oi_change_pct": f.oi_change_pct or 0,
+                                        "long_short_ratio": f.long_short_ratio or 1.0,
+                                    }
+
+                                zero_flow = {"funding_rate": 0, "oi_change_pct": 0, "long_short_ratio": 1.0}
+                                flow_for_features = []
+                                matched = 0
+                                for _, row in df.iterrows():
+                                    c_ts = pd.Timestamp(row.get("timestamp", 0))
+                                    if hasattr(c_ts, "to_pydatetime"):
+                                        c_dt = c_ts.to_pydatetime()
+                                        if c_dt.tzinfo is None:
+                                            from datetime import timezone as _tz
+                                            c_dt = c_dt.replace(tzinfo=_tz.utc)
+                                        c_dt = bucket_timestamp(c_dt, timeframe)
+                                    else:
+                                        c_dt = None
+                                    snap = flow_by_ts.get(c_dt, zero_flow) if c_dt else zero_flow
+                                    if snap is not zero_flow:
+                                        matched += 1
+                                    flow_for_features.append(snap)
+
+                                coverage = matched / len(df) if len(df) > 0 else 0
+                                if coverage < 0.1:
+                                    flow_for_features = None
+                                else:
+                                    # Cache for next cycle
+                                    tf_minutes = {"15m": 900, "1h": 3600, "4h": 14400, "1D": 86400}
+                                    ttl_flow = tf_minutes.get(timeframe, 3600)
+                                    try:
+                                        await redis.set(
+                                            cache_key_flow,
+                                            json.dumps(flow_for_features),
+                                            ex=ttl_flow,
+                                        )
+                                    except Exception:
+                                        pass
+                        except Exception as e:
+                            logger.debug(f"Flow matrix fetch timed out for {pair}: {e}")
+                            # Fall back to single-snapshot broadcast
+                            flow_data = order_flow.get(pair, {})
+                            if flow_data:
+                                flow_for_features = [{
+                                    "funding_rate": flow_data.get("funding_rate", 0),
+                                    "oi_change_pct": flow_data.get("open_interest_change_pct", 0),
+                                    "long_short_ratio": flow_data.get("long_short_ratio", 1.0),
+                                }] * len(df)
+                except Exception as e:
+                    logger.debug(f"Flow feature fetch skipped: {e}")
+
+            feature_matrix = build_feature_matrix(
+                df,
+                order_flow=flow_for_features,
+                regime=ml_regime,
+                trend_conviction=ml_conviction,
+                btc_candles=ml_btc_df,
+            )
             ml_prediction = ml_predictor.predict(feature_matrix)
 
             ml_direction = ml_prediction["direction"]

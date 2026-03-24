@@ -72,6 +72,9 @@ def _make_mock_predictor(direction="LONG", confidence=0.85, sl_atr=1.5, tp1_atr=
     predictor = MagicMock()
     predictor.seq_len = 50
     predictor.flow_used = False
+    predictor._stale = False
+    predictor.regime_used = False
+    predictor.btc_used = False
     predictor.predict.return_value = {
         "direction": direction,
         "confidence": confidence,
