@@ -75,6 +75,22 @@ ALL_FEATURES = BASE_FEATURES
 ALL_FEATURES_WITH_FLOW = BASE_FEATURES + FLOW_FEATURES + FLOW_ROC_FEATURES
 
 
+def get_feature_names(
+    flow_used: bool = False,
+    regime_used: bool = False,
+    btc_used: bool = False,
+) -> list[str]:
+    """Return ordered list of feature column names matching build_feature_matrix output."""
+    names = list(BASE_FEATURES)
+    if regime_used:
+        names = names + REGIME_FEATURES
+    if btc_used:
+        names = names + INTER_PAIR_FEATURES
+    if flow_used:
+        names = names + FLOW_FEATURES + FLOW_ROC_FEATURES
+    return names
+
+
 def _ema(series: pd.Series, span: int) -> pd.Series:
     return series.ewm(span=span, adjust=False).mean()
 

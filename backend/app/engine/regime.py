@@ -3,7 +3,7 @@
 
 REGIMES = ["trending", "ranging", "volatile", "steady"]
 CAP_KEYS = ["trend_cap", "mean_rev_cap", "squeeze_cap", "volume_cap"]
-OUTER_KEYS = ["tech", "flow", "onchain", "pattern"]
+OUTER_KEYS = ["tech", "flow", "onchain", "pattern", "liquidation"]
 
 DEFAULT_CAPS = {
     "trending": {"trend_cap": 38, "mean_rev_cap": 22, "squeeze_cap": 12, "volume_cap": 28},
@@ -13,10 +13,10 @@ DEFAULT_CAPS = {
 }
 
 DEFAULT_OUTER_WEIGHTS = {
-    "trending": {"tech": 0.45, "flow": 0.25, "onchain": 0.18, "pattern": 0.12},
-    "ranging": {"tech": 0.38, "flow": 0.18, "onchain": 0.26, "pattern": 0.18},
-    "volatile": {"tech": 0.30, "flow": 0.20, "onchain": 0.25, "pattern": 0.25},
-    "steady": {"tech": 0.48, "flow": 0.22, "onchain": 0.18, "pattern": 0.12},
+    "trending": {"tech": 0.42, "flow": 0.23, "onchain": 0.16, "pattern": 0.11, "liquidation": 0.08},
+    "ranging": {"tech": 0.35, "flow": 0.16, "onchain": 0.24, "pattern": 0.16, "liquidation": 0.09},
+    "volatile": {"tech": 0.27, "flow": 0.18, "onchain": 0.22, "pattern": 0.22, "liquidation": 0.11},
+    "steady": {"tech": 0.45, "flow": 0.20, "onchain": 0.16, "pattern": 0.11, "liquidation": 0.08},
 }
 
 

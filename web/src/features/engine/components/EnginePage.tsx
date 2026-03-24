@@ -8,13 +8,29 @@ import RegimeGrid from "./RegimeGrid";
 import { Dropdown } from "../../../shared/components/Dropdown";
 import { Button } from "../../../shared/components/Button";
 import PipelineFlow from "./PipelineFlow";
+import { api } from "../../../shared/lib/api";
+import { Card } from "../../../shared/components/Card";
 
 export default function EnginePage() {
   const { params, loading, error, fetch, refresh } = useEngineStore();
   const [selectedPair, setSelectedPair] = useState("");
   const [selectedTf, setSelectedTf] = useState("");
 
+  const [thresholds, setThresholds] = useState<{
+    default: number;
+    thresholds: { pair: string; regime: string; value: number }[];
+  } | null>(null);
+  const [thresholdsLoading, setThresholdsLoading] = useState(false);
+
   useEffect(() => { fetch(); }, [fetch]);
+
+  useEffect(() => {
+    setThresholdsLoading(true);
+    api.getEngineThresholds()
+      .then(setThresholds)
+      .catch(() => {})
+      .finally(() => setThresholdsLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!params) return;
@@ -168,6 +184,46 @@ export default function EnginePage() {
           )}
         </div>
       )}
+
+      <Card variant="low" padding="sm" border>
+        <div className="text-[10px] font-bold uppercase tracking-widest text-primary mb-2">
+          Adaptive Thresholds
+        </div>
+        {thresholdsLoading ? (
+          <p className="text-on-surface-variant text-xs py-2">Loading...</p>
+        ) : thresholds ? (
+          <>
+            <div className="bg-surface-container rounded-lg px-3 py-2 mb-2 inline-block">
+              <span className="text-[10px] uppercase tracking-wider text-primary mr-2">Default</span>
+              <span className="font-mono text-sm text-on-surface">{thresholds.default.toFixed(2)}</span>
+            </div>
+            {thresholds.thresholds.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-on-surface-variant text-left">
+                      <th className="pb-1 pr-3 font-medium">Pair</th>
+                      <th className="pb-1 pr-3 font-medium">Regime</th>
+                      <th className="pb-1 font-medium text-right">Threshold</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {thresholds.thresholds.map((t) => (
+                      <tr key={`${t.pair}-${t.regime}`} className="border-t border-outline-variant/10">
+                        <td className="py-1 pr-3 text-on-surface font-mono">{t.pair}</td>
+                        <td className="py-1 pr-3 text-on-surface-variant">{t.regime}</td>
+                        <td className="py-1 text-on-surface font-mono text-right">{t.value.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-on-surface-variant text-xs text-center py-3">No learned overrides yet</p>
+            )}
+          </>
+        ) : null}
+      </Card>
     </div>
   );
 }

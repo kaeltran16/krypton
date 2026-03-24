@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -387,6 +388,12 @@ class RegimeWeights(Base):
     steady_onchain_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.18, server_default="0.18")
     steady_pattern_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12, server_default="0.12")
 
+    # Liquidation weights (4 regimes x 1 weight)
+    trending_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.08, server_default="0.08")
+    ranging_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.09, server_default="0.09")
+    volatile_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.11, server_default="0.11")
+    steady_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.08, server_default="0.08")
+
     # per-pair ADX center for trend strength sigmoid
     adx_center: Mapped[float] = mapped_column(Float, nullable=False, default=20.0, server_default="20.0")
 
@@ -472,4 +479,19 @@ class MLTrainingRun(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class SourceICHistory(Base):
+    __tablename__ = "source_ic_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    pair: Mapped[str] = mapped_column(String(32), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    ic_value: Mapped[float] = mapped_column(Float, nullable=False)
+
+    __table_args__ = (
+        Index("ix_source_ic_source_pair_date", "source", "pair", "date"),
     )

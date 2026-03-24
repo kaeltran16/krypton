@@ -102,7 +102,7 @@ export default function SettingsPage() {
         />
       </SettingsCard>
 
-      <SettingsCard title="Signal Threshold">
+      <SettingsCard title="Default Threshold">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-on-surface-variant">Minimum score to trigger a signal</span>
           <span className="font-headline text-2xl font-bold tabular-nums text-primary">{threshold}</span>

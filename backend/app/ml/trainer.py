@@ -53,6 +53,7 @@ class Trainer:
         tp1_atr: np.ndarray,
         tp2_atr: np.ndarray,
         progress_callback: callable | None = None,
+        feature_names: list[str] | None = None,
     ) -> dict:
         """Run full training loop.
 
@@ -60,6 +61,9 @@ class Trainer:
         """
         cfg = self.config
         input_size = features.shape[1]
+
+        if feature_names is None:
+            feature_names = [f"feature_{i}" for i in range(input_size)]
 
         # Subsample NEUTRAL class to reduce imbalance
         if cfg.neutral_subsample_ratio < 1.0:
@@ -255,6 +259,8 @@ class Trainer:
                         "seq_len": cfg.seq_len,
                         "epoch": epoch + 1,
                         "val_loss": best_val_loss,
+                        "feature_names": feature_names,
+                        "temperature": 1.0,
                     }
                     with open(os.path.join(cfg.checkpoint_dir, "model_config.json"), "w") as f:
                         _json.dump(config_meta, f, indent=2)
@@ -279,6 +285,8 @@ class Trainer:
                     "seq_len": cfg.seq_len,
                     "epoch": epoch + 1,
                     "val_loss": None,
+                    "feature_names": feature_names,
+                    "temperature": 1.0,
                 }
                 with open(os.path.join(cfg.checkpoint_dir, "model_config.json"), "w") as f:
                     _json.dump(config_meta, f, indent=2)

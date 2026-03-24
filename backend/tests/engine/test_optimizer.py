@@ -145,7 +145,7 @@ def test_full_lifecycle_scenario():
     assert state.needs_eval("source_weights") is True
     assert state.can_propose("source_weights") is True
 
-    candidate = {"traditional": 0.35, "flow": 0.25, "onchain": 0.25, "pattern": 0.15}
+    candidate = {"traditional": 0.30, "flow": 0.20, "onchain": 0.25, "pattern": 0.15, "liquidation": 0.10}
     assert validate_candidate("source_weights", candidate) is True
 
     state.last_optimized["source_weights"] = state.resolved_count

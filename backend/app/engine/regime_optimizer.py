@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 _N_REGIMES = len(REGIMES)
 _N_CAPS = len(CAP_KEYS)
-_N_OUTER = 2  # tech + pattern (flow/onchain fixed at 0)
+# Backtester only optimizes tech + pattern; flow/onchain/liquidation are fixed
+# at 0 because those data sources aren't available during backtesting.
+_BACKTEST_OUTER_KEYS = ["tech", "pattern"]
+_N_OUTER = len(_BACKTEST_OUTER_KEYS)
 N_PARAMS = _N_REGIMES * _N_CAPS + _N_REGIMES * _N_OUTER
 
 _CAP_BOUNDS = (10.0, 45.0)
@@ -46,22 +49,21 @@ def vector_to_regime_dict(vec: list[float]) -> dict:
     """Convert a flat parameter vector to a nested regime dict.
 
     Returns dict with one key per regime (trending, ranging, volatile, steady).
-    Each has: trend_cap, mean_rev_cap, squeeze_cap, volume_cap, tech, pattern.
-    Outer weights (tech + pattern) are normalized to sum to 1.0 per regime.
+    Each has: trend_cap, mean_rev_cap, squeeze_cap, volume_cap, plus outer weights
+    for _BACKTEST_OUTER_KEYS, normalized to sum to 1.0 per regime.
     """
     result = {}
     caps_offset = _N_REGIMES * _N_CAPS
     for i, regime in enumerate(REGIMES):
         caps = {key: vec[i * _N_CAPS + j] for j, key in enumerate(CAP_KEYS)}
-        raw_tech = vec[caps_offset + i * 2]
-        raw_pattern = vec[caps_offset + i * 2 + 1]
-        w_total = raw_tech + raw_pattern
+        raw = [vec[caps_offset + i * _N_OUTER + j] for j in range(_N_OUTER)]
+        w_total = sum(raw)
         if w_total > 0:
-            caps["tech"] = raw_tech / w_total
-            caps["pattern"] = raw_pattern / w_total
+            for j, key in enumerate(_BACKTEST_OUTER_KEYS):
+                caps[key] = raw[j] / w_total
         else:
-            caps["tech"] = 0.5
-            caps["pattern"] = 0.5
+            for key in _BACKTEST_OUTER_KEYS:
+                caps[key] = 1.0 / _N_OUTER
         result[regime] = caps
     return result
 
@@ -73,8 +75,8 @@ def regime_dict_to_vector(d: dict) -> list[float]:
         for key in CAP_KEYS:
             vec.append(d[regime][key])
     for regime in REGIMES:
-        vec.append(d[regime]["tech"])
-        vec.append(d[regime]["pattern"])
+        for key in _BACKTEST_OUTER_KEYS:
+            vec.append(d[regime][key])
     return vec
 
 
@@ -82,14 +84,15 @@ class _MockRegimeWeights:
     """Lightweight object mimicking RegimeWeights DB row for backtester."""
 
     def __init__(self, regime_dict: dict):
+        from app.engine.regime import OUTER_KEYS
         for regime in REGIMES:
             for key in CAP_KEYS:
                 setattr(self, f"{regime}_{key}", regime_dict[regime][key])
-            setattr(self, f"{regime}_tech_weight", regime_dict[regime]["tech"])
-            setattr(self, f"{regime}_pattern_weight", regime_dict[regime]["pattern"])
-            # Flow and onchain are fixed at 0 for backtester optimization
-            setattr(self, f"{regime}_flow_weight", 0.0)
-            setattr(self, f"{regime}_onchain_weight", 0.0)
+            for src in OUTER_KEYS:
+                if src in _BACKTEST_OUTER_KEYS:
+                    setattr(self, f"{regime}_{src}_weight", regime_dict[regime][src])
+                else:
+                    setattr(self, f"{regime}_{src}_weight", 0.0)
 
 
 def optimize_regime_weights(

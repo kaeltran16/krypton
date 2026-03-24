@@ -6,7 +6,7 @@
 
 **Architecture:** Backtester loads `OrderFlowSnapshot` and new `OnchainSnapshot` records, aligning them to candles via bisect lookup. Candles without snapshot data get confidence=0.0, letting confidence-weighted blending redistribute weight naturally. Optimizer fitness becomes a 4-metric composite (Sharpe, PF, win rate, max drawdown). Shadow testing uses z-test for statistical significance instead of fixed window.
 
-**Tech Stack:** Python/FastAPI, SQLAlchemy 2.0 async, Alembic, pytest, scipy (z-test)
+**Tech Stack:** Python/FastAPI, SQLAlchemy 2.0 async, Alembic, pytest
 
 **Spec:** `docs/superpowers/specs/2026-03-24-signal-engine-v2-design.md` (Sections 4, 6)
 
@@ -331,6 +331,21 @@ def test_backtester_accepts_flow_snapshots():
     result = run_backtest(candles, "BTC-USDT-SWAP", flow_snapshots=flow_snapshots)
     assert "flow_coverage_pct" in result["stats"]
     assert 0 < result["stats"]["flow_coverage_pct"] <= 100
+
+
+def test_backtester_accepts_onchain_snapshots():
+    """Backtester should accept onchain_snapshots parameter and report coverage."""
+    candles = _make_candles(100)
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    onchain_snapshots = [
+        {"timestamp": base_time + timedelta(hours=i),
+         "metric_name": "exchange_netflow", "value": 1500.0}
+        for i in range(40)
+    ]
+
+    result = run_backtest(candles, "BTC-USDT-SWAP", onchain_snapshots=onchain_snapshots)
+    assert "onchain_coverage_pct" in result["stats"]
+    assert 0 < result["stats"]["onchain_coverage_pct"] <= 100
 ```
 
 - [ ] **Step 2: Update BacktestConfig and run_backtest signature**
@@ -363,38 +378,116 @@ def run_backtest(
 ) -> dict:
 ```
 
-- [ ] **Step 3: Wire flow scoring into backtester loop**
+- [ ] **Step 3: Wire flow/on-chain scoring into backtester loop**
+
+Before the main loop, set up alignment and counters:
+```python
+    from app.engine.traditional import compute_order_flow_score
+    from types import SimpleNamespace
+
+    # Align snapshots to candle timestamps
+    candle_times = [c["timestamp"] for c in candles]
+    aligned_flow = _align_snapshots_to_candles(candle_times, flow_snapshots or [])
+    onchain_metrics_by_time = _reconstruct_onchain_metrics(onchain_snapshots or [])
+    aligned_onchain = _align_snapshots_to_candles(
+        candle_times,
+        [{"timestamp": t, **m} for t, m in sorted(onchain_metrics_by_time.items())],
+    )
+
+    # Coverage counters
+    flow_covered = 0
+    onchain_covered = 0
+    evaluated_candles = 0
+```
 
 Inside the main loop, after tech scoring, add flow scoring:
 ```python
-    # flow scoring (if snapshots available)
-    flow_score = 0
-    flow_confidence = 0.0
-    if aligned_flow and aligned_flow[i] is not None:
-        flow_metrics = aligned_flow[i]
-        flow_metrics["price_direction"] = 1 if float(current["close"]) > float(current["open"]) else -1
-        flow_history_dicts = _build_flow_history(aligned_flow, i, window=10)
-        # IMPORTANT: _field_roc uses attribute access (s.funding_rate), not dict access.
-        # Convert dicts to SimpleNamespace so flow_history works with compute_order_flow_score.
-        from types import SimpleNamespace
-        flow_history = [SimpleNamespace(**d) for d in flow_history_dicts]
-        tc = tech_result.get("indicators", {}).get("trend_conviction", 0.0)
-        flow_result = compute_order_flow_score(
-            flow_metrics, regime=tech_result.get("regime"),
-            flow_history=flow_history, trend_conviction=tc,
-        )
-        flow_score = flow_result["score"]
-        flow_confidence = flow_result.get("confidence", 1.0)
+        evaluated_candles += 1
+
+        # flow scoring (if snapshots available)
+        flow_score = 0
+        flow_confidence = 0.0
+        if aligned_flow[i] is not None:
+            flow_covered += 1
+            flow_metrics = {**aligned_flow[i]}  # copy to avoid mutating aligned data
+            flow_metrics["price_direction"] = 1 if float(current["close"]) > float(current["open"]) else -1
+            flow_history_dicts = _build_flow_history(aligned_flow, i, window=10)
+            # IMPORTANT: _field_roc uses attribute access (s.funding_rate), not dict access.
+            # Convert dicts to SimpleNamespace so flow_history works with compute_order_flow_score.
+            flow_history = [SimpleNamespace(**d) for d in flow_history_dicts]
+            tc = tech_result.get("indicators", {}).get("trend_conviction", 0.0)
+            flow_result = compute_order_flow_score(
+                flow_metrics, regime=tech_result.get("regime"),
+                flow_history=flow_history, trend_conviction=tc,
+            )
+            flow_score = flow_result["score"]
+            flow_confidence = flow_result.get("confidence", 1.0)
+
+        # on-chain scoring (if snapshots available)
+        onchain_score = 0
+        onchain_confidence = 0.0
+        if aligned_onchain[i] is not None:
+            onchain_covered += 1
+            # aligned_onchain entries are metric dicts — pass raw values as score
+            # For backtester, use a simplified on-chain score since we can't call the async scorer
+            onchain_metrics = aligned_onchain[i]
+            netflow = onchain_metrics.get("exchange_netflow", 0)
+            onchain_score = max(-100, min(100, int(-netflow / 30)))  # simplified contrarian
+            onchain_confidence = 0.7  # fixed confidence for historical data
 ```
 
-Update the `compute_preliminary_score` call to include flow and on-chain scores with confidence.
+Update the `compute_preliminary_score` call to use `blend_outer_weights` when flow/on-chain data is present:
+```python
+        # Weight logic: when flow/onchain data is present, use blend_outer_weights
+        # directly (no renormalization away from those slots). When absent, their
+        # weight is 0 and remaining sources renormalize as before.
+        if regime_weights is not None:
+            regime = tech_result.get("regime")
+            outer = blend_outer_weights(regime, regime_weights)
+            bt_tech_w = outer["tech"]
+            bt_pattern_w = outer["pattern"]
+            bt_flow_w = outer["flow"] if aligned_flow[i] is not None else 0.0
+            bt_onchain_w = outer["onchain"] if aligned_onchain[i] is not None else 0.0
+            bt_total = bt_tech_w + bt_pattern_w + bt_flow_w + bt_onchain_w
+            if bt_total > 0:
+                bt_tech_w /= bt_total
+                bt_pattern_w /= bt_total
+                bt_flow_w /= bt_total
+                bt_onchain_w /= bt_total
+        else:
+            bt_tech_w = config.tech_weight
+            bt_pattern_w = config.pattern_weight
+            bt_flow_w = 0.0
+            bt_onchain_w = 0.0
+
+        indicator_preliminary = compute_preliminary_score(
+            technical_score=tech_result["score"],
+            order_flow_score=flow_score,
+            tech_weight=bt_tech_w,
+            flow_weight=bt_flow_w,
+            onchain_score=onchain_score,
+            onchain_weight=bt_onchain_w,
+            pattern_score=pat_score,
+            pattern_weight=bt_pattern_w,
+            flow_confidence=flow_confidence,
+            onchain_confidence=onchain_confidence,
+        )["score"]
+```
+
+**NOTE:** This replaces the existing outer-weight block and `compute_preliminary_score` call — do not keep the old hardcoded `flow_weight=0.0, onchain_weight=0.0` version.
 
 - [ ] **Step 4: Add coverage tracking to results**
 
-In `_build_results`, compute and include coverage percentages:
+After `_build_results` returns, inject coverage stats into the result dict (avoids changing `_build_results` signature):
 ```python
-"flow_coverage_pct": round(flow_covered / total_candles * 100, 1) if total_candles > 0 else 0.0,
-"onchain_coverage_pct": round(onchain_covered / total_candles * 100, 1) if total_candles > 0 else 0.0,
+    result = _build_results(trades, pair, config)
+    result["stats"]["flow_coverage_pct"] = round(
+        flow_covered / evaluated_candles * 100, 1
+    ) if evaluated_candles > 0 else 0.0
+    result["stats"]["onchain_coverage_pct"] = round(
+        onchain_covered / evaluated_candles * 100, 1
+    ) if evaluated_candles > 0 else 0.0
+    return result
 ```
 
 - [ ] **Step 5: Run tests**
@@ -444,9 +537,10 @@ def test_high_drawdown_reduces_fitness():
 
 
 def test_fitness_zero_trades_returns_zero():
-    """With no trades, fitness should be 0."""
+    """With no trades, fitness should be 0 — including when backtester returns None values."""
+    # Backtester returns None for sharpe_ratio (<7 trades) and profit_factor (no losses)
     fitness = compute_multi_metric_fitness({
-        "sharpe_ratio": 0.0, "profit_factor": 0.0, "win_rate": 0.0, "max_drawdown": 0.0,
+        "sharpe_ratio": None, "profit_factor": None, "win_rate": 0.0, "max_drawdown": 0.0,
     })
     assert fitness == 0.0
 ```
@@ -467,15 +561,19 @@ def compute_multi_metric_fitness(stats: dict) -> float:
     Each metric normalized to [0, 1].
 
     IMPORTANT: The backtester returns stats with these keys and scales:
-    - "sharpe_ratio" (not "sharpe") — float, unbounded
-    - "profit_factor" — float, 0+
+    - "sharpe_ratio" (not "sharpe") — float or None (<7 trades), unbounded
+    - "profit_factor" — float or None (no losses), 0+
     - "win_rate" — float, 0-100 (percentage, NOT 0-1 fraction)
     - "max_drawdown" — float, percentage points (e.g., 5.0 means 5%)
+
+    Values may be None when the backtester has insufficient data. Use `or 0.0`
+    to coalesce None to zero (dict.get default only applies to missing keys,
+    not keys present with None value).
     """
-    sharpe = stats.get("sharpe_ratio", 0.0)
-    pf = stats.get("profit_factor", 0.0)
-    win_rate = stats.get("win_rate", 0.0)
-    max_dd = stats.get("max_drawdown", 0.0)
+    sharpe = stats.get("sharpe_ratio") or 0.0
+    pf = stats.get("profit_factor") or 0.0
+    win_rate = stats.get("win_rate") or 0.0
+    max_dd = stats.get("max_drawdown") or 0.0
 
     if sharpe == 0 and pf == 0 and win_rate == 0:
         return 0.0
@@ -529,13 +627,12 @@ def test_shadow_z_test_too_few_inconclusive():
 
 
 def test_shadow_z_test_not_significant_inconclusive():
-    """When shadow is only marginally better, z-test should not reach significance."""
-    # Nearly identical distributions
-    current = [0.01, -0.005, 0.008, -0.003] * 6  # 24 results
-    shadow = [0.011, -0.004, 0.009, -0.002] * 6   # 24 results, barely better
+    """When shadow has identical win rate, z-test should return inconclusive."""
+    # Same win/loss pattern — z-score will be 0
+    current = [0.01, -0.005, 0.008, -0.003] * 6  # 24 results, 50% win rate
+    shadow = [0.012, -0.004, 0.009, -0.002] * 6   # 24 results, 50% win rate (same ratio)
     result = evaluate_shadow_results(current, shadow)
-    # With such small differences and only 24 samples, z-test should not reach p < 0.10
-    assert result in ("inconclusive", "promote")
+    assert result == "inconclusive"
 ```
 
 - [ ] **Step 2: Update evaluate_shadow_results with z-test**
@@ -693,7 +790,38 @@ Expected: PASS
 
 ---
 
-## Task 11: Wire Multi-Metric Fitness into Optimizer
+## Task 11: Fix BacktestConfig Usage in Optimizer
+
+**Files:**
+- Modify: `backend/app/engine/optimizer.py` (run_counterfactual_eval)
+
+The existing `run_counterfactual_eval` creates `BacktestConfig(pair=pair, timeframe="15m", ...)` but `BacktestConfig` has no `pair` or `timeframe` fields — this causes `TypeError` at runtime. Fix while we're already modifying this function.
+
+- [ ] **Step 1: Fix BacktestConfig instantiation**
+
+In `run_counterfactual_eval`, change:
+```python
+config = BacktestConfig(
+    pair=pair,
+    timeframe="15m",
+    signal_threshold=candidate.get("signal", settings.engine_signal_threshold),
+)
+```
+to:
+```python
+config = BacktestConfig(
+    signal_threshold=candidate.get("signal", settings.engine_signal_threshold),
+)
+```
+
+- [ ] **Step 2: Run existing optimizer tests**
+
+Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_optimizer.py -v`
+Expected: PASS
+
+---
+
+## Task 12: Wire Multi-Metric Fitness into Optimizer
 
 **Files:**
 - Modify: `backend/app/engine/optimizer.py` (run_counterfactual_eval)
@@ -714,7 +842,97 @@ Expected: PASS
 
 ---
 
-## Task 11: Full Integration Test
+## Task 13: Load Snapshots in Optimizer Counterfactual Eval
+
+**Files:**
+- Modify: `backend/app/engine/optimizer.py` (run_counterfactual_eval)
+- Test: `backend/tests/engine/test_optimizer_fitness.py`
+
+Without this, the optimizer will always run backtests with zero flow/on-chain data, defeating the plan's core goal of tuning all scoring sources.
+
+- [ ] **Step 1: Write test**
+
+Add to `test_optimizer_fitness.py`:
+```python
+from unittest.mock import patch, AsyncMock, MagicMock
+import asyncio
+
+
+def test_counterfactual_eval_loads_snapshots():
+    """run_counterfactual_eval should query OrderFlowSnapshot and OnchainSnapshot
+    and pass them to run_backtest."""
+    # This is a wiring test — verify the query and parameter passing, not the backtest itself
+    from app.engine.optimizer import run_counterfactual_eval
+    # Detailed integration test would require full app state; verify at integration level
+    # in Task 14.
+```
+
+- [ ] **Step 2: Load snapshots in run_counterfactual_eval**
+
+In `run_counterfactual_eval`, after loading candles and before the grid sweep, add snapshot queries:
+```python
+            # Load flow snapshots for this pair/timerange
+            from app.db.models import OrderFlowSnapshot, OnchainSnapshot
+            candle_dicts = [
+                {"timestamp": c.timestamp, "open": float(c.open), "high": float(c.high),
+                 "low": float(c.low), "close": float(c.close), "volume": float(c.volume)}
+                for c in candles
+            ]
+            time_start = candles[0].timestamp
+            time_end = candles[-1].timestamp
+
+            flow_result = await session.execute(
+                select(OrderFlowSnapshot)
+                .where(OrderFlowSnapshot.pair == pair)
+                .where(OrderFlowSnapshot.timestamp >= time_start)
+                .where(OrderFlowSnapshot.timestamp <= time_end)
+                .order_by(OrderFlowSnapshot.timestamp)
+            )
+            flow_rows = flow_result.scalars().all()
+            flow_snapshots = [
+                {"timestamp": r.timestamp, "funding_rate": r.funding_rate,
+                 "long_short_ratio": r.long_short_ratio,
+                 "open_interest_change_pct": r.oi_change_pct}
+                for r in flow_rows
+            ] if flow_rows else None
+
+            onchain_result = await session.execute(
+                select(OnchainSnapshot)
+                .where(OnchainSnapshot.pair == pair)
+                .where(OnchainSnapshot.timestamp >= time_start)
+                .where(OnchainSnapshot.timestamp <= time_end)
+                .order_by(OnchainSnapshot.timestamp)
+            )
+            onchain_rows = onchain_result.scalars().all()
+            onchain_snapshots = [
+                {"timestamp": r.timestamp, "metric_name": r.metric_name, "value": r.value}
+                for r in onchain_rows
+            ] if onchain_rows else None
+```
+
+Then update the `run_backtest` call inside the grid sweep to pass snapshot data:
+```python
+            results = await loop.run_in_executor(
+                None,
+                lambda: run_backtest(
+                    candles=candle_dicts,
+                    pair=pair,
+                    config=config,
+                    cancel_flag=None,
+                    flow_snapshots=flow_snapshots,
+                    onchain_snapshots=onchain_snapshots,
+                ),
+            )
+```
+
+- [ ] **Step 3: Run tests**
+
+Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_optimizer.py tests/engine/test_optimizer_fitness.py -v`
+Expected: PASS
+
+---
+
+## Task 14: Full Integration Test
 
 - [ ] **Step 1: Run the full backend test suite**
 
@@ -724,3 +942,7 @@ Expected: All tests pass
 - [ ] **Step 2: Run a backtest with flow snapshots end-to-end**
 
 If there are existing OrderFlowSnapshot rows in the test database, verify the backtester picks them up and reports non-zero coverage.
+
+- [ ] **Step 3: Verify optimizer loads snapshots**
+
+Run a counterfactual eval manually (or via the optimizer API) against a pair with flow/on-chain data. Verify the backtest results include non-zero `flow_coverage_pct`.

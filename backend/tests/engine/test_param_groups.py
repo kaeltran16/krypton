@@ -30,12 +30,12 @@ def test_get_group_unknown_returns_none():
 
 
 def test_source_weights_constraint_sum_to_one():
-    valid = {"traditional": 0.4, "flow": 0.2, "onchain": 0.25, "pattern": 0.15}
+    valid = {"traditional": 0.35, "flow": 0.2, "onchain": 0.20, "pattern": 0.15, "liquidation": 0.10}
     assert validate_candidate("source_weights", valid) is True
 
 
 def test_source_weights_constraint_rejects_bad_sum():
-    invalid = {"traditional": 0.5, "flow": 0.3, "onchain": 0.3, "pattern": 0.1}
+    invalid = {"traditional": 0.5, "flow": 0.3, "onchain": 0.3, "pattern": 0.1, "liquidation": 0.1}
     assert validate_candidate("source_weights", invalid) is False
 
 

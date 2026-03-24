@@ -121,6 +121,26 @@ def parse_fills_response(raw: dict) -> list[dict]:
     return fills
 
 
+def parse_liquidation_response(raw: dict) -> list[dict]:
+    """Parse OKX liquidation orders response into list of event dicts."""
+    if raw.get("code") != "0" or not raw.get("data"):
+        return []
+    events = []
+    for item in raw["data"]:
+        details = item.get("details", [])
+        for d in details:
+            bk_px = _safe_float(d.get("bkPx"))
+            sz = _safe_float(d.get("sz"))
+            if bk_px > 0 and sz > 0:
+                events.append({
+                    "bkPx": str(bk_px),
+                    "sz": str(sz),
+                    "side": d.get("side", ""),
+                    "ts": d.get("ts", "0"),
+                })
+    return events
+
+
 class OKXClient:
     def __init__(self, api_key: str, api_secret: str, passphrase: str, demo: bool = True):
         self.api_key = api_key
@@ -281,3 +301,15 @@ class OKXClient:
             if data.get("code") != "0":
                 return {"success": False, "error": _parse_error(data)}
             return {"success": True}
+
+    async def get_liquidation_orders(self, inst_id: str) -> list[dict]:
+        """Fetch recent liquidation orders for an instrument. Public endpoint, no auth required."""
+        path = f"/api/v5/public/liquidation-orders?instType=SWAP&instId={inst_id}&state=filled"
+        try:
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+                resp = await client.get(path)
+                resp.raise_for_status()
+                return parse_liquidation_response(resp.json())
+        except Exception:
+            logger.debug("Failed to fetch liquidation orders for %s", inst_id, exc_info=True)
+            return []

@@ -20,14 +20,14 @@
 
 | File | Responsibility |
 |------|---------------|
-| `backend/app/engine/risk.py` | Fractional Kelly, confidence sizing, correlation adjustment, drawdown tracker |
-| `backend/app/main.py` | Initialize correlation matrix in app.state, wire drawdown check before signal emission |
+| `backend/app/engine/risk.py` | Fractional Kelly, confidence sizing, correlation adjustment, drawdown tracker, `fetch_pair_returns`, `get_kelly_inputs` |
+| `backend/app/main.py` | Initialize correlation matrix + drawdown tracker in app.state, wire drawdown check before signal emission, daily correlation recompute, adjusted sizing in `_emit_signal` |
 
 ### Test Files
 
 | File | What it covers |
 |------|---------------|
-| `backend/tests/engine/test_risk_v2.py` | Kelly, correlation sizing, confidence scaling, drawdown pausing |
+| `backend/tests/engine/test_risk_v2.py` | Kelly, correlation sizing, confidence scaling, drawdown pausing, `get_kelly_inputs` integration, `fetch_pair_returns`, adjusted sizing chain end-to-end |
 
 ---
 
@@ -117,6 +117,8 @@ def compute_kelly_fraction(
 
     kelly_full = (b * p - q) / b
     if kelly_full <= 0:
+        # Probe size: still take small positions on losing strategies for statistical
+        # exploration — avoids abandoning a strategy due to variance in small samples.
         return KELLY_PROBE_FRACTION * fallback_risk
 
     kelly_sized = KELLY_FRACTION * kelly_full
@@ -296,6 +298,7 @@ def compute_correlation_adjustment(
     pair_idx = {p: i for i, p in enumerate(pairs)}
     new_idx = pair_idx.get(new_pair)
     if new_idx is None:
+        logger.warning("Pair %s not in correlation matrix — skipping adjustment", new_pair)
         return 1.0
 
     total_reduction = 0.0
@@ -553,65 +556,101 @@ Expected: PASS
 ## Task 7: Wire Risk Improvements into Main Pipeline
 
 **Files:**
-- Modify: `backend/app/main.py`
+- Modify: `backend/app/main.py`, `backend/app/engine/risk.py`
+- Test: `backend/tests/engine/test_risk_v2.py`
+
+**Design note — DrawdownTracker vs RiskGuard:** The existing `RiskGuard.daily_loss_limit` is evaluated per-trade in the API risk status endpoint (reactive, informational). The new `DrawdownTracker` is a pipeline-level circuit breaker that prevents signal emission when intraday equity drops too fast (proactive). Both block independently — `RiskGuard` guards trade execution, `DrawdownTracker` guards signal generation.
 
 - [ ] **Step 1: Initialize correlation state and drawdown tracker in lifespan**
 
-In `main.py` lifespan:
+In `main.py` lifespan, after existing `app.state` initialization:
 ```python
+import numpy as np
+from app.engine.risk import DrawdownTracker
+
 app.state.correlation_matrix = np.eye(3)
 app.state.correlation_pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "WIF-USDT-SWAP"]
 app.state.drawdown_tracker = DrawdownTracker(max_drawdown_pct=0.03)
+app.state._last_corr_update = None
 ```
 
 - [ ] **Step 2: Add daily correlation recomputation**
 
-In the outcome resolution loop (or a timestamp-checked guard in `run_pipeline`), recompute correlation when >24h have elapsed:
+Add a helper to `risk.py` that queries 1h candle closes from DB and computes log returns:
 ```python
-import numpy as np
-from datetime import datetime, timezone
+async def fetch_pair_returns(session, pair: str, days: int = 30) -> np.ndarray | None:
+    """Fetch 1h candle closes for a pair and compute log returns."""
+    from sqlalchemy import select
+    from app.db.models import Candle
 
-# at start of run_pipeline or outcome loop:
+    result = await session.execute(
+        select(Candle.close)
+        .where(Candle.pair == pair, Candle.timeframe == "1H")
+        .order_by(Candle.timestamp.desc())
+        .limit(days * 24)
+    )
+    closes = [float(row[0]) for row in result.all()]
+    if len(closes) < 2:
+        return None
+    # reverse to chronological order, compute log returns
+    closes = np.array(closes[::-1])
+    return np.diff(np.log(closes))
+```
+
+In `run_pipeline`, add a timestamp-guarded recomputation near the top (after fetching `db`):
+```python
+from datetime import datetime, timezone
+from app.engine.risk import compute_return_correlation, fetch_pair_returns
+
 last_corr_update = getattr(app.state, "_last_corr_update", None)
 now = datetime.now(timezone.utc)
 if last_corr_update is None or (now - last_corr_update).total_seconds() > 86400:
-    # fetch 30 days of 1h candle closes from DB, compute log returns per pair
-    from app.engine.risk import compute_return_correlation
-    returns = {}  # populated from DB query
-    for pair in app.state.correlation_pairs:
-        # query 1h candles, compute close-to-close returns
-        # returns[pair] = np.diff(np.log(closes))
-        pass  # actual DB query here
-    app.state.correlation_matrix = compute_return_correlation(
-        returns, app.state.correlation_pairs
-    )
-    app.state._last_corr_update = now
+    try:
+        async with db.session_factory() as session:
+            returns = {}
+            for pair in app.state.correlation_pairs:
+                r = await fetch_pair_returns(session, pair)
+                if r is not None:
+                    returns[pair] = r
+            app.state.correlation_matrix = compute_return_correlation(
+                returns, app.state.correlation_pairs
+            )
+        app.state._last_corr_update = now
+        logger.info("Correlation matrix updated for %d pairs", len(returns))
+    except Exception as e:
+        logger.warning("Correlation matrix update failed: %s", e)
 ```
 
-- [ ] **Step 3: Wire drawdown check before signal emission**
+- [ ] **Step 3: Wire drawdown daily reset and equity update**
 
-In `run_pipeline`, before `_emit_signal`:
+Add a UTC day boundary check at the top of `run_pipeline`:
+```python
+from datetime import datetime, timezone
+
+tracker = app.state.drawdown_tracker
+today = datetime.now(timezone.utc).date()
+if getattr(tracker, "_last_reset_date", None) != today:
+    tracker.reset_daily()
+    tracker._last_reset_date = today
+```
+
+Update equity inside `_emit_signal`, right after the balance fetch succeeds (after line `equity = balance["total_equity"]`):
+```python
+app.state.drawdown_tracker.update_equity(equity)
+```
+
+- [ ] **Step 4: Wire drawdown check before signal emission**
+
+In `run_pipeline`, before the `_emit_signal` call (around line 860):
 ```python
 if app.state.drawdown_tracker.should_pause():
     logger.info("Signal emission paused: intraday drawdown limit reached")
     return
 ```
 
-- [ ] **Step 4: Wire drawdown daily reset**
+- [ ] **Step 5: Add get_kelly_inputs helper to risk.py**
 
-Add a UTC day boundary check at the start of `run_pipeline` or the outcome loop:
-```python
-from datetime import date
-tracker = app.state.drawdown_tracker
-today = date.today()
-if getattr(tracker, "_last_reset_date", None) != today:
-    tracker.reset_daily()
-    tracker._last_reset_date = today
-```
-
-- [ ] **Step 5: Compute Kelly inputs from rolling 100 signals**
-
-Add a helper that queries the last 100 resolved signals per (pair, timeframe) to compute win_rate, avg_win, avg_loss:
+Add to `risk.py`:
 ```python
 async def get_kelly_inputs(session, pair: str, timeframe: str, window: int = 100):
     """Query last N resolved signals to compute Kelly criterion inputs."""
@@ -624,7 +663,7 @@ async def get_kelly_inputs(session, pair: str, timeframe: str, window: int = 100
         .order_by(Signal.outcome_at.desc())
         .limit(window)
     )
-    pnls = [row[0] for row in result.all() if row[0] is not None]
+    pnls = [float(row[0]) for row in result.all() if row[0] is not None]
     if len(pnls) < 10:
         return None  # insufficient data
     wins = [p for p in pnls if p > 0]
@@ -639,28 +678,51 @@ async def get_kelly_inputs(session, pair: str, timeframe: str, window: int = 100
 
 - [ ] **Step 6: Wire adjusted sizing into _emit_signal**
 
-In `_emit_signal`, replace fixed `risk_per_trade` with the computed adjusted risk:
+In `_emit_signal`, replace the fixed `risk_per_trade` path. After fetching equity and risk settings, replace the `PositionSizer` construction:
 ```python
-# compute Kelly from rolling 100 signals
-kelly_inputs = await get_kelly_inputs(session, pair, timeframe)
+from app.engine.risk import (
+    compute_kelly_fraction, compute_correlation_adjustment,
+    compute_adjusted_risk_per_trade, get_kelly_inputs,
+)
+
+# Compute Kelly from rolling 100 signals
+async with db.session_factory() as session:
+    kelly_inputs = await get_kelly_inputs(session, signal_data["pair"], signal_data["timeframe"])
 if kelly_inputs:
     kelly_risk = compute_kelly_fraction(
         win_rate=kelly_inputs["win_rate"],
         avg_win=kelly_inputs["avg_win"],
         avg_loss=kelly_inputs["avg_loss"],
         resolved_count=kelly_inputs["resolved_count"],
-        fallback_risk=risk_settings.risk_per_trade,
+        fallback_risk=risk_per_trade,
     )
 else:
-    kelly_risk = risk_settings.risk_per_trade  # fallback
+    kelly_risk = risk_per_trade  # fallback
 
-# compute correlation adjustment
+# Fetch open positions from OKX for correlation adjustment
+open_positions_list = []
+try:
+    raw_positions = await okx_client.get_positions()
+    open_positions_list = [
+        {
+            "pair": pos["pair"],
+            "direction": pos["side"].upper(),  # "long"→"LONG", "short"→"SHORT"
+            "size_usd": pos["size"] * pos["mark_price"],
+        }
+        for pos in raw_positions
+        if pos["size"] > 0
+    ]
+except Exception as e:
+    logger.debug("Open positions fetch skipped: %s", e)
+
+# Compute correlation adjustment
 corr_adj = compute_correlation_adjustment(
-    new_pair=pair, new_direction=direction,
-    open_positions=open_positions_list,  # from app.state or DB
+    new_pair=signal_data["pair"],
+    new_direction=signal_data["direction"],
+    open_positions=open_positions_list,
     corr_matrix=app.state.correlation_matrix,
     pairs=app.state.correlation_pairs,
-    equity=balance,
+    equity=equity,
 )
 
 adjusted_risk = compute_adjusted_risk_per_trade(
@@ -668,11 +730,83 @@ adjusted_risk = compute_adjusted_risk_per_trade(
     confidence_tier=signal_data.get("confidence_tier"),
     correlation_adj=corr_adj,
 )
-# Note: max_position_size_usd and 25% equity caps are enforced by PositionSizer.calculate()
-sizer = PositionSizer(equity=balance, risk_per_trade=adjusted_risk, ...)
+
+# max_position_size_usd and 25% equity caps are enforced by PositionSizer.calculate()
+sizer = PositionSizer(equity, adjusted_risk, max_pos_usd)
 ```
 
-- [ ] **Step 5: Run full test suite**
+- [ ] **Step 7: Write integration tests**
+
+Add to `test_risk_v2.py`:
+```python
+import pytest
+from unittest.mock import AsyncMock, MagicMock
+
+
+@pytest.mark.asyncio
+async def test_get_kelly_inputs_sufficient_data():
+    """get_kelly_inputs should compute win_rate/avg_win/avg_loss from resolved signals."""
+    from app.engine.risk import get_kelly_inputs
+
+    # Mock session returning 5 wins (+2%) and 5 losses (-1%)
+    mock_rows = [(2.0,)] * 5 + [(-1.0,)] * 5
+    mock_result = MagicMock()
+    mock_result.all.return_value = mock_rows
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    inputs = await get_kelly_inputs(mock_session, "BTC-USDT-SWAP", "1H")
+    assert inputs is not None
+    assert inputs["win_rate"] == 0.5
+    assert inputs["avg_win"] == 2.0
+    assert inputs["avg_loss"] == 1.0
+    assert inputs["resolved_count"] == 10
+
+
+@pytest.mark.asyncio
+async def test_get_kelly_inputs_insufficient_data():
+    """get_kelly_inputs should return None with <10 resolved signals."""
+    from app.engine.risk import get_kelly_inputs
+
+    mock_rows = [(2.0,)] * 5
+    mock_result = MagicMock()
+    mock_result.all.return_value = mock_rows
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    inputs = await get_kelly_inputs(mock_session, "BTC-USDT-SWAP", "1H")
+    assert inputs is None
+
+
+def test_adjusted_sizing_uses_kelly_not_fixed():
+    """The sizing chain should use Kelly-derived risk, not the fixed fallback."""
+    from app.engine.risk import compute_kelly_fraction, compute_adjusted_risk_per_trade
+
+    kelly = compute_kelly_fraction(win_rate=0.55, avg_win=2.0, avg_loss=1.0)
+    adjusted = compute_adjusted_risk_per_trade(
+        kelly_risk=kelly, confidence_tier="medium", correlation_adj=0.9,
+    )
+    # Should be Kelly * 0.7 * 0.9, NOT the default 0.01
+    assert adjusted != 0.01
+    expected = kelly * 0.7 * 0.9
+    assert abs(adjusted - expected) < 0.001
+
+
+@pytest.mark.asyncio
+async def test_fetch_pair_returns_empty():
+    """fetch_pair_returns should return None for pairs with insufficient candles."""
+    from app.engine.risk import fetch_pair_returns
+
+    mock_result = MagicMock()
+    mock_result.all.return_value = [(100.0,)]  # only 1 candle
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+
+    result = await fetch_pair_returns(mock_session, "BTC-USDT-SWAP")
+    assert result is None
+```
+
+- [ ] **Step 8: Run full test suite**
 
 Run: `docker exec krypton-api-1 python -m pytest tests/ -v --timeout=120`
 Expected: PASS

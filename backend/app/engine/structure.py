@@ -90,6 +90,7 @@ def collect_structure_levels(
     candles: pd.DataFrame,
     indicators: dict,
     atr: float,
+    liquidation_clusters: list[dict] | None = None,
 ) -> list[dict]:
     """Collect all technical structure levels from available data.
 
@@ -131,6 +132,15 @@ def collect_structure_levels(
         val = indicators.get(key)
         if val is not None:
             levels.append({"price": val, "label": key, "strength": strength})
+
+    # 4. Liquidation clusters as S/R zones
+    if liquidation_clusters:
+        for cluster in liquidation_clusters:
+            levels.append({
+                "price": cluster["price"],
+                "label": "liq_cluster",
+                "strength": min(10, int(cluster["volume"] / 100)),
+            })
 
     levels.sort(key=lambda lv: lv["price"])
     return levels

@@ -24,11 +24,13 @@
 |------|---------------|
 | `backend/app/collector/liquidation.py` | OKX liquidation endpoint poller, event aggregation, rolling 24h window |
 | `backend/app/engine/liquidation_scorer.py` | Score liquidation clusters, emit confidence, identify S/R zones |
+| `backend/tests/collector/test_liquidation_collector.py` | Collector state management, pruning, poll failure resilience |
 
 ### Modified Files
 
 | File | Responsibility |
 |------|---------------|
+| `backend/app/exchange/okx_client.py` | Add `get_liquidation_orders()` method |
 | `backend/app/engine/combiner.py` | Add 5th source slot for liquidation |
 | `backend/app/engine/regime.py` | Add liquidation to DEFAULT_OUTER_WEIGHTS |
 | `backend/app/engine/structure.py` | Integrate liquidation zones as S/R |
@@ -37,6 +39,7 @@
 | `backend/app/db/models.py` | SourceICHistory model, RegimeWeights liquidation columns, PipelineSettings threshold columns |
 | `backend/app/main.py` | Wire liquidation collector, IC tracking, adaptive threshold lookup |
 | `web/src/features/signals/types.ts` | Already updated in Plan 1 |
+| `backend/app/api/routes.py` | Add GET `/engine/thresholds` endpoint for learned threshold overrides |
 | `web/src/features/engine/components/EnginePage.tsx` | Display per-pair/regime threshold overrides |
 | `web/src/features/settings/components/SettingsPage.tsx` | Rename threshold slider label |
 
@@ -45,8 +48,9 @@
 | File | What it covers |
 |------|---------------|
 | `backend/tests/engine/test_liquidation_scorer.py` | Bucket aggregation, decay, cluster detection, scoring |
-| `backend/tests/engine/test_ic_pruning.py` | IC tracking, pruning threshold, re-enable |
+| `backend/tests/engine/test_ic_pruning.py` | IC tracking, pruning threshold, re-enable, pipeline wiring |
 | `backend/tests/engine/test_adaptive_threshold.py` | Fallback cascade, per-pair lookup, LLM threshold interaction |
+| `backend/tests/collector/test_liquidation_collector.py` | Collector state management, pruning, poll failure resilience |
 
 ---
 
@@ -255,6 +259,12 @@ def compute_liquidation_score(
     if not clusters:
         return {"score": 0, "confidence": 0.1, "clusters": []}
 
+    # Normalize density relative to median bucket volume for the pair,
+    # so scoring works across assets with vastly different volumes (BTC vs WIF).
+    all_vols = [b["total_volume"] for b in buckets]
+    median_vol = sorted(all_vols)[len(all_vols) // 2] if all_vols else 1.0
+    density_norm = max(median_vol * 3, 1.0)  # 3x median = full density contribution
+
     score = 0.0
     for cluster in clusters:
         distance = cluster["center"] - current_price
@@ -267,16 +277,19 @@ def compute_liquidation_score(
         proximity = sigmoid_score(2.0 - distance_atr, center=0, steepness=2.0)
         density = cluster["total_volume"]
 
-        # direction: cluster above = potential short squeeze (bullish),
-        # cluster below = potential long liquidation cascade (bearish)
+        # Direction rationale (per spec Section 8):
+        # Cluster ABOVE price = dense short liquidation levels = potential short squeeze
+        # as cascading liquidations push price up → bullish.
+        # Cluster BELOW price = dense long liquidation levels = potential long cascade
+        # as cascading liquidations push price down → bearish.
         direction = 1 if distance > 0 else -1
-        score += direction * proximity * min(density / 500, 1.0) * 30
+        score += direction * proximity * min(density / density_norm, 1.0) * 30
 
     score = max(min(round(score), 100), -100)
 
     # confidence based on data freshness and cluster density
     total_vol = sum(b["total_volume"] for b in buckets)
-    confidence = min(1.0, len(clusters) / 3.0) * min(1.0, total_vol / 1000.0)
+    confidence = min(1.0, len(clusters) / 3.0) * min(1.0, total_vol / density_norm)
 
     return {
         "score": score,
@@ -292,12 +305,127 @@ Expected: PASS
 
 ---
 
-## Task 3: Liquidation Data Collector
+## Task 3: OKX Client — Add `get_liquidation_orders()` Method
+
+**Files:**
+- Modify: `backend/app/exchange/okx_client.py`
+
+The OKX client currently has no method for fetching liquidation data. This is a prerequisite for the collector.
+
+- [ ] **Step 1: Add `parse_liquidation_response` helper**
+
+Add above `OKXClient` class in `okx_client.py`:
+```python
+def parse_liquidation_response(raw: dict) -> list[dict]:
+    """Parse OKX liquidation orders response into list of event dicts."""
+    if raw.get("code") != "0" or not raw.get("data"):
+        return []
+    events = []
+    for item in raw["data"]:
+        details = item.get("details", [])
+        for d in details:
+            bk_px = _safe_float(d.get("bkPx"))
+            sz = _safe_float(d.get("sz"))
+            if bk_px > 0 and sz > 0:
+                events.append({
+                    "bkPx": str(bk_px),
+                    "sz": str(sz),
+                    "side": d.get("side", ""),
+                    "ts": d.get("ts", "0"),
+                })
+    return events
+```
+
+- [ ] **Step 2: Add `get_liquidation_orders` method to `OKXClient`**
+
+Add to `OKXClient` class (public endpoint, no auth headers needed):
+```python
+async def get_liquidation_orders(self, inst_id: str) -> list[dict]:
+    """Fetch recent liquidation orders for an instrument. Public endpoint, no auth required."""
+    path = f"/api/v5/public/liquidation-orders?instType=SWAP&instId={inst_id}&state=filled"
+    try:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.get(path)
+            resp.raise_for_status()
+            return parse_liquidation_response(resp.json())
+    except Exception:
+        logger.debug("Failed to fetch liquidation orders for %s", inst_id, exc_info=True)
+        return []
+```
+
+- [ ] **Step 3: Verify no regressions**
+
+Run: `docker exec krypton-api-1 python -m pytest tests/exchange/ -v`
+Expected: PASS
+
+---
+
+## Task 4: Liquidation Data Collector
 
 **Files:**
 - Create: `backend/app/collector/liquidation.py`
+- Create: `backend/tests/collector/test_liquidation_collector.py`
 
-- [ ] **Step 1: Create the collector**
+- [ ] **Step 1: Write collector unit test**
+
+```python
+# backend/tests/collector/test_liquidation_collector.py
+import asyncio
+from datetime import datetime, timezone, timedelta
+from unittest.mock import AsyncMock
+import pytest
+from app.collector.liquidation import LiquidationCollector
+
+
+@pytest.mark.asyncio
+async def test_events_stored_after_poll():
+    """Poll should store parsed events in the events dict."""
+    mock_client = AsyncMock()
+    mock_client.get_liquidation_orders.return_value = [
+        {"bkPx": "50000", "sz": "100", "side": "buy", "ts": "0"},
+    ]
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"])
+    await collector._poll()
+    assert len(collector.events["BTC-USDT-SWAP"]) == 1
+    assert collector.events["BTC-USDT-SWAP"][0]["price"] == 50000.0
+
+
+@pytest.mark.asyncio
+async def test_old_events_pruned():
+    """Events older than 24h window should be pruned."""
+    mock_client = AsyncMock()
+    mock_client.get_liquidation_orders.return_value = []
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"])
+    # inject an old event
+    old_ts = datetime.now(timezone.utc) - timedelta(hours=25)
+    collector._events["BTC-USDT-SWAP"] = [
+        {"price": 50000.0, "volume": 100.0, "timestamp": old_ts, "side": "buy"},
+    ]
+    await collector._poll()
+    assert len(collector.events["BTC-USDT-SWAP"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_pruning_runs_even_when_poll_fails():
+    """Pruning should still happen if the API call for a pair fails."""
+    mock_client = AsyncMock()
+    mock_client.get_liquidation_orders.side_effect = Exception("API down")
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"])
+    old_ts = datetime.now(timezone.utc) - timedelta(hours=25)
+    collector._events["BTC-USDT-SWAP"] = [
+        {"price": 50000.0, "volume": 100.0, "timestamp": old_ts, "side": "buy"},
+    ]
+    await collector._poll()
+    # old event should still be pruned despite poll failure
+    assert len(collector.events["BTC-USDT-SWAP"]) == 0
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `docker exec krypton-api-1 python -m pytest tests/collector/test_liquidation_collector.py -v`
+Expected: FAIL
+
+- [ ] **Step 3: Create the collector**
 
 ```python
 # backend/app/collector/liquidation.py
@@ -343,8 +471,7 @@ class LiquidationCollector:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)
         for pair in self._pairs:
             try:
-                inst_id = pair  # OKX format
-                raw = await self._client.get_liquidation_orders(inst_id)
+                raw = await self._client.get_liquidation_orders(pair)
                 if raw:
                     for item in raw:
                         self._events[pair].append({
@@ -353,21 +480,24 @@ class LiquidationCollector:
                             "timestamp": datetime.now(timezone.utc),
                             "side": item.get("side", ""),
                         })
-                # prune old events
+            except Exception as e:
+                logger.debug("Liquidation poll for %s failed: %s", pair, e)
+            finally:
+                # Always prune old events, even if the API call failed,
+                # to prevent unbounded memory growth
                 self._events[pair] = [
                     e for e in self._events[pair] if e["timestamp"] > cutoff
                 ]
-            except Exception as e:
-                logger.debug("Liquidation poll for %s failed: %s", pair, e)
 ```
 
-- [ ] **Step 2: Run test**
+- [ ] **Step 4: Run tests**
 
-The collector is mostly I/O — integration tested via mocked OKX client. The scoring logic is fully unit-tested in Task 2.
+Run: `docker exec krypton-api-1 python -m pytest tests/collector/test_liquidation_collector.py -v`
+Expected: PASS
 
 ---
 
-## Task 4: Add Liquidation to Combiner and Regime Weights
+## Task 5: Add Liquidation to Combiner and Regime Weights
 
 **Files:**
 - Modify: `backend/app/engine/regime.py:15-20`
@@ -415,19 +545,14 @@ Add liquidation weight to the `regime_outer` param group so it's included in the
 # In _regime_outer_ok: update to validate 5-key normalization per regime
 ```
 
-- [ ] **Step 5: Generate and apply migration**
-
-Run: `MSYS_NO_PATHCONV=1 docker exec krypton-api-1 alembic revision --autogenerate -m "add liquidation weights and source ic history"`
-Run: `MSYS_NO_PATHCONV=1 docker exec krypton-api-1 alembic upgrade head`
-
-- [ ] **Step 6: Run regime tests**
+- [ ] **Step 5: Run regime tests**
 
 Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_regime.py tests/engine/test_combiner.py -v`
 Expected: PASS (after updating tests for 5th source)
 
 ---
 
-## Task 5: Integrate Liquidation Zones into Structure Snapping
+## Task 6: Integrate Liquidation Zones into Structure Snapping
 
 **Files:**
 - Modify: `backend/app/engine/structure.py`
@@ -457,7 +582,7 @@ Expected: PASS
 
 ---
 
-## Task 6: SourceICHistory DB Model and IC Tracking
+## Task 7: SourceICHistory DB Model and IC Tracking
 
 **Files:**
 - Modify: `backend/app/db/models.py`
@@ -586,7 +711,133 @@ Expected: PASS
 
 ---
 
-## Task 7: Adaptive Signal Threshold — DB and Lookup
+## Task 8: Wire IC Tracking into Pipeline
+
+**Files:**
+- Modify: `backend/app/engine/optimizer.py`
+- Modify: `backend/app/main.py`
+- Test: `backend/tests/engine/test_ic_pruning.py`
+
+IC computation functions from Task 7 need to be called from the pipeline. Daily IC is computed from resolved signals; pruning decisions feed into the combiner via zeroed confidence.
+
+- [ ] **Step 1: Write test for IC pipeline integration**
+
+Add to `test_ic_pruning.py`:
+```python
+from app.engine.optimizer import compute_daily_ic_for_sources, get_pruned_sources
+
+
+def test_compute_daily_ic_for_sources():
+    """Should compute IC per source from resolved signal data."""
+    resolved_signals = [
+        {"raw_indicators": {"tech_score": 30, "flow_score": -10, "onchain_score": 5, "pattern_score": 10, "liquidation_score": 5}, "outcome_pct": 0.03},
+        {"raw_indicators": {"tech_score": -20, "flow_score": 15, "onchain_score": -8, "pattern_score": -5, "liquidation_score": -3}, "outcome_pct": -0.02},
+        {"raw_indicators": {"tech_score": 40, "flow_score": -5, "onchain_score": 10, "pattern_score": 15, "liquidation_score": 8}, "outcome_pct": 0.05},
+        {"raw_indicators": {"tech_score": -15, "flow_score": 20, "onchain_score": -12, "pattern_score": -8, "liquidation_score": -6}, "outcome_pct": -0.03},
+        {"raw_indicators": {"tech_score": 25, "flow_score": -15, "onchain_score": 7, "pattern_score": 12, "liquidation_score": 4}, "outcome_pct": 0.02},
+    ]
+    ic_map = compute_daily_ic_for_sources(resolved_signals)
+    assert "tech" in ic_map
+    assert "flow" in ic_map
+    assert "onchain" in ic_map
+    assert "pattern" in ic_map
+    assert "liquidation" in ic_map
+    # tech scores correlate positively with outcomes
+    assert ic_map["tech"] > 0
+
+
+def test_get_pruned_sources_returns_set():
+    """Should return set of source names that should be pruned."""
+    ic_histories = {
+        "tech": [-0.06, -0.07, -0.08],  # below threshold for 3 days
+        "flow": [0.1, 0.2, 0.15],       # healthy
+        "liquidation": [-0.10, -0.10, -0.10],  # excluded from pruning
+    }
+    pruned = get_pruned_sources(ic_histories, threshold=-0.05, min_days=3)
+    assert "tech" in pruned
+    assert "flow" not in pruned
+    assert "liquidation" not in pruned  # excluded per spec
+```
+
+- [ ] **Step 2: Implement IC pipeline helpers**
+
+Add to `optimizer.py`:
+```python
+# Source key mapping for IC computation
+_IC_SOURCE_KEYS = {
+    "tech": "tech_score",
+    "flow": "flow_score",
+    "onchain": "onchain_score",
+    "pattern": "pattern_score",
+    "liquidation": "liquidation_score",
+}
+
+
+def compute_daily_ic_for_sources(resolved_signals: list[dict]) -> dict[str, float]:
+    """Compute IC for each scoring source from resolved signals.
+
+    Each signal must have raw_indicators with per-source scores and an outcome_pct.
+    """
+    outcomes = [s["outcome_pct"] for s in resolved_signals]
+    ic_map = {}
+    for source_name, score_key in _IC_SOURCE_KEYS.items():
+        scores = [s["raw_indicators"].get(score_key, 0) for s in resolved_signals]
+        ic_map[source_name] = compute_ic(scores, outcomes)
+    return ic_map
+
+
+def get_pruned_sources(
+    ic_histories: dict[str, list[float]],
+    threshold: float = IC_PRUNE_THRESHOLD,
+    min_days: int = 30,
+) -> set[str]:
+    """Return set of source names that should be pruned based on IC history."""
+    pruned = set()
+    for source_name, history in ic_histories.items():
+        if should_prune_source(source_name, history, threshold, min_days):
+            pruned.add(source_name)
+    return pruned
+```
+
+- [ ] **Step 3: Wire IC computation into optimizer loop**
+
+In `optimizer.py`'s `run_optimizer_loop`, add a daily IC computation pass:
+```python
+# After existing optimizer logic, once per day:
+# 1. Query resolved signals from last 24h
+# 2. Call compute_daily_ic_for_sources()
+# 3. Persist results to SourceICHistory table
+# 4. Load 30-day IC history, call get_pruned_sources()
+# 5. Store pruned set in app.state.pruned_sources
+```
+
+- [ ] **Step 4: Apply pruning in run_pipeline**
+
+In `main.py`'s `run_pipeline`, before calling `compute_preliminary_score`, zero the confidence for pruned sources:
+```python
+pruned = getattr(app.state, "pruned_sources", set())
+if "tech" in pruned:
+    tech_conf = 0.0
+if "flow" in pruned:
+    flow_conf = 0.0
+if "onchain" in pruned:
+    onchain_conf = 0.0
+if "pattern" in pruned:
+    pattern_conf = 0.0
+if "liquidation" in pruned:
+    liq_confidence = 0.0
+```
+
+This leverages the existing confidence-weighted blending: a source with `confidence=0.0` contributes zero effective weight, effectively pruning it without changing the combiner API.
+
+- [ ] **Step 5: Run tests**
+
+Run: `docker exec krypton-api-1 python -m pytest tests/engine/test_ic_pruning.py -v`
+Expected: PASS
+
+---
+
+## Task 9: Adaptive Signal Threshold — DB and Lookup
 
 **Files:**
 - Modify: `backend/app/db/models.py` (PipelineSettings or new table)
@@ -670,7 +921,7 @@ Expected: PASS
 
 ---
 
-## Task 8: Adaptive Threshold Learning (Optimizer 1D Sweep)
+## Task 10: Adaptive Threshold Learning (Optimizer 1D Sweep)
 
 **Files:**
 - Modify: `backend/app/engine/optimizer.py`
@@ -739,7 +990,7 @@ Expected: PASS
 
 ---
 
-## Task 9: Wire Adaptive Threshold in Main Pipeline
+## Task 11: Wire Adaptive Threshold in Main Pipeline
 
 **Files:**
 - Modify: `backend/app/main.py`
@@ -775,19 +1026,28 @@ Expected: PASS
 
 ---
 
-## Task 10: Wire Liquidation Scoring in Main Pipeline
+## Task 12: Wire Liquidation Scoring in Main Pipeline
 
 **Files:**
 - Modify: `backend/app/main.py`
 
-- [ ] **Step 1: Initialize liquidation collector in lifespan**
+- [ ] **Step 1: Initialize liquidation collector in lifespan + shutdown**
 
+In lifespan startup:
 ```python
 from app.collector.liquidation import LiquidationCollector
 
 liq_collector = LiquidationCollector(okx_client, settings.pairs)
 await liq_collector.start()
 app.state.liquidation_collector = liq_collector
+app.state.pruned_sources = set()  # populated by IC tracking in optimizer
+```
+
+In lifespan shutdown (after `yield`, alongside other `.stop()` / `.cancel()` calls):
+```python
+liq_collector = getattr(app.state, "liquidation_collector", None)
+if liq_collector:
+    await liq_collector.stop()
 ```
 
 - [ ] **Step 2: Call liquidation scorer in run_pipeline**
@@ -800,8 +1060,12 @@ liq_clusters = []
 liq_collector = getattr(app.state, "liquidation_collector", None)
 if liq_collector:
     from app.engine.liquidation_scorer import compute_liquidation_score
-    atr = tech_result["indicators"].get("atr", 200)
+    atr = tech_result["indicators"].get("atr", None)
     current_price = float(candle["close"])
+    # Use price-relative fallback (2%) instead of fixed value,
+    # so bucket widths scale correctly across assets (BTC ~$60k vs WIF ~$1)
+    if atr is None or atr <= 0:
+        atr = current_price * 0.02
     liq_result = compute_liquidation_score(
         events=liq_collector.events.get(pair, []),
         current_price=current_price,
@@ -814,7 +1078,7 @@ if liq_collector:
 
 - [ ] **Step 3: Store liquidation scores in engine_snapshot JSONB**
 
-The spec requires per-signal liquidation scores stored in `engine_snapshot` for future IC computation. In `run_pipeline`, when building `signal_data["raw_indicators"]`, add:
+The spec requires per-signal liquidation scores stored in `raw_indicators` for IC computation. In `run_pipeline`, when building `signal_data["raw_indicators"]`, add:
 ```python
 "liquidation_score": liq_score,
 "liquidation_confidence": liq_confidence,
@@ -830,35 +1094,53 @@ structure = collect_structure_levels(df, tech_result["indicators"], atr,
                                      liquidation_clusters=liq_clusters)
 ```
 
-- [ ] **Step 4: Run full test suite**
+- [ ] **Step 5: Run full test suite**
 
 Run: `docker exec krypton-api-1 python -m pytest tests/ -v --timeout=120`
 Expected: PASS
 
 ---
 
-## Task 11: Frontend — Threshold Display Updates
+## Task 13: Frontend — Threshold Display Updates
 
 **Files:**
+- Modify: `backend/app/api/routes.py` (add threshold endpoint)
 - Modify: `web/src/features/settings/components/SettingsPage.tsx`
 - Modify: `web/src/features/engine/components/EnginePage.tsx`
 
-- [ ] **Step 1: Rename threshold slider label**
+- [ ] **Step 1: Add API endpoint for learned thresholds**
+
+In `routes.py`, add a GET endpoint that serves the learned threshold overrides so the frontend can display them:
+```python
+@router.get("/engine/thresholds")
+async def get_learned_thresholds(request: Request):
+    thresholds = getattr(request.app.state, "learned_thresholds", {})
+    # Convert tuple keys to serializable format
+    return {
+        "thresholds": [
+            {"pair": k[0], "regime": k[1], "value": v}
+            for k, v in thresholds.items()
+        ],
+        "default": request.app.state.settings.engine_signal_threshold,
+    }
+```
+
+- [ ] **Step 2: Rename threshold slider label**
 
 In `SettingsPage.tsx`, change the signal threshold slider label from "Signal Threshold" to "Default Threshold".
 
-- [ ] **Step 2: Display per-pair/regime overrides on engine page**
+- [ ] **Step 3: Display per-pair/regime overrides on engine page**
 
-In `EnginePage.tsx`, add a section showing learned threshold overrides (read-only) alongside other optimizer-tuned parameters.
+In `EnginePage.tsx`, add a section showing learned threshold overrides (read-only) fetched from `/engine/thresholds`, alongside other optimizer-tuned parameters.
 
-- [ ] **Step 3: Build frontend**
+- [ ] **Step 4: Build frontend**
 
 Run: `cd web && pnpm build`
 Expected: No TypeScript errors
 
 ---
 
-## Task 12: Alembic Migration for All Plan 5 Changes
+## Task 14: Alembic Migration for All Model Changes
 
 - [ ] **Step 1: Generate migration**
 
@@ -872,7 +1154,7 @@ Run: `MSYS_NO_PATHCONV=1 docker exec krypton-api-1 alembic upgrade head`
 
 ---
 
-## Task 13: Final Integration Test
+## Task 15: Final Integration Test
 
 - [ ] **Step 1: Run the full backend test suite**
 

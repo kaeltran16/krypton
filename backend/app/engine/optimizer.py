@@ -12,11 +12,13 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
+import numpy as np
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ParameterProposal, ShadowResult, Signal
 from app.engine.param_groups import PARAM_GROUPS, PRIORITY_LAYERS, validate_candidate
+from app.engine.regime import OUTER_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +356,121 @@ async def run_counterfactual_eval(
                 return None
 
     return None
+
+
+# ── IC-based source pruning ──
+
+IC_PRUNE_THRESHOLD = -0.05
+IC_REENABLE_THRESHOLD = 0.0
+IC_PRUNE_EXCLUDED_SOURCES = {"liquidation"}
+
+_IC_SOURCE_KEYS = {key: f"{key}_score" for key in OUTER_KEYS}
+
+
+def compute_ic(source_scores: list[float], outcomes: list[float]) -> float:
+    """Compute Information Coefficient (Pearson correlation) between scores and outcomes."""
+    if len(source_scores) < 5 or len(outcomes) < 5:
+        return 0.0
+    scores = np.array(source_scores, dtype=float)
+    outs = np.array(outcomes, dtype=float)
+    if np.std(scores) == 0 or np.std(outs) == 0:
+        return 0.0
+    return float(np.corrcoef(scores, outs)[0, 1])
+
+
+def should_prune_source(
+    source_name: str,
+    ic_history: list[float],
+    threshold: float = IC_PRUNE_THRESHOLD,
+    min_days: int = 30,
+) -> bool:
+    """Check if a source should be pruned based on IC history."""
+    if source_name in IC_PRUNE_EXCLUDED_SOURCES:
+        return False
+    if len(ic_history) < min_days:
+        return False
+    recent = ic_history[-min_days:]
+    return all(ic < threshold for ic in recent)
+
+
+def should_reenable_source(ic_history: list[float]) -> bool:
+    """Check if a pruned source should be re-enabled."""
+    if not ic_history:
+        return False
+    return ic_history[-1] > IC_REENABLE_THRESHOLD
+
+
+def compute_daily_ic_for_sources(resolved_signals: list[dict]) -> dict[str, float]:
+    """Compute IC for each scoring source from resolved signals."""
+    outcomes = [s["outcome_pct"] for s in resolved_signals]
+    ic_map = {}
+    for source_name, score_key in _IC_SOURCE_KEYS.items():
+        scores = [s["raw_indicators"].get(score_key, 0) for s in resolved_signals]
+        ic_map[source_name] = compute_ic(scores, outcomes)
+    return ic_map
+
+
+def get_pruned_sources(
+    ic_histories: dict[str, list[float]],
+    threshold: float = IC_PRUNE_THRESHOLD,
+    min_days: int = 30,
+) -> set[str]:
+    """Return set of source names that should be pruned based on IC history."""
+    pruned = set()
+    for source_name, history in ic_histories.items():
+        if should_prune_source(source_name, history, threshold, min_days):
+            pruned.add(source_name)
+    return pruned
+
+
+# ── Adaptive signal threshold ──
+
+def lookup_signal_threshold(
+    pair: str,
+    dominant_regime: str,
+    learned_thresholds: dict,
+    default: int = 40,
+) -> int:
+    """Look up signal threshold with fallback cascade.
+
+    Cascade: (pair, regime) → (pair, any) → (any, regime) → global default.
+    """
+    t = learned_thresholds.get((pair, dominant_regime))
+    if t is not None:
+        return t
+    t = learned_thresholds.get((pair, None))
+    if t is not None:
+        return t
+    t = learned_thresholds.get((None, dominant_regime))
+    if t is not None:
+        return t
+    return default
+
+
+def sweep_threshold_1d(
+    fitness_fn,
+    low: int = 20,
+    high: int = 60,
+    step: int = 5,
+    signal_count: int | None = None,
+    min_signals: int = 10,
+) -> tuple[int | None, float]:
+    """1D sweep to find optimal signal threshold.
+
+    Returns (best_threshold, best_fitness) or (None, 0.0) if insufficient data.
+    """
+    if signal_count is not None and signal_count < min_signals:
+        return None, 0.0
+
+    best_threshold = None
+    best_fitness = -float("inf")
+    for t in range(low, high + 1, step):
+        f = fitness_fn(t)
+        if f > best_fitness:
+            best_fitness = f
+            best_threshold = t
+
+    return best_threshold, best_fitness
 
 
 async def run_optimizer_loop(app) -> None:

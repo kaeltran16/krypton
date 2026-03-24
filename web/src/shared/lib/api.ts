@@ -481,6 +481,12 @@ export const api = {
       body: JSON.stringify({ pair, timeframe }),
     }),
 
+  getEngineThresholds: () =>
+    request<{
+      default: number;
+      thresholds: { pair: string; regime: string; value: number }[];
+    }>("/api/engine/thresholds"),
+
   // System
   getSystemHealth: () => request<SystemHealthResponse>("/api/system/health"),
 

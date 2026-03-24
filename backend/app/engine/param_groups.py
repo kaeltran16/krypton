@@ -14,7 +14,7 @@ import math
 from typing import Any, Callable
 
 from app.engine.constants import PATTERN_STRENGTHS
-from app.engine.regime import REGIMES
+from app.engine.regime import REGIMES, OUTER_KEYS
 
 # ── Priority layers (lower number = optimize first) ──
 
@@ -40,7 +40,7 @@ def _sum_close_to(values: list[float], target: float, tol: float = 0.01) -> bool
 # ── Constraint functions ──
 
 def _source_weights_ok(c: dict[str, Any]) -> bool:
-    vals = [c["traditional"], c["flow"], c["onchain"], c["pattern"]]
+    vals = [c["traditional"], c["flow"], c["onchain"], c["pattern"], c["liquidation"]]
     return _sum_close_to(vals, 1.0) and all(v >= 0 for v in vals)
 
 
@@ -114,6 +114,7 @@ PARAM_GROUPS: dict[str, dict] = {
             "flow": "blending.source_weights.flow",
             "onchain": "blending.source_weights.onchain",
             "pattern": "blending.source_weights.pattern",
+            "liquidation": "blending.source_weights.liquidation",
         },
         "sweep_method": "grid",
         "sweep_ranges": {
@@ -121,6 +122,7 @@ PARAM_GROUPS: dict[str, dict] = {
             "flow": (0.05, 0.40, 0.05),
             "onchain": (0.05, 0.40, 0.05),
             "pattern": (0.05, 0.30, 0.05),
+            "liquidation": (0.0, 0.20, 0.05),
         },
         "constraints": _source_weights_ok,
         "priority": _priority_for("source_weights"),
@@ -159,13 +161,15 @@ PARAM_GROUPS: dict[str, dict] = {
         "params": {
             f"{r}_{src}_weight": f"regime_weights.*.*.{r}_{src}_weight"
             for r in REGIMES
-            for src in ("tech", "flow", "onchain", "pattern")
+            for src in OUTER_KEYS
         },
         "sweep_method": "de",
         "sweep_ranges": {
-            f"{r}_{src}_weight": (0.10, 0.50, None)
+            f"{r}_{src}_weight": (
+                (0.0, 0.20, None) if src == "liquidation" else (0.10, 0.50, None)
+            )
             for r in REGIMES
-            for src in ("tech", "flow", "onchain", "pattern")
+            for src in OUTER_KEYS
         },
         "constraints": _regime_outer_ok,
         "priority": _priority_for("regime_outer"),

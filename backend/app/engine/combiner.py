@@ -14,34 +14,41 @@ def compute_preliminary_score(
     flow_confidence: float = 0.5,
     onchain_confidence: float = 0.5,
     pattern_confidence: float = 0.5,
+    liquidation_score: int = 0,
+    liquidation_weight: float = 0.0,
+    liquidation_confidence: float = 0.0,
 ) -> dict:
     # confidence-weight each source: effective_weight = base_weight * confidence
     ew_tech = tech_weight * tech_confidence
     ew_flow = flow_weight * flow_confidence
     ew_onchain = onchain_weight * onchain_confidence
     ew_pattern = pattern_weight * pattern_confidence
-    total = ew_tech + ew_flow + ew_onchain + ew_pattern
+    ew_liq = liquidation_weight * liquidation_confidence
+    total = ew_tech + ew_flow + ew_onchain + ew_pattern + ew_liq
     if total > 0:
         ew_tech /= total
         ew_flow /= total
         ew_onchain /= total
         ew_pattern /= total
+        ew_liq /= total
     else:
         # fallback to equal weights
-        ew_tech = ew_flow = ew_onchain = ew_pattern = 0.25
+        ew_tech = ew_flow = ew_onchain = ew_pattern = ew_liq = 0.2
     score = round(
         technical_score * ew_tech
         + order_flow_score * ew_flow
         + onchain_score * ew_onchain
         + pattern_score * ew_pattern
+        + liquidation_score * ew_liq
     )
     # weighted-average confidence (using base weights, not effective weights)
-    total_w = tech_weight + flow_weight + onchain_weight + pattern_weight
+    total_w = tech_weight + flow_weight + onchain_weight + pattern_weight + liquidation_weight
     avg_confidence = (
         tech_confidence * tech_weight
         + flow_confidence * flow_weight
         + onchain_confidence * onchain_weight
         + pattern_confidence * pattern_weight
+        + liquidation_confidence * liquidation_weight
     ) / total_w if total_w > 0 else 0.0
     return {"score": score, "avg_confidence": avg_confidence}
 

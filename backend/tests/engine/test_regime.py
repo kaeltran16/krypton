@@ -92,7 +92,7 @@ class TestBlendOuterWeights:
     def test_sums_to_one(self):
         regime = {"trending": 0.3, "ranging": 0.25, "volatile": 0.25, "steady": 0.2}
         weights = blend_outer_weights(regime, None)
-        total = weights["tech"] + weights["flow"] + weights["onchain"] + weights["pattern"]
+        total = sum(weights.values())
         assert abs(total - 1.0) < 1e-9
 
     def test_pure_trending_returns_trending_weights(self):

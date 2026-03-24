@@ -626,4 +626,15 @@ def create_router() -> APIRouter:
             await session.commit()
             return {"status": "reset", "pair": body.pair, "timeframe": body.timeframe}
 
+    @router.get("/engine/thresholds")
+    async def get_learned_thresholds(request: Request, _key: str = auth):
+        thresholds = getattr(request.app.state, "learned_thresholds", {})
+        return {
+            "thresholds": [
+                {"pair": k[0], "regime": k[1], "value": v}
+                for k, v in thresholds.items()
+            ],
+            "default": request.app.state.settings.engine_signal_threshold,
+        }
+
     return router

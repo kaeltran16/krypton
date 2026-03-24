@@ -21,9 +21,12 @@
 | File | Responsibility |
 |------|---------------|
 | `backend/app/ml/trainer.py` | Add temperature scaling after training, save temperature + feature names to sidecar |
-| `backend/app/ml/predictor.py` | MC Dropout inference (5 passes), feature name mapping, checkpoint age staleness |
+| `backend/app/ml/predictor.py` | MC Dropout inference (5 passes), feature name mapping, checkpoint age staleness, remove old `_stale` heuristic |
 | `backend/app/ml/model.py` | No changes — architecture unchanged |
 | `backend/app/ml/features.py` | Export feature column names for layout versioning |
+| `backend/app/api/ml.py` | Wire `set_available_features` in `_reload_predictors`, pass `feature_names` to trainer |
+| `backend/app/main.py` | Remove dead `_stale` check (line 513) |
+| `backend/tests/ml/test_predictor.py` | Delete `TestStaleModelDetection` and `TestFeatureTruncation` classes (replaced by new tests) |
 
 ### Test Files
 
@@ -75,43 +78,26 @@ Expected: FAIL — `get_feature_names` doesn't exist
 
 - [ ] **Step 3: Implement get_feature_names in features.py**
 
-In `backend/app/ml/features.py`, add a function that returns the ordered feature column names matching the matrix columns. Read the existing feature group constants (PRICE_FEATURES, INDICATOR_FEATURES, etc.) and build the names list in the same order as `build_feature_matrix` constructs them:
+In `backend/app/ml/features.py`, add a function that returns the ordered feature column names matching the matrix columns. Reuse the existing constants (`PRICE_FEATURES`, `INDICATOR_FEATURES`, etc.) which are already string lists in the correct order — do NOT create duplicate name lists:
 
 ```python
-PRICE_FEATURE_NAMES = ["ret", "body_ratio", "upper_wick", "lower_wick", "volume_zscore"]
-INDICATOR_FEATURE_NAMES = ["ema9_dist", "ema21_dist", "ema50_dist", "rsi_norm", "macd_norm", "bb_position", "bb_width", "atr_pct"]
-TEMPORAL_FEATURE_NAMES = ["hour_sin", "hour_cos"]
-MOMENTUM_FEATURE_NAMES = ["ret_5", "ret_10", "ret_20", "rsi_roc", "vol_trend", "macd_accel"]
-MULTI_TF_FEATURE_NAMES = ["rsi_slow", "ema_slow_dist", "bb_pos_slow"]
-REGIME_FEATURE_NAMES = ["regime_trend", "regime_range", "regime_vol", "trend_conv"]
-INTER_PAIR_FEATURE_NAMES = ["btc_ret_5", "btc_atr_pct"]
-FLOW_FEATURE_NAMES = ["funding_rate", "oi_change_pct", "long_short_ratio_norm"]
-FLOW_ROC_FEATURE_NAMES = ["funding_delta", "ls_delta", "oi_accel"]
-
-
 def get_feature_names(
     flow_used: bool = False,
     regime_used: bool = False,
     btc_used: bool = False,
 ) -> list[str]:
     """Return ordered list of feature column names matching build_feature_matrix output."""
-    names = (
-        PRICE_FEATURE_NAMES
-        + INDICATOR_FEATURE_NAMES
-        + TEMPORAL_FEATURE_NAMES
-        + MOMENTUM_FEATURE_NAMES
-        + MULTI_TF_FEATURE_NAMES
-    )
+    names = list(BASE_FEATURES)  # PRICE + INDICATOR + TEMPORAL + MOMENTUM + MULTI_TF
     if regime_used:
-        names = names + REGIME_FEATURE_NAMES
+        names = names + REGIME_FEATURES
     if btc_used:
-        names = names + INTER_PAIR_FEATURE_NAMES
+        names = names + INTER_PAIR_FEATURES
     if flow_used:
-        names = names + FLOW_FEATURE_NAMES + FLOW_ROC_FEATURE_NAMES
+        names = names + FLOW_FEATURES + FLOW_ROC_FEATURES
     return names
 ```
 
-Verify that the order matches the column order in `build_feature_matrix`. If `build_feature_matrix` assembles columns differently, adjust the name list to match.
+This reuses the existing constants at the top of `features.py` (lines 8-69), which are already ordered string lists matching `build_feature_matrix` column order. The `BASE_FEATURES` constant (line 72) already combines the base groups.
 
 - [ ] **Step 4: Run tests**
 
@@ -246,7 +232,8 @@ def test_temperature_scaling_changes_calibration():
         with open(config_path) as f:
             config = json.load(f)
 
-        # Temperature should be > 1.0 for overconfident model (softens predictions)
+        # Temperature should differ from 1.0 — calibration must have run
+        assert config["temperature"] != 1.0, "Temperature scaling must change T from default 1.0"
         assert config["temperature"] > 0.1, "Temperature must be positive"
         assert isinstance(config["temperature"], float)
 ```
@@ -304,6 +291,8 @@ After the training loop completes and the best model is saved, add temperature c
 ```
 
 Then update all sidecar writes to use the computed `temperature` instead of `1.0`.
+
+**Important:** Rather than patching the JSON after the fact, restructure the trainer so the early-stopping and no-validation sidecar writes still use `temperature: 1.0` during training, but after the training loop ends and temperature is calibrated, re-write the sidecar once with the final `temperature` value. This avoids the inline `import json as _json` duplication — do the final sidecar write in one place after temperature calibration completes.
 
 - [ ] **Step 4: Run test**
 
@@ -366,7 +355,7 @@ def test_mc_dropout_reduces_confidence_with_high_variance(tmp_path):
 
 
 def test_mc_dropout_completes_within_latency_budget(tmp_path):
-    """5 MC Dropout passes should complete in <2s on CPU."""
+    """5 MC Dropout passes should complete in <5s on CPU (generous for CI/Docker)."""
     import time
     from app.ml.model import SignalLSTM
 
@@ -390,7 +379,7 @@ def test_mc_dropout_completes_within_latency_budget(tmp_path):
     result = predictor.predict(features)
     elapsed = time.monotonic() - start
 
-    assert elapsed < 2.0, f"MC Dropout inference took {elapsed:.2f}s (budget: 2s)"
+    assert elapsed < 5.0, f"MC Dropout inference took {elapsed:.2f}s (budget: 5s)"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -400,15 +389,25 @@ Expected: FAIL — no `mc_variance` in result
 
 - [ ] **Step 3: Implement MC Dropout in predictor.py**
 
-Replace the `predict` method in `backend/app/ml/predictor.py`:
+First, add `"mc_variance": 0.0` to `_NEUTRAL_RESULT` at the top of `predictor.py` so early returns (stale model, too few candles) don't cause `KeyError` for callers checking `mc_variance`:
+
+```python
+_NEUTRAL_RESULT = {
+    "direction": "NEUTRAL",
+    "confidence": 0.0,
+    "sl_atr": 0.0,
+    "tp1_atr": 0.0,
+    "tp2_atr": 0.0,
+    "mc_variance": 0.0,
+}
+```
+
+Then replace the `predict` method in `backend/app/ml/predictor.py`:
 
 ```python
 MC_DROPOUT_PASSES = 5
 
     def predict(self, features: np.ndarray) -> dict:
-        if self._stale:
-            return dict(_NEUTRAL_RESULT)
-
         if len(features) < self.seq_len:
             return dict(_NEUTRAL_RESULT)
 
@@ -485,7 +484,7 @@ Expected: PASS
 
 Replace silent truncation (`features[:, :self.input_size]`) with name-based mapping. Missing features filled with 0, extra features ignored with logging.
 
-**Note:** Add `"mc_variance": 0.0` to `_NEUTRAL_RESULT` at the top of `predictor.py` so early returns don't cause KeyError for callers checking `mc_variance`.
+**Note:** `_NEUTRAL_RESULT` already has `"mc_variance": 0.0` from Task 4.
 
 - [ ] **Step 1: Write test**
 
@@ -618,7 +617,22 @@ Expected: PASS
 
 Replace `input_size` heuristic (16-23 = stale) with checkpoint file age. Models not retrained within N days (default 14) get confidence capped at 0.3.
 
-**IMPORTANT:** Remove the existing `_stale` input-size heuristic (lines 42-51 in current `predictor.py`). The old `if 16 <= self.input_size <= 23` block and its early `return` in `__init__` must be deleted — the spec says "replace" not "add alongside". Also update existing tests in `tests/ml/test_predictor.py:TestStaleModelDetection` — remove/rewrite the input-size-based staleness tests since that heuristic is gone.
+**IMPORTANT:** Remove the existing `_stale` input-size heuristic (lines 42-51 in current `predictor.py`). The old `if 16 <= self.input_size <= 23` block and its early `return` in `__init__` must be deleted — the spec says "replace" not "add alongside".
+
+Since the old `_stale` heuristic is being fully removed, also remove the `_stale` attribute and its early return in `predict()` (lines 74-75). Stale-age models still run inference — they just cap confidence via `_max_confidence`. Then update `main.py:513` to remove the dead `_stale` check:
+
+```python
+# main.py:513 — change:
+if ml_predictor is not None and not getattr(ml_predictor, "_stale", False):
+# to:
+if ml_predictor is not None:
+```
+
+**Existing test updates in `tests/ml/test_predictor.py`:**
+- **Delete** the entire `TestStaleModelDetection` class (lines 80-115 — 6 tests). These all test the removed input-size heuristic.
+- **Delete** `TestFeatureTruncation` class (lines 118-142 — 3 tests). Feature truncation is replaced by name-based mapping from Task 5.
+- The replacement age-based staleness tests are in `test_ml_calibration.py` (this task).
+- `TestPredictor.test_load_model` (line 46-48) still passes — `predictor.model is not None` holds since all models are now loaded regardless of age.
 
 - [ ] **Step 1: Write test**
 
@@ -692,7 +706,6 @@ Update `Predictor.__init__` to accept `max_age_days` and check file mtime:
 class Predictor:
     def __init__(self, checkpoint_path: str, max_age_days: int = 14):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._stale = False
         self._stale_age = False
         self._max_confidence = 1.0
 
@@ -748,36 +761,76 @@ Expected: PASS
 
 ---
 
-## Task 7: Wire Feature Names in Main Pipeline
+## Task 7: Wire Feature Names in Pipeline
 
 **Files:**
-- Modify: `backend/app/main.py` (where ML predictor is initialized and features are built)
+- Modify: `backend/app/api/ml.py` (where ML predictors are loaded and training is triggered)
+- Modify: `backend/app/main.py` (remove dead `_stale` check from line 513)
 
-- [ ] **Step 1: Pass feature names when building predictors**
+- [ ] **Step 1: Wire `set_available_features` in `_reload_predictors`**
 
-In `main.py`, where ML predictors are loaded (lifespan), call `set_available_features` with the names from `get_feature_names`:
+In `backend/app/api/ml.py:_reload_predictors` (line 570-589), after creating each `Predictor`, call `set_available_features`:
 
 ```python
 from app.ml.features import get_feature_names
 
-# After creating each predictor:
-feature_names = get_feature_names(
-    flow_used=predictor.flow_used,
-    regime_used=predictor.regime_used,
-    btc_used=predictor.btc_used,
-)
-predictor.set_available_features(feature_names)
+def _reload_predictors(app, settings):
+    """Reload per-pair ML predictors from checkpoints."""
+    import os
+    from app.ml.predictor import Predictor
+    predictors = {}
+    checkpoint_dir = getattr(settings, "ml_checkpoint_dir", "models")
+    if not os.path.isdir(checkpoint_dir):
+        return
+    for entry in os.listdir(checkpoint_dir):
+        pair_dir = os.path.join(checkpoint_dir, entry)
+        if not os.path.isdir(pair_dir):
+            continue
+        model_path = os.path.join(pair_dir, "best_model.pt")
+        if os.path.isfile(model_path):
+            try:
+                predictor = Predictor(model_path)
+                # Wire feature name mapping for layout versioning
+                feature_names = get_feature_names(
+                    flow_used=predictor.flow_used,
+                    regime_used=predictor.regime_used,
+                    btc_used=predictor.btc_used,
+                )
+                predictor.set_available_features(feature_names)
+                predictors[entry] = predictor
+                logger.info(f"ML predictor loaded for {entry}")
+            except Exception as e:
+                logger.error(f"Failed to load ML predictor for {entry}: {e}")
+    app.state.ml_predictors = predictors
 ```
 
 - [ ] **Step 2: Pass feature_names to trainer when training**
 
-In the training trigger code, pass `feature_names` to `trainer.train()`:
+In `backend/app/api/ml.py` (around line 259-261), pass `feature_names` to `trainer.train()`:
 ```python
-feature_names = get_feature_names(flow_used=..., regime_used=..., btc_used=...)
-trainer.train(features, direction, sl, tp1, tp2, feature_names=feature_names)
+from app.ml.features import get_feature_names
+
+feature_names = get_feature_names(
+    flow_used=flow_used,
+    regime_used=True,
+    btc_used=not is_btc and btc_candles_list is not None,
+)
+pair_result = await asyncio.to_thread(
+    trainer.train, features, direction, sl, tp1, tp2, on_progress, feature_names,
+)
 ```
 
-- [ ] **Step 3: Run existing ML tests**
+- [ ] **Step 3: Remove dead `_stale` check from main.py**
+
+In `backend/app/main.py:513`, remove the `_stale` guard that was for the old input-size heuristic:
+```python
+# Change:
+if ml_predictor is not None and not getattr(ml_predictor, "_stale", False):
+# To:
+if ml_predictor is not None:
+```
+
+- [ ] **Step 4: Run existing ML tests**
 
 Run: `docker exec krypton-api-1 python -m pytest tests/ml/ -v`
 Expected: PASS
@@ -793,4 +846,4 @@ Expected: All tests pass
 
 - [ ] **Step 2: Verify ML prediction latency with MC Dropout**
 
-The test from Task 4 (`test_mc_dropout_completes_within_latency_budget`) confirms 5 passes complete in <2s. Verify it passes.
+The test from Task 4 (`test_mc_dropout_completes_within_latency_budget`) confirms 5 passes complete in <5s on CPU. Verify it passes.

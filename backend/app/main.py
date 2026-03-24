@@ -44,6 +44,7 @@ from app.engine.confluence import (
 )
 from app.engine.regime import blend_outer_weights, smooth_regime_mix
 from app.engine.structure import collect_structure_levels, snap_levels_to_structure
+from app.engine.optimizer import lookup_signal_threshold
 from app.db.models import RegimeWeights
 
 logger = logging.getLogger(__name__)
@@ -459,6 +460,29 @@ async def run_pipeline(app: FastAPI, candle: dict):
             logger.debug(f"On-chain scoring skipped: {e}")
     onchain_score = onchain_result["score"]
 
+    # Liquidation scoring (if collector available)
+    liq_score = 0
+    liq_conf = 0.0
+    liq_clusters = []
+    liq_collector = getattr(app.state, "liquidation_collector", None)
+    if liq_collector:
+        try:
+            from app.engine.liquidation_scorer import compute_liquidation_score
+            liq_atr = tech_result["indicators"].get("atr", None)
+            current_price = float(candle["close"])
+            if liq_atr is None or liq_atr <= 0:
+                liq_atr = current_price * 0.02
+            liq_result = compute_liquidation_score(
+                events=liq_collector.events.get(pair, []),
+                current_price=current_price,
+                atr=liq_atr,
+            )
+            liq_score = liq_result["score"]
+            liq_conf = liq_result["confidence"]
+            liq_clusters = liq_result["clusters"]
+        except Exception as e:
+            logger.debug(f"Liquidation scoring skipped: {e}")
+
     # Regime-aware outer weight blending (smoothed to prevent single-candle flips)
     regime = tech_result.get("regime")
     if regime:
@@ -467,21 +491,36 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # Zero unavailable sources, then renormalize
     flow_available = bool(flow_metrics)
+    liq_available = liq_score != 0 or liq_conf > 0
     tech_w = outer["tech"]
     flow_w = outer["flow"] if flow_available else 0.0
     onchain_w = outer["onchain"] if onchain_available else 0.0
     pattern_w = outer["pattern"]
-    total_w = tech_w + flow_w + onchain_w + pattern_w
+    liq_w = outer.get("liquidation", 0.0) if liq_available else 0.0
+    total_w = tech_w + flow_w + onchain_w + pattern_w + liq_w
     if total_w > 0:
         tech_w /= total_w
         flow_w /= total_w
         onchain_w /= total_w
         pattern_w /= total_w
+        liq_w /= total_w
 
     tech_conf = tech_result.get("confidence", 0.5)
     flow_conf = flow_result.get("confidence", 0.5)
     onchain_conf = onchain_result.get("confidence", 0.0)
     pattern_conf = pat_result.get("confidence", 0.0)
+
+    # Apply IC-based source pruning: zero confidence for pruned sources
+    pruned = getattr(app.state, "pruned_sources", set())
+    conf_vars = {"tech": tech_conf, "flow": flow_conf, "onchain": onchain_conf,
+                 "pattern": pattern_conf, "liquidation": liq_conf}
+    for src in pruned:
+        if src in conf_vars:
+            conf_vars[src] = 0.0
+    tech_conf, flow_conf, onchain_conf, pattern_conf, liq_conf = (
+        conf_vars["tech"], conf_vars["flow"], conf_vars["onchain"],
+        conf_vars["pattern"], conf_vars["liquidation"],
+    )
 
     prelim_result = compute_preliminary_score(
         tech_result["score"],
@@ -496,6 +535,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
         flow_confidence=flow_conf,
         onchain_confidence=onchain_conf,
         pattern_confidence=pattern_conf,
+        liquidation_score=liq_score,
+        liquidation_weight=liq_w,
+        liquidation_confidence=liq_conf,
     )
     indicator_preliminary = prelim_result["score"]
     confidence_tier = compute_confidence_tier(prelim_result["avg_confidence"])
@@ -710,8 +752,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
     final = compute_final_score(blended, llm_contribution)
     direction = "LONG" if final > 0 else "SHORT"
 
-    # ── Step 7: Threshold check + emit ──
-    emitted = abs(final) >= settings.engine_signal_threshold
+    # ── Step 7: Threshold check + emit (adaptive per-pair/regime) ──
+    dominant = max(regime, key=regime.get) if regime else "steady"
+    effective_threshold = lookup_signal_threshold(
+        pair, dominant, getattr(app.state, "learned_thresholds", {}),
+        default=settings.engine_signal_threshold,
+    )
+    emitted = abs(final) >= effective_threshold
 
     _log_pipeline_evaluation(
         pair=pair, timeframe=timeframe,
@@ -745,7 +792,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     scaled = scale_atr_multipliers(
         score=final, bb_width_pct=bb_width_pct,
         sl_base=sl_base, tp1_base=tp1_base, tp2_base=tp2_base,
-        signal_threshold=settings.engine_signal_threshold,
+        signal_threshold=effective_threshold,
     )
 
     llm_levels = None
@@ -783,7 +830,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
     )
 
     # Post-process: snap levels to nearby technical structure
-    structure = collect_structure_levels(df, tech_result["indicators"], atr)
+    structure = collect_structure_levels(df, tech_result["indicators"], atr,
+                                         liquidation_clusters=liq_clusters)
     levels, snap_info = snap_levels_to_structure(
         levels, structure, direction, atr,
         sl_min_atr=settings.ml_sl_min_atr,
@@ -846,6 +894,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "funding_rate": flow_result["details"].get("funding_rate"),
             "open_interest_change_pct": flow_result["details"].get("open_interest_change_pct"),
             "long_short_ratio": flow_result["details"].get("long_short_ratio"),
+            "liquidation_score": liq_score,
+            "liquidation_confidence": liq_conf,
+            "liquidation_cluster_count": len(liq_clusters),
             "llm_contribution": llm_contribution,
             "llm_prompt_tokens": llm_result.prompt_tokens if llm_result else None,
             "llm_completion_tokens": llm_result.completion_tokens if llm_result else None,
@@ -1291,6 +1342,14 @@ async def lifespan(app: FastAPI):
         onchain_task = asyncio.create_task(onchain_collector.run())
     app.state.onchain_collector = onchain_collector
 
+    # Liquidation collector
+    from app.collector.liquidation import LiquidationCollector
+    liq_collector = LiquidationCollector(okx_client, settings.pairs)
+    await liq_collector.start()
+    app.state.liquidation_collector = liq_collector
+    app.state.learned_thresholds = {}  # populated by optimizer
+    app.state.pruned_sources = set()   # populated by IC tracking
+
     # News collector
     from app.collector.news import NewsCollector
     news_collector = NewsCollector(
@@ -1385,6 +1444,9 @@ async def lifespan(app: FastAPI):
     if onchain_task:
         onchain_collector.stop()
         onchain_task.cancel()
+    liq_collector = getattr(app.state, "liquidation_collector", None)
+    if liq_collector:
+        await liq_collector.stop()
     await redis.close()
     await db.close()
 
