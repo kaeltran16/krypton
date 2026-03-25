@@ -56,6 +56,15 @@ def parse_positions_response(raw: dict) -> list[dict]:
     for p in raw["data"]:
         if _safe_float(p.get("pos")) == 0:
             continue
+        c_time = p.get("cTime")
+        created_at = None
+        if c_time and c_time != "":
+            try:
+                created_at = datetime.fromtimestamp(
+                    int(c_time) / 1000, tz=timezone.utc
+                ).isoformat()
+            except (ValueError, TypeError):
+                pass
         positions.append({
             "pair": p["instId"],
             "side": "long" if p.get("posSide") == "long" else "short",
@@ -66,6 +75,7 @@ def parse_positions_response(raw: dict) -> list[dict]:
             "liquidation_price": _safe_float(p.get("liqPx")) or None,
             "margin": _safe_float(p.get("margin")),
             "leverage": p.get("lever", "0"),
+            "created_at": created_at,
         })
     return positions
 
@@ -219,13 +229,14 @@ class OKXClient:
         size: str,
         order_type: str = "market",
         client_order_id: str | None = None,
+        pos_side: str | None = None,
     ) -> dict:
         path = "/api/v5/trade/order"
         body_dict = {
             "instId": pair,
             "tdMode": "cross",
             "side": side,
-            "posSide": "long" if side == "buy" else "short",
+            "posSide": pos_side if pos_side else ("long" if side == "buy" else "short"),
             "ordType": order_type,
             "sz": size,
         }
@@ -280,6 +291,66 @@ class OKXClient:
                 return {"success": False, "error": _parse_error(data)}
             algo = data["data"][0]
             return {"success": True, "algo_id": algo.get("algoId")}
+
+    async def get_algo_orders_pending(self, pair: str) -> list[dict]:
+        """Fetch pending algo orders (SL/TP) for a pair."""
+        path = f"/api/v5/trade/orders-algo-pending?instType=SWAP&instId={pair}"
+        sign_path = path.split("?")[0]
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.get(path, headers=self._headers("GET", sign_path))
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != "0" or not data.get("data"):
+                return []
+            orders = []
+            for o in data["data"]:
+                orders.append({
+                    "algo_id": o.get("algoId"),
+                    "pair": o.get("instId"),
+                    "side": o.get("side"),
+                    "tp_trigger_price": _safe_float(o.get("tpTriggerPx")) or None,
+                    "sl_trigger_price": _safe_float(o.get("slTriggerPx")) or None,
+                    "size": o.get("sz", "0"),
+                    "status": o.get("state", ""),
+                })
+            return orders
+
+    async def cancel_algo_order(self, pair: str, algo_id: str) -> dict:
+        """Cancel a pending algo order."""
+        path = "/api/v5/trade/cancel-algos"
+        body_dict = [{"instId": pair, "algoId": algo_id}]
+        body = json.dumps(body_dict)
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.post(
+                path,
+                content=body,
+                headers=self._headers("POST", path, body),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != "0":
+                return {"success": False, "error": _parse_error(data)}
+            return {"success": True}
+
+    async def get_funding_costs(self, pair: str) -> list[dict]:
+        """Fetch funding fee bills for a pair."""
+        path = f"/api/v5/account/bills?type=8&instId={pair}"
+        sign_path = path.split("?")[0]
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+            resp = await client.get(path, headers=self._headers("GET", sign_path))
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != "0" or not data.get("data"):
+                return []
+            bills = []
+            for b in data["data"]:
+                bills.append({
+                    "pair": b.get("instId"),
+                    "pnl": _safe_float(b.get("pnl")),
+                    "fee": _safe_float(b.get("fee")),
+                    "ts": int(b.get("ts", 0)),
+                })
+            return bills
 
     async def close_position(self, pair: str, pos_side: str) -> dict:
         """Market-close a position. pos_side is 'long' or 'short'."""

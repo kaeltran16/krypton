@@ -1,17 +1,18 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useAccount } from "../../dashboard/hooks/useAccount";
 import { useSignalStats } from "../hooks/useSignalStats";
 import { useRecentNews } from "../../news/hooks/useNews";
 import { RecentSignals } from "./RecentSignals";
 import { MiniSparkline } from "./MiniSparkline";
-import { formatPrice, formatRelativeTime, formatPair } from "../../../shared/lib/format";
-import { TrendingUp, TrendingDown } from "lucide-react";
-import { api, type Portfolio, type Position } from "../../../shared/lib/api";
+import { formatPrice, formatRelativeTime, formatPair, formatElapsed } from "../../../shared/lib/format";
+import { TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
+import { type Portfolio, type Position } from "../../../shared/lib/api";
 import { Button } from "../../../shared/components/Button";
 import { Badge } from "../../../shared/components/Badge";
 import { MetricCard } from "../../../shared/components/MetricCard";
 import { Skeleton } from "../../../shared/components/Skeleton";
 import { SectionLabel } from "../../../shared/components/SectionLabel";
+import { useNavigationStore } from "../../../shared/stores/navigation";
 import type { SignalStats } from "../../signals/types";
 import type { NewsEvent } from "../../news/types";
 
@@ -109,9 +110,8 @@ function PortfolioStrip({ portfolio, positions, loading }: { portfolio: Portfoli
   );
 }
 
-function OpenPositions({ positions, loading, onRefresh }: { positions: Position[]; loading: boolean; onRefresh: () => void }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [closing, setClosing] = useState<string | null>(null);
+function OpenPositions({ positions, loading }: { positions: Position[]; loading: boolean; onRefresh: () => void }) {
+  const navigateToPosition = useNavigationStore((s) => s.navigateToPosition);
 
   if (loading) return <Skeleton height="h-20" />;
 
@@ -127,17 +127,22 @@ function OpenPositions({ positions, loading, onRefresh }: { positions: Position[
           {positions.map((pos) => {
             const key = `${pos.pair}-${pos.side}`;
             const isLong = pos.side === "long";
-            const isExpanded = expanded === key;
             const DirIcon = isLong ? TrendingUp : TrendingDown;
+            const roi = pos.margin > 0 ? (pos.unrealized_pnl / pos.margin) * 100 : 0;
+            const notional = Math.abs(pos.size * pos.mark_price);
+            const liqDist = pos.liquidation_price && pos.mark_price > 0
+              ? Math.abs((pos.mark_price - pos.liquidation_price) / pos.mark_price * 100)
+              : null;
+            const timeOpen = formatElapsed(pos.created_at);
 
             return (
-              <div key={key} className="bg-surface-container-high rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setExpanded(isExpanded ? null : key)}
-                  aria-expanded={isExpanded}
-                  aria-label={`${formatPair(pos.pair)} ${pos.side} position details`}
-                  className="w-full p-3 flex items-center justify-between text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
+              <button
+                key={key}
+                onClick={() => navigateToPosition(pos.pair, pos.side)}
+                aria-label={`${formatPair(pos.pair)} ${pos.side} position — tap for details`}
+                className="w-full bg-surface-container-high rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98] transition-transform"
+              >
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`p-1.5 rounded ${isLong ? "bg-long/10" : "bg-short/10"}`}>
                       <DirIcon size={16} className={isLong ? "text-long" : "text-short"} />
@@ -149,67 +154,30 @@ function OpenPositions({ positions, loading, onRefresh }: { positions: Position[
                           {pos.side.toUpperCase()} {pos.leverage}x
                         </Badge>
                       </div>
-                      <span className="text-xs text-on-surface-variant tabular">Size: {pos.size}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className={`font-headline font-bold text-sm block tabular ${pos.unrealized_pnl >= 0 ? "text-long" : "text-short"}`}>
-                      {pos.unrealized_pnl >= 0 ? "+" : ""}{formatPrice(pos.unrealized_pnl)}
-                    </span>
-                    <span className="text-xs text-on-surface-variant tabular">${formatPrice(pos.mark_price)}</span>
-                  </div>
-                </button>
-                <div
-                  className={`grid transition-[grid-template-rows] duration-200 ease-out ${
-                    isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                  }`}
-                >
-                  <div className="overflow-hidden">
-                    <div className="px-3 pb-3 pt-1 grid grid-cols-3 gap-2">
-                      <div>
-                        <span className="text-xs text-on-surface-variant block uppercase">Entry</span>
-                        <span className="text-xs font-medium tabular">${formatPrice(pos.avg_price)}</span>
-                      </div>
-                      <div>
-                        <span className="text-xs text-on-surface-variant block uppercase">Mark</span>
-                        <span className="text-xs font-medium tabular">${formatPrice(pos.mark_price)}</span>
-                      </div>
-                      {pos.liquidation_price && (
-                        <div>
-                          <span className="text-xs text-on-surface-variant block uppercase">Liq. Price</span>
-                          <span className="text-xs font-medium text-short tabular">${formatPrice(pos.liquidation_price)}</span>
-                        </div>
+                      {timeOpen && (
+                        <span className="text-xs text-on-surface-variant">{timeOpen}</span>
                       )}
-                      <div>
-                        <span className="text-xs text-on-surface-variant block uppercase">Margin</span>
-                        <span className="text-xs font-medium tabular">${formatPrice(pos.margin)}</span>
-                      </div>
                     </div>
-                    <div className="px-3 pb-3">
-                      <Button
-                        variant="short"
-                        size="lg"
-                        loading={closing === key}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          setClosing(key);
-                          try {
-                            await api.closePosition(pos.pair, pos.side);
-                            onRefresh();
-                          } catch {
-                            // error already visible via refresh
-                          } finally {
-                            setClosing(null);
-                            setExpanded(null);
-                          }
-                        }}
-                      >
-                        Close Position
-                      </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <span className={`font-headline font-bold text-sm block tabular ${pos.unrealized_pnl >= 0 ? "text-long" : "text-short"}`}>
+                        {pos.unrealized_pnl >= 0 ? "+" : ""}{formatPrice(pos.unrealized_pnl)}
+                      </span>
+                      <span className={`text-xs font-medium tabular ${roi >= 0 ? "text-long" : "text-short"}`}>
+                        {roi >= 0 ? "+" : ""}{roi.toFixed(1)}%
+                      </span>
                     </div>
+                    <ChevronRight size={16} className="text-outline" />
                   </div>
                 </div>
-              </div>
+                <div className="flex items-center gap-4 mt-2 text-xs text-on-surface-variant">
+                  <span className="tabular">${formatPrice(notional)}</span>
+                  {liqDist != null && (
+                    <span className="tabular text-short/80">Liq {liqDist.toFixed(1)}%</span>
+                  )}
+                </div>
+              </button>
             );
           })}
         </div>

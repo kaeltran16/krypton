@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity, Zap } from "lucide-react";
+import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity, Zap, Newspaper } from "lucide-react";
 import { SubPageShell } from "../../../shared/components/SubPageShell";
 import SettingsPage from "../../settings/components/SettingsPage";
 import RiskPage from "../../settings/components/RiskPage";
@@ -10,9 +10,10 @@ import { AlertsPage } from "../../alerts/components/AlertsPage";
 import { JournalView } from "../../signals/components/JournalView";
 import { SystemDiagnostics } from "../../system/components/SystemDiagnostics";
 import OptimizerPage from "../../optimizer/components/OptimizerPage";
+import { NewsView } from "../../news/components/NewsView";
 import { hapticTap } from "../../../shared/lib/haptics";
 
-type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | "optimizer" | null;
+type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | "optimizer" | "news" | null;
 
 const CLUSTERS = [
   {
@@ -28,6 +29,7 @@ const CLUSTERS = [
     items: [
       { key: "ml" as SubPage, icon: Brain, label: "ML Training", desc: "Neural net optimization", color: "text-primary" },
       { key: "alerts" as SubPage, icon: BellRing, label: "Alerts", desc: "Critical signal configurations", color: "text-error" },
+      { key: "news" as SubPage, icon: Newspaper, label: "News", desc: "Market news & sentiment", color: "text-primary" },
       { key: "journal" as SubPage, icon: LineChart, label: "Journal", desc: "Trading analytics & calendar", color: "text-primary" },
     ],
   },
@@ -48,6 +50,7 @@ const PAGE_TITLES: Record<string, string> = {
   alerts: "Alerts",
   risk: "Risk Management",
   settings: "Settings",
+  news: "News",
   journal: "Journal & Analytics",
   system: "System Diagnostics",
   optimizer: "Optimizer",
@@ -65,6 +68,7 @@ export function MorePage() {
         {activePage === "alerts" && <AlertsPage />}
         {activePage === "risk" && <RiskPage />}
         {activePage === "settings" && <SettingsPage />}
+        {activePage === "news" && <NewsView />}
         {activePage === "journal" && <JournalView />}
         {activePage === "system" && <SystemDiagnostics />}
         {activePage === "optimizer" && <OptimizerPage />}

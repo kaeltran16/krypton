@@ -1,10 +1,13 @@
 import asyncio
 import uuid
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
+from sqlalchemy import select
 
 from app.api.auth import require_auth
+from app.db.models import Signal
 
 router = APIRouter(prefix="/api/account")
 
@@ -173,3 +176,171 @@ async def close_position(request: Request, body: ClosePositionRequest, _key: str
     if not result["success"]:
         raise HTTPException(400, result["error"])
     return result
+
+
+# --- Algo orders ---
+
+
+@router.get("/algo-orders")
+async def get_algo_orders(request: Request, pair: str, _key: str = require_auth()):
+    okx = request.app.state.okx_client
+    if not okx:
+        raise HTTPException(503, "OKX client not configured")
+    return await okx.get_algo_orders_pending(pair)
+
+
+class AmendAlgoRequest(BaseModel):
+    pair: str
+    side: str
+    size: str
+    sl_price: str | None = None
+    tp_price: str | None = None
+
+    @field_validator("side")
+    @classmethod
+    def validate_side(cls, v: str) -> str:
+        if v not in ("buy", "sell"):
+            raise ValueError("side must be 'buy' or 'sell'")
+        return v
+
+
+@router.post("/amend-algo")
+async def amend_algo(request: Request, body: AmendAlgoRequest, _key: str = require_auth()):
+    okx = request.app.state.okx_client
+    if not okx:
+        raise HTTPException(503, "OKX client not configured")
+
+    # 1. Fetch current pending algos
+    pending = await okx.get_algo_orders_pending(body.pair)
+    if not pending:
+        raise HTTPException(404, "No pending algo orders found for this pair")
+
+    # 2. Cancel existing algo
+    algo_id = pending[0]["algo_id"]
+    cancel_result = await okx.cancel_algo_order(body.pair, algo_id)
+    if not cancel_result["success"]:
+        raise HTTPException(400, f"Failed to cancel existing algo: {cancel_result['error']}")
+
+    # 3. Place new algo
+    algo_result = await okx.place_algo_order(
+        pair=body.pair,
+        side=body.side,
+        size=body.size,
+        tp_trigger_price=body.tp_price,
+        sl_trigger_price=body.sl_price,
+    )
+    if not algo_result["success"]:
+        return {
+            "success": False,
+            "error": f"Old SL/TP removed but new placement failed: {algo_result['error']}",
+            "sl_tp_removed": True,
+        }
+    return {"success": True, "algo_id": algo_result["algo_id"]}
+
+
+# --- Partial close ---
+
+
+class PartialCloseRequest(BaseModel):
+    pair: str
+    pos_side: str
+    size: str
+
+    @field_validator("pos_side")
+    @classmethod
+    def validate_pos_side(cls, v: str) -> str:
+        if v not in ("long", "short"):
+            raise ValueError("pos_side must be 'long' or 'short'")
+        return v
+
+    @field_validator("size")
+    @classmethod
+    def validate_size(cls, v: str) -> str:
+        try:
+            val = float(v)
+        except ValueError:
+            raise ValueError("size must be a valid number")
+        if val <= 0:
+            raise ValueError("size must be positive")
+        return v
+
+
+@router.post("/partial-close")
+async def partial_close(request: Request, body: PartialCloseRequest, _key: str = require_auth()):
+    okx = request.app.state.okx_client
+    if not okx:
+        raise HTTPException(503, "OKX client not configured")
+    # Closing side is opposite of position side
+    closing_side = "sell" if body.pos_side == "long" else "buy"
+    result = await okx.place_order(
+        pair=body.pair,
+        side=closing_side,
+        size=body.size,
+        pos_side=body.pos_side,
+        client_order_id=uuid.uuid4().hex[:16],
+    )
+    if not result["success"]:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+# --- Funding costs ---
+
+
+@router.get("/funding-costs")
+async def get_funding_costs(request: Request, pair: str, _key: str = require_auth()):
+    okx = request.app.state.okx_client
+    if not okx:
+        raise HTTPException(503, "OKX client not configured")
+    bills = await okx.get_funding_costs(pair)
+    total = sum(b["pnl"] for b in bills)
+    return {"pair": pair, "total_funding": round(total, 6), "bills": bills}
+
+
+# --- Trade history (resolved signals) ---
+
+
+@router.get("/trade-history")
+async def get_trade_history(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    pair: str | None = None,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _key: str = require_auth(),
+):
+    db = request.app.state.db
+    if not db:
+        raise HTTPException(503, "Database not available")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    async with db.session_factory() as session:
+        query = (
+            select(Signal)
+            .where(Signal.outcome != "PENDING")
+            .where(Signal.outcome_at.isnot(None))
+            .where(Signal.outcome_at >= cutoff)
+        )
+        if pair:
+            query = query.where(Signal.pair == pair)
+        query = query.order_by(Signal.outcome_at.desc()).offset(offset).limit(limit)
+        result = await session.execute(query)
+        signals = result.scalars().all()
+        return [
+            {
+                "signal_id": s.id,
+                "pair": s.pair,
+                "direction": s.direction.lower(),
+                "entry_price": float(s.entry),
+                "sl_price": float(s.stop_loss),
+                "tp1_price": float(s.take_profit_1),
+                "tp2_price": float(s.take_profit_2),
+                "pnl_pct": float(s.outcome_pnl_pct) if s.outcome_pnl_pct is not None else 0,
+                "duration_minutes": s.outcome_duration_minutes or 0,
+                "outcome": s.outcome,
+                "signal_score": s.final_score,
+                "signal_reason": s.explanation,
+                "opened_at": s.created_at.isoformat() if s.created_at else None,
+                "closed_at": s.outcome_at.isoformat() if s.outcome_at else None,
+            }
+            for s in signals
+        ]

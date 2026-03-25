@@ -125,6 +125,40 @@ export interface Position {
   liquidation_price: number | null;
   margin: number;
   leverage: string;
+  created_at: string | null;
+}
+
+export interface AlgoOrder {
+  algo_id: string;
+  pair: string;
+  side: string;
+  tp_trigger_price: number | null;
+  sl_trigger_price: number | null;
+  size: string;
+  status: string;
+}
+
+export interface TradeHistoryEntry {
+  signal_id: number;
+  pair: string;
+  direction: "long" | "short";
+  entry_price: number;
+  sl_price: number | null;
+  tp1_price: number | null;
+  tp2_price: number | null;
+  pnl_pct: number;
+  duration_minutes: number;
+  outcome: "TP1_HIT" | "SL_HIT" | "EXPIRED";
+  signal_score: number;
+  signal_reason: string | null;
+  opened_at: string;
+  closed_at: string;
+}
+
+export interface FundingCostsResponse {
+  pair: string;
+  total_funding: number;
+  bills: { pair: string; pnl: number; fee: number; ts: number }[];
 }
 
 export interface CandleData {
@@ -524,4 +558,33 @@ export const api = {
     request<{ status: string; proposal_id: number }>(`/api/optimizer/proposals/${id}/rollback`, {
       method: "POST",
     }),
+
+  // Positions / Algo orders
+  getAlgoOrders: (pair: string) =>
+    request<AlgoOrder[]>(`/api/account/algo-orders?pair=${encodeURIComponent(pair)}`),
+
+  amendAlgo: (body: { pair: string; side: string; size: string; sl_price?: string; tp_price?: string }) =>
+    request<{ success: boolean; algo_id?: string; error?: string; sl_tp_removed?: boolean }>("/api/account/amend-algo", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  partialClose: (body: { pair: string; pos_side: string; size: string }) =>
+    request<{ success: boolean; order_id?: string; error?: string }>("/api/account/partial-close", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  getTradeHistory: (params?: { days?: number; pair?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.days) query.set("days", String(params.days));
+    if (params?.pair) query.set("pair", params.pair);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return request<TradeHistoryEntry[]>(`/api/account/trade-history${qs ? `?${qs}` : ""}`);
+  },
+
+  getFundingCosts: (pair: string) =>
+    request<FundingCostsResponse>(`/api/account/funding-costs?pair=${encodeURIComponent(pair)}`),
 };

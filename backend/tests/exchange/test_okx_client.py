@@ -106,3 +106,51 @@ def test_parse_order_response_error():
     result = parse_order_response(raw)
     assert result["success"] is False
     assert "Invalid size" in result["error"]
+
+
+def test_parse_positions_response_with_ctime():
+    from app.exchange.okx_client import parse_positions_response
+    raw = {
+        "code": "0",
+        "data": [
+            {
+                "instId": "BTC-USDT-SWAP",
+                "posSide": "long",
+                "pos": "1",
+                "avgPx": "65000",
+                "markPx": "66000",
+                "upl": "1000",
+                "liqPx": "60000",
+                "margin": "6500",
+                "lever": "10",
+                "cTime": "1711468800000",
+            },
+        ],
+    }
+    result = parse_positions_response(raw)
+    assert len(result) == 1
+    assert result[0]["created_at"] is not None
+    assert "2024-03-26" in result[0]["created_at"]
+
+
+def test_parse_positions_response_missing_ctime():
+    from app.exchange.okx_client import parse_positions_response
+    raw = {
+        "code": "0",
+        "data": [
+            {
+                "instId": "BTC-USDT-SWAP",
+                "posSide": "long",
+                "pos": "1",
+                "avgPx": "65000",
+                "markPx": "66000",
+                "upl": "1000",
+                "liqPx": "60000",
+                "margin": "6500",
+                "lever": "10",
+            },
+        ],
+    }
+    result = parse_positions_response(raw)
+    assert len(result) == 1
+    assert result[0]["created_at"] is None

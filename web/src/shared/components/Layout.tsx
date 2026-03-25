@@ -1,15 +1,14 @@
-import { useState, useRef, useCallback, type ReactNode } from "react";
-import { Home, BarChart3, Zap, Newspaper, MoreHorizontal } from "lucide-react";
+import { useRef, useCallback, useEffect, type ReactNode } from "react";
+import { Home, BarChart3, Zap, Layers, MoreHorizontal } from "lucide-react";
 import { TickerBar } from "./TickerBar";
 import { hapticTap } from "../lib/haptics";
-
-type Tab = "home" | "chart" | "signals" | "news" | "more";
+import { useNavigationStore, type Tab } from "../stores/navigation";
 
 interface LayoutProps {
   home: ReactNode;
   chart: ReactNode;
   signals: ReactNode;
-  news: ReactNode;
+  positions: ReactNode;
   more: ReactNode;
   price: number | null;
   change24h: number | null;
@@ -21,7 +20,7 @@ const TAB_ICONS = {
   home: Home,
   chart: BarChart3,
   signals: Zap,
-  news: Newspaper,
+  positions: Layers,
   more: MoreHorizontal,
 } as const;
 
@@ -29,26 +28,32 @@ const TAB_LABELS: Record<Tab, string> = {
   home: "Home",
   chart: "Chart",
   signals: "Signals",
-  news: "News",
+  positions: "Positions",
   more: "More",
 };
 
-const TABS: Tab[] = ["home", "chart", "signals", "news", "more"];
+const TABS: Tab[] = ["home", "chart", "signals", "positions", "more"];
 
 export function Layout({
-  home, chart, signals, news, more,
+  home, chart, signals, positions, more,
   price, change24h, selectedPair, onPairChange,
 }: LayoutProps) {
-  const [tab, setTab] = useState<Tab>("home");
+  const tab = useNavigationStore((s) => s.tab);
+  const setTab = useNavigationStore((s) => s.setTab);
   const mainRef = useRef<HTMLElement>(null);
 
-  const views = { home, chart, signals, news, more } as const;
+  const views = { home, chart, signals, positions, more } as const;
 
   const switchTab = useCallback((t: Tab) => {
     hapticTap();
     setTab(t);
     mainRef.current?.scrollTo(0, 0);
-  }, []);
+  }, [setTab]);
+
+  // Scroll to top when tab changes via store (e.g., navigateToPosition)
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [tab]);
 
   return (
     <div className="h-screen h-dvh text-on-surface flex flex-col overflow-hidden">

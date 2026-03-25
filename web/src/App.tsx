@@ -3,7 +3,7 @@ import { Layout } from "./shared/components/Layout";
 import { HomeView } from "./features/home/components/HomeView";
 import { ChartView } from "./features/chart/components/ChartView";
 import { SignalsView } from "./features/signals/components/SignalsView";
-import { NewsView } from "./features/news/components/NewsView";
+import { PositionsView } from "./features/positions/components/PositionsView";
 import { NewsAlertToast } from "./features/news/components/NewsAlertToast";
 import { AlertToast } from "./features/alerts/components/AlertToast";
 import { MorePage } from "./features/more/components/MorePage";
@@ -59,7 +59,7 @@ function AuthenticatedApp() {
         home={<HomeView />}
         chart={<ChartView pair={selectedPair} />}
         signals={<SignalsView />}
-        news={<NewsView />}
+        positions={<PositionsView />}
         more={<MorePage />}
         price={price}
         change24h={change24h}
