@@ -234,9 +234,15 @@ def detect_candlestick_patterns(candles: pd.DataFrame) -> list[dict]:
     return patterns
 
 
+def _pattern_key(name: str) -> str:
+    """Convert display name to override key: 'Bullish Engulfing' -> 'bullish_engulfing'."""
+    return name.lower().replace(" ", "_")
+
+
 def compute_pattern_score(
     patterns: list[dict],
     indicator_ctx: dict | None = None,
+    strength_overrides: dict[str, int | float] | None = None,
 ) -> dict:
     """Score detected candlestick patterns with contextual boosts.
 
@@ -269,6 +275,8 @@ def compute_pattern_score(
     for p in patterns:
         bias = p.get("bias", "neutral")
         strength = p.get("strength", 0)
+        if strength_overrides:
+            strength = strength_overrides.get(_pattern_key(p.get("name", "")), strength)
 
         if bias == "neutral":
             continue

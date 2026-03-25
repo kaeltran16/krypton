@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Info } from "lucide-react";
 import { useOptimizerStore } from "../store";
 import { useEngineStore } from "../../engine/store";
 import { Button } from "../../../shared/components/Button";
@@ -60,7 +60,11 @@ export default function OptimizerPage() {
   if (error) {
     return <div className="p-4 text-error text-sm">Error: {error}</div>;
   }
+  const [showGuide, setShowGuide] = useState(false);
+
   if (!status) return null;
+
+  const hasActivity = pendingProposals.length > 0 || status.active_shadow;
 
   return (
     <div className="p-3 space-y-3">
@@ -74,20 +78,53 @@ export default function OptimizerPage() {
             </span>
             {status.global_profit_factor != null && (
               <span className="text-xs font-mono text-on-surface">
-                PF {status.global_profit_factor === Infinity
+                Profit Factor{" "}
+                {status.global_profit_factor === Infinity
                   ? "\u221E"
                   : status.global_profit_factor.toFixed(2)}
               </span>
             )}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          icon={<RefreshCw size={16} className={loading ? "animate-spin" : ""} />}
-          onClick={() => { fetchStatus(); fetchProposals(); }}
-          aria-label="Refresh"
-        />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            icon={<Info size={16} />}
+            onClick={() => setShowGuide((v) => !v)}
+            aria-label="How it works"
+          />
+          <Button
+            variant="ghost"
+            icon={<RefreshCw size={16} className={loading ? "animate-spin" : ""} />}
+            onClick={() => { fetchStatus(); fetchProposals(); }}
+            aria-label="Refresh"
+          />
+        </div>
       </div>
+
+      {/* How it works guide */}
+      {showGuide && (
+        <div className="border border-primary/20 rounded-xl bg-surface-container-low p-3 space-y-2">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-primary">
+            How it works
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] text-muted flex-wrap">
+            <span className="px-1.5 py-0.5 rounded bg-accent/15 text-accent">Propose</span>
+            <span>{">"}</span>
+            <span className="px-1.5 py-0.5 rounded bg-long/15 text-long">Approve</span>
+            <span>{">"}</span>
+            <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Shadow Test</span>
+            <span>{">"}</span>
+            <span className="px-1.5 py-0.5 rounded bg-long/15 text-long">Promote Live</span>
+          </div>
+          <p className="text-[11px] text-muted leading-relaxed">
+            The engine detects underperforming parameters and proposes changes backed by backtests.
+            <strong className="text-on-surface"> Approve</strong> starts shadow testing against live signals.
+            <strong className="text-on-surface"> Promote</strong> applies changes to the live engine.
+            You can <strong className="text-on-surface">Rollback</strong> any promoted change.
+          </p>
+        </div>
+      )}
 
       {/* Action error toast */}
       {actionError && (
@@ -107,6 +144,11 @@ export default function OptimizerPage() {
       )}
 
       {/* Pending proposals */}
+      {pendingProposals.length > 0 && (
+        <div className="text-[10px] font-bold uppercase tracking-widest text-primary">
+          Pending Review
+        </div>
+      )}
       {pendingProposals.map((p) => (
         <ProposalCard
           key={p.id}
@@ -119,6 +161,16 @@ export default function OptimizerPage() {
           onRollback={withErrorHandling(rollback)}
         />
       ))}
+
+      {/* Empty state */}
+      {!hasActivity && (
+        <div className="flex flex-col items-center py-8 text-center">
+          <div className="text-muted text-sm">No pending proposals</div>
+          <p className="text-[11px] text-muted/60 mt-1 max-w-[240px]">
+            The optimizer will propose parameter changes when it detects room for improvement.
+          </p>
+        </div>
+      )}
 
       {/* Group health */}
       <GroupHealthTable groups={status.groups} />

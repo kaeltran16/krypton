@@ -283,9 +283,12 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     if timeframe in _HTF_TIMEFRAMES:
         divergence = detect_divergence(close, rsi, lookback=50, order=3)
 
+    # === Scoring parameters (shape + blend) ===
+    sp = scoring_params or {}
+
     adx_center = getattr(regime_weights, "adx_center", 20.0) if regime_weights else 20.0
-    trend_strength = sigmoid_scale(adx_val, center=adx_center, steepness=0.25)
-    vol_expansion = sigmoid_scale(bb_width_pct, center=50, steepness=0.08)
+    trend_strength = sigmoid_scale(adx_val, center=sp.get("trend_strength_center", adx_center), steepness=sp.get("trend_strength_steepness", 0.25))
+    vol_expansion = sigmoid_scale(bb_width_pct, center=sp.get("vol_expansion_center", 50), steepness=sp.get("vol_expansion_steepness", 0.08))
     regime = compute_regime_mix(trend_strength, vol_expansion)
     caps = blend_caps(regime, regime_weights)
 
@@ -300,8 +303,6 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         caps["mean_rev_cap"] += shift
         caps["trend_cap"] -= shift
 
-    # === Scoring parameters (shape + blend) ===
-    sp = scoring_params or {}
     mr_rsi_steep = sp.get("mean_rev_rsi_steepness", 0.25)
     mr_bb_steep = sp.get("mean_rev_bb_pos_steepness", 10.0)
     sq_steep = sp.get("squeeze_steepness", 0.10)
@@ -310,7 +311,7 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     # === Scoring (caps from regime-aware blending) ===
     # 1. Trend
     di_sign = 1 if di_plus_val > di_minus_val else -1
-    trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=0.30) * caps["trend_cap"]
+    trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=sp.get("trend_score_steepness", 0.30)) * caps["trend_cap"]
 
     # 2. Unified mean reversion (RSI + BB position)
     rsi_raw = sigmoid_score(50 - rsi_val, center=0, steepness=mr_rsi_steep)
@@ -331,10 +332,10 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
 
         obv_dir = 1 if obv_slope_norm > 0 else -1
         obv_confirms = (obv_dir == score_sign)
-        obv_strength = sigmoid_scale(abs(obv_slope_norm), center=0, steepness=4)
+        obv_strength = sigmoid_scale(abs(obv_slope_norm), center=0, steepness=sp.get("obv_slope_steepness", 4))
 
         candle_confirms = (candle_direction == score_sign)
-        vol_strength = sigmoid_scale(vol_ratio - 1, center=0, steepness=3)
+        vol_strength = sigmoid_scale(vol_ratio - 1, center=0, steepness=sp.get("volume_ratio_steepness", 3))
 
         obv_w = vol["obv_weight"]
         vol_w = 1.0 - obv_w

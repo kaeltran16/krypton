@@ -22,6 +22,9 @@ from app.engine.regime import OUTER_KEYS
 
 logger = logging.getLogger(__name__)
 
+_NON_BACKTESTABLE = frozenset({"order_flow", "llm_factors", "onchain"})
+_BACKTESTABLE_OUTER = frozenset({"tech", "pattern"})
+
 OPTIMIZER_CONFIG = {
     "min_signals_for_eval": 50,      # min resolved signals before any optimization
     "shadow_signal_count": 20,       # signals to shadow-test before promoting
@@ -253,6 +256,92 @@ async def get_shadow_progress(
     }
 
 
+def _extract_metrics(backtest_result: dict) -> dict:
+    """Extract standardized metrics dict from a backtest result."""
+    stats = backtest_result.get("stats", {})
+    return {
+        "profit_factor": stats.get("profit_factor", 0),
+        "win_rate": stats.get("win_rate", 0),
+        "avg_rr": stats.get("avg_rr", 0),
+        "drawdown": stats.get("max_drawdown", 0),
+        "signals_tested": stats.get("total_trades", 0),
+    }
+
+
+def _build_regime_weights(candidate: dict, base=None):
+    """Build a regime_weights namespace from candidate values overlaid on a base.
+
+    Used by DE sweep to construct regime_weights objects that blend_caps()
+    and blend_outer_weights() can read via getattr.
+    When base is None, populates all attributes from DEFAULT_CAPS and
+    DEFAULT_OUTER_WEIGHTS to prevent AttributeError in blend functions.
+    """
+    from types import SimpleNamespace
+    from app.engine.regime import REGIMES, CAP_KEYS, OUTER_KEYS, DEFAULT_CAPS, DEFAULT_OUTER_WEIGHTS
+
+    rw = SimpleNamespace()
+    if base is not None:
+        for attr, value in vars(base).items():
+            if not attr.startswith("_"):
+                setattr(rw, attr, value)
+    else:
+        for regime in REGIMES:
+            for cap_key in CAP_KEYS:
+                setattr(rw, f"{regime}_{cap_key}", DEFAULT_CAPS[regime][cap_key])
+            for outer_key in OUTER_KEYS:
+                setattr(rw, f"{regime}_{outer_key}_weight", DEFAULT_OUTER_WEIGHTS[regime][outer_key])
+    for key, value in candidate.items():
+        setattr(rw, key, value)
+    return rw
+
+
+def _run_de_sweep(
+    objective,
+    group_def: dict,
+    max_evals: int = 500,
+    seed: int | None = 42,
+) -> tuple[dict, float]:
+    """Run differential evolution to maximize an objective function.
+
+    Args:
+        objective: callable(candidate_dict) -> float (higher is better)
+        group_def: param group with sweep_ranges and constraints
+        max_evals: maximum function evaluations
+        seed: random seed (42 for tests, None for production variance)
+
+    Returns:
+        (best_candidate_dict, best_fitness)
+    """
+    from scipy.optimize import differential_evolution
+
+    param_names = list(group_def["sweep_ranges"].keys())
+    bounds = [(lo, hi) for lo, hi, _ in group_def["sweep_ranges"].values()]
+    constraint_fn = group_def["constraints"]
+
+    def neg_objective(x):
+        candidate = dict(zip(param_names, x))
+        if not constraint_fn(candidate):
+            return 1e6
+        return -objective(candidate)
+
+    n_params = len(param_names)
+    popsize = max(15, min(25, max_evals // 20))
+    maxiter = max(10, max_evals // (popsize * n_params))
+
+    result = differential_evolution(
+        neg_objective,
+        bounds=bounds,
+        maxiter=maxiter,
+        popsize=popsize,
+        tol=0.01,
+        seed=seed,
+        init="sobol",
+    )
+
+    best = dict(zip(param_names, result.x))
+    return best, -result.fun
+
+
 async def run_counterfactual_eval(
     app,
     group_name: str,
@@ -342,7 +431,8 @@ async def run_counterfactual_eval(
                                 cancel_flag=None,
                             ),
                         )
-                        pf = results.get("profit_factor", 0) or 0
+                        stats = results.get("stats", {})
+                        pf = stats.get("profit_factor", 0) or 0
                         if pf > best_pf:
                             best_pf = pf
                             best_candidate = candidate
@@ -353,17 +443,75 @@ async def run_counterfactual_eval(
                 if best_candidate and best_metrics:
                     return {
                         "candidate": best_candidate,
-                        "metrics": {
-                            "profit_factor": best_metrics.get("profit_factor", 0),
-                            "win_rate": best_metrics.get("win_rate", 0),
-                            "avg_rr": best_metrics.get("avg_rr", 0),
-                            "drawdown": best_metrics.get("max_drawdown", 0),
-                            "signals_tested": best_metrics.get("total_trades", 0),
-                        },
+                        "metrics": _extract_metrics(best_metrics),
                     }
             else:
-                # DE-based groups: skip for now
-                logger.info("DE sweep for %s not yet wired — skipping", group_name)
+                # DE-based sweep
+                if group_name in _NON_BACKTESTABLE:
+                    logger.info(
+                        "DE group %s requires signal replay (not backtestable) -- skipping",
+                        group_name,
+                    )
+                    return None
+
+                import asyncio
+                from app.engine.backtester import run_backtest, BacktestConfig
+
+                candle_dicts = [
+                    {
+                        "timestamp": c.timestamp,
+                        "open": c.open, "high": c.high,
+                        "low": c.low, "close": c.close,
+                        "volume": c.volume,
+                    }
+                    for c in candles
+                ]
+
+                is_regime_group = group_name in ("regime_caps", "regime_outer")
+                base_rw = app.state.regime_weights.get((pair, "15m"))
+
+                # For regime_outer, only sweep tech+pattern weights (backtestable);
+                # flow/onchain/liquidation multiply zero in backtests so optimizing
+                # them would learn zero-weights that suppress real signals in prod.
+                if group_name == "regime_outer":
+                    group = {
+                        **group,
+                        "sweep_ranges": {
+                            k: v for k, v in group["sweep_ranges"].items()
+                            if any(src in k for src in _BACKTESTABLE_OUTER)
+                        },
+                    }
+
+                def _run_bt(candidate):
+                    if is_regime_group:
+                        rw = _build_regime_weights(candidate, base_rw)
+                        cfg = BacktestConfig(signal_threshold=settings.engine_signal_threshold)
+                        return run_backtest(candle_dicts, pair, cfg, regime_weights=rw)
+                    else:
+                        cfg = BacktestConfig(
+                            signal_threshold=settings.engine_signal_threshold,
+                            param_overrides=candidate,
+                        )
+                        return run_backtest(candle_dicts, pair, cfg, regime_weights=base_rw)
+
+                def objective(candidate):
+                    return _run_bt(candidate)["stats"].get("profit_factor", 0) or 0
+
+                n_params = len(group["sweep_ranges"])
+                max_evals = min(500, n_params * 30)
+
+                loop = asyncio.get_running_loop()
+                best_candidate, best_fitness = await loop.run_in_executor(
+                    None,
+                    lambda: _run_de_sweep(objective, group, max_evals=max_evals, seed=None),
+                )
+
+                if best_fitness > 0:
+                    final = await loop.run_in_executor(None, lambda: _run_bt(best_candidate))
+                    return {
+                        "candidate": best_candidate,
+                        "metrics": _extract_metrics(final),
+                    }
                 return None
 
     return None

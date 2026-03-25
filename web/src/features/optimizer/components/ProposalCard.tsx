@@ -93,19 +93,42 @@ export default function ProposalCard({
       </div>
 
       {/* Backtest metrics */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { label: "PF", value: bm.profit_factor.toFixed(2) },
-          { label: "Win", value: `${(bm.win_rate * 100).toFixed(0)}%` },
-          { label: "R:R", value: bm.avg_rr.toFixed(2) },
-          { label: "DD", value: `${(bm.drawdown * 100).toFixed(1)}%` },
-          { label: "Signals", value: String(bm.signals_tested) },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-surface-container rounded px-2 py-1">
-            <span className="text-[10px] text-muted">{label}</span>
-            <span className="ml-1 text-xs font-mono text-on-surface">{value}</span>
-          </div>
-        ))}
+      <div className="space-y-1">
+        <div className="text-[10px] text-muted">Backtest Results</div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            {
+              label: "Profit Factor",
+              value: bm.profit_factor.toFixed(2),
+              color: bm.profit_factor >= 1.5 ? "text-long" : bm.profit_factor >= 1.0 ? "text-on-surface" : "text-short",
+            },
+            {
+              label: "Win Rate",
+              value: `${(bm.win_rate * 100).toFixed(0)}%`,
+              color: bm.win_rate >= 0.55 ? "text-long" : bm.win_rate >= 0.45 ? "text-on-surface" : "text-short",
+            },
+            {
+              label: "Risk:Reward",
+              value: bm.avg_rr.toFixed(2),
+              color: bm.avg_rr >= 1.5 ? "text-long" : bm.avg_rr >= 1.0 ? "text-on-surface" : "text-short",
+            },
+            {
+              label: "Max DD",
+              value: `${(bm.drawdown * 100).toFixed(1)}%`,
+              color: bm.drawdown <= 0.1 ? "text-long" : bm.drawdown <= 0.2 ? "text-on-surface" : "text-short",
+            },
+            {
+              label: "Signals",
+              value: String(bm.signals_tested),
+              color: "text-on-surface",
+            },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-surface-container rounded px-2 py-1">
+              <span className="text-[10px] text-muted">{label}</span>
+              <span className={`ml-1 text-xs font-mono ${color}`}>{value}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Actions */}

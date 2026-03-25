@@ -14,11 +14,21 @@ from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
 from app.engine.confluence import compute_confluence_score, di_direction
+from app.engine.constants import PATTERN_STRENGTHS
 from app.engine.regime import blend_outer_weights
 
 logger = logging.getLogger(__name__)
 
 MIN_CANDLES = 70  # minimum candles for reliable indicators
+
+_SIGMOID_KEYS = frozenset({
+    "trend_strength_center", "trend_strength_steepness",
+    "vol_expansion_center", "vol_expansion_steepness",
+    "trend_score_steepness", "obv_slope_steepness",
+    "volume_ratio_steepness",
+    "mean_rev_rsi_steepness", "mean_rev_bb_pos_steepness",
+    "squeeze_steepness", "mean_rev_blend_ratio",
+})
 
 
 def precompute_parent_indicators(parent_candles: list[dict]) -> tuple[list[str], list[dict]]:
@@ -137,6 +147,22 @@ def run_backtest(
     if len(candles) < MIN_CANDLES:
         return _build_results(trades, pair, config)
 
+    scoring_params: dict | None = None
+    strength_overrides: dict | None = None
+    remaining_overrides: dict | None = None
+    if config.param_overrides:
+        _sp, _so, _ro = {}, {}, {}
+        for k, v in config.param_overrides.items():
+            if k in _SIGMOID_KEYS:
+                _sp[k] = v
+            elif k in PATTERN_STRENGTHS:
+                _so[k] = v
+            else:
+                _ro[k] = v
+        scoring_params = _sp or None
+        strength_overrides = _so or None
+        remaining_overrides = _ro or None
+
     for i in range(MIN_CANDLES, len(candles)):
         # Check cancellation
         if cancel_flag and cancel_flag.get("cancelled"):
@@ -153,7 +179,11 @@ def run_backtest(
 
         # ── Rule-based scoring (always runs) ──
         try:
-            tech_result = compute_technical_score(df, regime_weights=regime_weights, overrides=config.param_overrides or None)
+            tech_result = compute_technical_score(
+                df, regime_weights=regime_weights,
+                scoring_params=scoring_params,
+                overrides=remaining_overrides,
+            )
         except Exception:
             continue
 
@@ -176,7 +206,7 @@ def run_backtest(
             try:
                 detected = detect_candlestick_patterns(df)
                 indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-                pat_score = compute_pattern_score(detected, indicator_ctx)["score"]
+                pat_score = compute_pattern_score(detected, indicator_ctx, strength_overrides=strength_overrides)["score"]
             except Exception:
                 pass
 
