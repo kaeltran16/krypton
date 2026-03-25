@@ -212,3 +212,44 @@ class TestSnapLevelsToStructure:
         ]
         _, snap_info = snap_levels_to_structure(levels, structure, "LONG", atr=350.0)
         assert isinstance(snap_info, dict)
+
+
+# --- depth modulation tests ---
+
+import numpy as np
+
+
+def _make_simple_candles(n=50, base=100.0):
+    data = {
+        "open": [base] * n,
+        "high": [base + 2] * n,
+        "low": [base - 2] * n,
+        "close": [base] * n,
+        "volume": [1000.0] * n,
+    }
+    return pd.DataFrame(data)
+
+
+def test_depth_none_unchanged():
+    candles = _make_simple_candles()
+    indicators = {"bb_upper": 105.0, "bb_lower": 95.0}
+    r1 = collect_structure_levels(candles, indicators, atr=2.0)
+    r2 = collect_structure_levels(candles, indicators, atr=2.0, depth=None)
+    assert r1 == r2
+
+
+def test_support_strength_amplified_by_heavy_bids():
+    candles = _make_simple_candles(50, base=100.0)
+    indicators = {"bb_upper": 105.0, "bb_lower": 95.0}
+    heavy_bids = {
+        "bids": [(95.0, 5000), (94.0, 100), (93.0, 100)],
+        "asks": [(105.0, 100), (106.0, 100)],
+    }
+    r_no_depth = collect_structure_levels(candles, indicators, atr=2.0)
+    r_depth = collect_structure_levels(candles, indicators, atr=2.0, depth=heavy_bids)
+
+    bb_lower_no = next((l for l in r_no_depth if l["label"] == "bb_lower"), None)
+    bb_lower_d = next((l for l in r_depth if l["label"] == "bb_lower"), None)
+
+    assert bb_lower_no is not None and bb_lower_d is not None
+    assert bb_lower_d["strength"] >= bb_lower_no["strength"]

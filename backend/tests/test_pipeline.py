@@ -1,4 +1,6 @@
+import pytest
 import pandas as pd
+from unittest.mock import AsyncMock, MagicMock
 
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.combiner import compute_preliminary_score, compute_final_score, calculate_levels
@@ -107,3 +109,59 @@ def test_pipeline_with_regime_and_flow_history():
 
     preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])["score"]
     assert isinstance(preliminary, (int, float))
+
+
+# --- order flow preloading ---
+
+@pytest.mark.asyncio
+async def test_order_flow_preloaded_from_db():
+    """After lifespan init, order_flow should be seeded from latest snapshots."""
+    from app.main import _seed_order_flow
+    from app.db.models import OrderFlowSnapshot
+
+    mock_snap = MagicMock(spec=OrderFlowSnapshot)
+    mock_snap.pair = "BTC-USDT-SWAP"
+    mock_snap.funding_rate = 0.0003
+    mock_snap.open_interest = 150000.0
+    mock_snap.long_short_ratio = 1.2
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_snap]
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    order_flow = {}
+    await _seed_order_flow(order_flow, mock_session)
+
+    assert "BTC-USDT-SWAP" in order_flow
+    assert order_flow["BTC-USDT-SWAP"]["funding_rate"] == 0.0003
+    assert order_flow["BTC-USDT-SWAP"]["open_interest"] == 150000.0
+    assert order_flow["BTC-USDT-SWAP"]["long_short_ratio"] == 1.2
+
+
+@pytest.mark.asyncio
+async def test_seed_order_flow_skips_null_fields():
+    """Snapshot with NULL open_interest should not inject None into order_flow."""
+    from app.main import _seed_order_flow
+    from app.db.models import OrderFlowSnapshot
+
+    mock_snap = MagicMock(spec=OrderFlowSnapshot)
+    mock_snap.pair = "ETH-USDT-SWAP"
+    mock_snap.funding_rate = 0.0001
+    mock_snap.open_interest = None
+    mock_snap.long_short_ratio = None
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_snap]
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    order_flow = {}
+    await _seed_order_flow(order_flow, mock_session)
+
+    assert "ETH-USDT-SWAP" in order_flow
+    assert order_flow["ETH-USDT-SWAP"]["funding_rate"] == 0.0001
+    assert "open_interest" not in order_flow["ETH-USDT-SWAP"]
+    assert "long_short_ratio" not in order_flow["ETH-USDT-SWAP"]

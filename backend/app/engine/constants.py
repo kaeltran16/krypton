@@ -28,8 +28,8 @@ SIGMOID_PARAMS = {
 
 # -- Order flow scoring --
 ORDER_FLOW = {
-    "max_scores": {"funding": 35, "oi": 20, "ls_ratio": 35},
-    "sigmoid_steepnesses": {"funding": 400, "oi": 20, "ls_ratio": 6},
+    "max_scores": {"funding": 30, "oi": 20, "ls_ratio": 30, "cvd": 20},
+    "sigmoid_steepnesses": {"funding": 400, "oi": 20, "ls_ratio": 6, "cvd": 3},
     "trending_floor": 0.3,
     "recent_window": 3,
     "baseline_window": 7,
@@ -263,6 +263,16 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "description": "Sigmoid steepness for long/short ratio scoring",
         "pipeline_stage": "Order Flow Scoring",
         "range": "2-12",
+    },
+    "cvd_max": {
+        "description": "Maximum score contribution from cumulative volume delta",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "10-30",
+    },
+    "cvd_steepness": {
+        "description": "Sigmoid steepness for CVD delta scoring. Higher = more sensitive to volume imbalance",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "1-8",
     },
     # ── ATR / Levels ──
     "sl": {

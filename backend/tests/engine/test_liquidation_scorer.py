@@ -75,3 +75,49 @@ def test_liquidation_score_no_events():
     result = compute_liquidation_score(events=[], current_price=50000.0, atr=200.0)
     assert result["score"] == 0
     assert result["confidence"] == 0.0
+
+
+# --- depth modifier tests ---
+
+def _make_events(price, volume, count=5):
+    now = datetime.now(timezone.utc)
+    return [{"price": price, "volume": volume, "timestamp": now, "side": "buy"} for _ in range(count)]
+
+
+def test_depth_none_unchanged():
+    events = _make_events(50200.0, 500.0)
+    r1 = compute_liquidation_score(events, current_price=50000.0, atr=200.0)
+    r2 = compute_liquidation_score(events, current_price=50000.0, atr=200.0, depth=None)
+    assert r1["score"] == r2["score"]
+
+
+def test_depth_thin_asks_amplifies_bullish_cluster():
+    events = _make_events(50200.0, 500.0)
+    thin_asks = {
+        "bids": [(49900, 100), (49800, 100)],
+        "asks": [(50100, 5), (50200, 3)],
+    }
+    r_no_depth = compute_liquidation_score(events, 50000.0, 200.0)
+    r_thin = compute_liquidation_score(events, 50000.0, 200.0, depth=thin_asks)
+    assert abs(r_thin["score"]) >= abs(r_no_depth["score"])
+
+
+def test_depth_thick_asks_dampens_bullish_cluster():
+    events = _make_events(50200.0, 500.0)
+    thick_asks = {
+        "bids": [(49900, 100), (49800, 100)],
+        "asks": [(50100, 5000), (50200, 3000)],
+    }
+    r_no_depth = compute_liquidation_score(events, 50000.0, 200.0)
+    r_thick = compute_liquidation_score(events, 50000.0, 200.0, depth=thick_asks)
+    assert abs(r_thick["score"]) <= abs(r_no_depth["score"])
+
+
+def test_depth_modifier_bounded():
+    events = _make_events(50200.0, 500.0)
+    extreme_depth = {
+        "bids": [(49900, 1)],
+        "asks": [(50100, 999999)],
+    }
+    result = compute_liquidation_score(events, 50000.0, 200.0, depth=extreme_depth)
+    assert -100 <= result["score"] <= 100

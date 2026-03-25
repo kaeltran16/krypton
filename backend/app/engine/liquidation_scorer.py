@@ -61,10 +61,49 @@ def detect_clusters(
     return [b for b in buckets if b["total_volume"] > threshold_mult * median_vol]
 
 
+def _depth_modifier(cluster_center: float, current_price: float, atr: float, depth: dict | None) -> float:
+    """Compute depth-based modifier for a liquidation cluster. Returns [0.7, 1.3].
+
+    Compares the volume of the relevant side (asks for clusters above, bids for
+    clusters below) near the cluster to the average volume across ALL depth levels.
+    Thin resistance near a cluster amplifies; thick resistance dampens.
+    """
+    if not depth:
+        return 1.0
+
+    is_above = cluster_center > current_price
+    levels = depth.get("asks", []) if is_above else depth.get("bids", [])
+
+    if not levels:
+        return 1.0
+
+    nearby_vol = sum(size for price, size in levels if abs(price - cluster_center) <= 0.5 * atr)
+
+    if nearby_vol == 0:
+        return 1.0
+
+    all_depth_vols = [size for _, size in depth.get("bids", []) + depth.get("asks", [])]
+    avg_vol = sum(all_depth_vols) / len(all_depth_vols) if all_depth_vols else 1.0
+
+    if avg_vol <= 0:
+        return 1.0
+
+    ratio = nearby_vol / avg_vol
+    if ratio < 0.5:
+        modifier = 1.3
+    elif ratio > 2.0:
+        modifier = 0.7
+    else:
+        modifier = 1.0 + 0.3 * (1.0 - ratio)
+
+    return max(0.7, min(1.3, modifier))
+
+
 def compute_liquidation_score(
     events: list[dict],
     current_price: float,
     atr: float,
+    depth: dict | None = None,
 ) -> dict:
     """Score liquidation levels based on cluster proximity to current price.
 
@@ -103,7 +142,8 @@ def compute_liquidation_score(
         # Cluster BELOW price = dense long liquidation levels = potential long cascade
         # as cascading liquidations push price down → bearish.
         direction = 1 if distance > 0 else -1
-        score += direction * proximity * min(density / density_norm, 1.0) * 30
+        mod = _depth_modifier(cluster["center"], current_price, atr, depth)
+        score += direction * proximity * min(density / density_norm, 1.0) * 30 * mod
 
     score = max(min(round(score), 100), -100)
 

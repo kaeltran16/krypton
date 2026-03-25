@@ -1,5 +1,4 @@
 import asyncio
-import json
 import time
 from datetime import datetime, timezone
 
@@ -78,38 +77,10 @@ def _get_memory_mb() -> int | None:
     return None
 
 
-def _parse_epoch(ts) -> float | None:
-    """Normalize a timestamp (ISO string or numeric epoch) to seconds-since-epoch."""
-    if ts is None:
-        return None
-    if isinstance(ts, str):
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return dt.timestamp()
-    ts = float(ts)
-    return ts / 1000 if ts > 1e12 else ts
-
-
-async def _get_freshness(redis, keys: list[str], ts_field: str, use_list: bool = False) -> int | None:
-    """Seconds since the most recent timestamp across a set of Redis keys.
-
-    Reads all keys concurrently. use_list=True reads from list tail (LINDEX -1),
-    use_list=False reads a plain string key (GET).
-    """
-    async def _read(key):
-        try:
-            raw = await (redis.lindex(key, -1) if use_list else redis.get(key))
-            if not raw:
-                return None
-            data = json.loads(raw)
-            return _parse_epoch(data.get(ts_field))
-        except Exception:
-            return None
-
-    epochs = await asyncio.gather(*(_read(k) for k in keys))
-    valid = [e for e in epochs if e is not None]
-    if not valid:
-        return None
-    return max(0, int(time.time() - max(valid)))
+def _freshness_seconds_ago(report_section: dict) -> int | None:
+    """Extract the minimum seconds_ago from a freshness report section."""
+    ages = [v.get("seconds_ago") for v in report_section.values() if isinstance(v, dict) and v.get("seconds_ago") is not None]
+    return min(ages) if ages else None
 
 
 @router.get("/health")
@@ -120,33 +91,32 @@ async def system_health(request: Request, _user: dict = require_auth()):
     settings = app.state.settings
     pairs = list(settings.pairs)
 
-    # Build freshness key lists
-    candle_keys = [f"candles:{p}:1m" for p in pairs]
-    onchain_metrics = ["whale_tx_count", "active_addresses", "exchange_netflow", "nvt_ratio"]
-    onchain_keys = [f"onchain:{p}:{m}" for p in pairs for m in onchain_metrics]
+    from app.collector.freshness import compute_freshness
 
     # Run all independent checks concurrently
     (
         redis_check, pg_check, signals_today, candle_buffer,
-        tech_freshness, onchain_freshness,
+        freshness_report,
     ) = await asyncio.gather(
         _check_redis(redis),
         _check_postgres(db),
         _get_signals_today(db),
         _get_candle_buffer(redis, pairs),
-        _get_freshness(redis, candle_keys, "timestamp", use_list=True),
-        _get_freshness(redis, onchain_keys, "ts"),
+        compute_freshness(app.state),
     )
 
     okx_check = _check_okx_ws(app.state.order_flow)
 
-    # Pipeline metrics (read last_cycle once, use for both order flow and pipeline)
+    # Pipeline metrics
     last_cycle = getattr(app.state, "last_pipeline_cycle", 0)
     last_cycle_seconds_ago = max(0, int(time.time() - last_cycle)) if last_cycle > 0 else None
 
-    order_flow_seconds_ago = None
-    if app.state.order_flow and last_cycle > 0:
-        order_flow_seconds_ago = last_cycle_seconds_ago
+    tech_freshness = _freshness_seconds_ago(freshness_report.get("candles", {}))
+    order_flow_seconds_ago = _freshness_seconds_ago(freshness_report.get("order_flow", {}))
+    onchain_section = freshness_report.get("onchain", {})
+    onchain_freshness = None
+    if any(v.get("stale") is False for v in onchain_section.values() if isinstance(v, dict)):
+        onchain_freshness = 0  # at least some data present
 
     # Resources
     engine = db.engine

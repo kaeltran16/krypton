@@ -107,6 +107,59 @@ def parse_open_interest_message(msg: dict) -> dict | None:
     }
 
 
+def parse_trade_message(msg: dict) -> dict | None:
+    """Parse an OKX trades channel message."""
+    arg = msg.get("arg")
+    data = msg.get("data")
+    if not arg or not data:
+        return None
+
+    if arg.get("channel") != "trades":
+        return None
+
+    row = data[0]
+    size = _parse_float(row.get("sz"))
+    price = _parse_float(row.get("px"))
+    if size is None or price is None:
+        return None
+
+    return {
+        "pair": arg["instId"],
+        "price": price,
+        "size": size,
+        "side": row.get("side", ""),
+        "timestamp": datetime.fromtimestamp(int(row["ts"]) / 1000, tz=timezone.utc),
+    }
+
+
+def parse_books5_message(msg: dict) -> dict | None:
+    """Parse an OKX books5 channel message (top 5 bid/ask levels)."""
+    arg = msg.get("arg")
+    data = msg.get("data")
+    if not arg or not data:
+        return None
+
+    if arg.get("channel") != "books5":
+        return None
+
+    row = data[0]
+    raw_bids = row.get("bids", [])
+    raw_asks = row.get("asks", [])
+    if not raw_bids and not raw_asks:
+        return None
+
+    bids = [(_parse_float(b[0]), _parse_float(b[1])) for b in raw_bids if len(b) >= 2]
+    asks = [(_parse_float(a[0]), _parse_float(a[1])) for a in raw_asks if len(a) >= 2]
+    bids = [(p, s) for p, s in bids if p is not None and s is not None]
+    asks = [(p, s) for p, s in asks if p is not None and s is not None]
+
+    return {
+        "pair": arg["instId"],
+        "bids": bids,
+        "asks": asks,
+    }
+
+
 class OKXWebSocketClient:
     def __init__(
         self,
@@ -115,12 +168,16 @@ class OKXWebSocketClient:
         on_candle: Callable[[dict], Coroutine] | None = None,
         on_funding_rate: Callable[[dict], Coroutine] | None = None,
         on_open_interest: Callable[[dict], Coroutine] | None = None,
+        on_trade: Callable[[dict], Coroutine] | None = None,
+        on_depth: Callable[[dict], Coroutine] | None = None,
     ):
         self.pairs = pairs
         self.timeframes = timeframes
         self.on_candle = on_candle
         self.on_funding_rate = on_funding_rate
         self.on_open_interest = on_open_interest
+        self.on_trade = on_trade
+        self.on_depth = on_depth
         self._running = False
 
     def _build_candle_args(self) -> list[dict]:
@@ -137,6 +194,8 @@ class OKXWebSocketClient:
         for pair in self.pairs:
             args.append({"channel": "funding-rate", "instId": pair})
             args.append({"channel": "open-interest", "instId": pair})
+            args.append({"channel": "trades", "instId": pair})
+            args.append({"channel": "books5", "instId": pair})
         return args
 
     async def connect(self):
@@ -150,7 +209,7 @@ class OKXWebSocketClient:
         backoff = 1
         while self._running:
             try:
-                async with websockets.connect(url) as ws:
+                async with websockets.connect(url, ping_interval=20) as ws:
                     backoff = 1
                     await self._subscribe(ws, subscribe_args, label)
                     await self._listen(ws)
@@ -186,6 +245,16 @@ class OKXWebSocketClient:
                 oi = parse_open_interest_message(msg)
                 if oi and self.on_open_interest:
                     await self.on_open_interest(oi)
+                    continue
+
+                trade = parse_trade_message(msg)
+                if trade and self.on_trade:
+                    await self.on_trade(trade)
+                    continue
+
+                depth = parse_books5_message(msg)
+                if depth and self.on_depth:
+                    await self.on_depth(depth)
             except (KeyError, ValueError) as e:
                 logger.warning("Failed to parse message: %s", e)
 

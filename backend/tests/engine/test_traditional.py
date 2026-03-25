@@ -780,3 +780,80 @@ class TestOrderFlowBackwardCompat:
         spiking = _make_snapshots([0.0001] * 7 + [0.01] * 3, [1.0] * 10)
         result = compute_order_flow_score(metrics, regime=regime, flow_history=spiking)
         assert -100 <= result["score"] <= 100
+
+
+class TestCVDScoring:
+    def test_positive_cvd_scores_positive(self):
+        metrics = {"cvd_delta": 500.0, "avg_candle_volume": 1000.0}
+        result = compute_order_flow_score(metrics)
+        assert result["score"] > 0
+        assert result["details"]["cvd_score"] > 0
+
+    def test_negative_cvd_scores_negative(self):
+        metrics = {"cvd_delta": -500.0, "avg_candle_volume": 1000.0}
+        result = compute_order_flow_score(metrics)
+        assert result["score"] < 0
+        assert result["details"]["cvd_score"] < 0
+
+    def test_cvd_not_affected_by_contrarian_mult(self):
+        metrics = {"cvd_delta": 500.0, "avg_candle_volume": 1000.0}
+        regime_trending = {"trending": 0.8, "ranging": 0.1, "volatile": 0.05, "steady": 0.05}
+        result_trending = compute_order_flow_score(metrics, regime=regime_trending)
+        result_no_regime = compute_order_flow_score(metrics)
+        assert result_trending["details"]["cvd_score"] == result_no_regime["details"]["cvd_score"]
+
+    def test_cvd_max_bounded_to_20(self):
+        metrics = {"cvd_delta": 99999.0, "avg_candle_volume": 1.0}
+        result = compute_order_flow_score(metrics)
+        assert abs(result["details"]["cvd_score"]) <= 20.1
+
+    def test_cvd_absent_scores_zero(self):
+        metrics = {"funding_rate": 0.001}
+        result = compute_order_flow_score(metrics)
+        assert result["details"]["cvd_score"] == 0.0
+
+    def test_max_scores_rebalanced(self):
+        """Total max scores should now be 100 (30+20+30+20)."""
+        from app.engine.constants import ORDER_FLOW
+        total = sum(ORDER_FLOW["max_scores"].values())
+        assert total == 100
+
+
+class TestDynamicConfidence:
+    def test_three_legacy_sources_full_confidence(self):
+        metrics = {"funding_rate": 0.001, "open_interest_change_pct": 0.05,
+                   "long_short_ratio": 1.5, "price_direction": 1}
+        result = compute_order_flow_score(metrics)
+        assert result["confidence"] == 1.0
+
+    def test_three_legacy_plus_cvd_full_confidence(self):
+        metrics = {"funding_rate": 0.001, "open_interest_change_pct": 0.05,
+                   "long_short_ratio": 1.5, "price_direction": 1,
+                   "cvd_delta": 100.0, "avg_candle_volume": 1000.0}
+        result = compute_order_flow_score(metrics)
+        assert result["confidence"] == 1.0
+
+    def test_cvd_unavailable_no_regression(self):
+        """When CVD is absent, confidence should be same as pre-CVD (3/3=1.0)."""
+        metrics = {"funding_rate": 0.001, "open_interest_change_pct": 0.05,
+                   "long_short_ratio": 1.5, "price_direction": 1}
+        result = compute_order_flow_score(metrics)
+        assert result["confidence"] == 1.0
+
+    def test_only_funding_partial_confidence(self):
+        """With only funding present, confidence = 1/3 (not 1/1)."""
+        metrics = {"funding_rate": 0.001}
+        result = compute_order_flow_score(metrics)
+        assert abs(result["confidence"] - 1 / 3) < 0.01
+
+    def test_sparse_data_does_not_inflate_confidence(self):
+        """Confidence must not reach 1.0 when only one source has data."""
+        metrics = {"funding_rate": 0.001}
+        result = compute_order_flow_score(metrics)
+        assert result["confidence"] < 0.5
+
+    def test_cvd_present_raises_denominator(self):
+        """When CVD flows, denominator is 4 not 3."""
+        metrics = {"funding_rate": 0.001, "cvd_delta": 100.0, "avg_candle_volume": 1000.0}
+        result = compute_order_flow_score(metrics)
+        assert abs(result["confidence"] - 0.5) < 0.01

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock
 import pytest
@@ -44,4 +45,60 @@ async def test_pruning_runs_even_when_poll_fails():
     ]
     await collector._poll()
     # old event should still be pruned despite poll failure
+    assert len(collector.events["BTC-USDT-SWAP"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_events_persisted_to_redis():
+    mock_client = AsyncMock()
+    mock_client.get_liquidation_orders.return_value = [
+        {"bkPx": "50000", "sz": "100", "side": "buy", "ts": "0"},
+    ]
+    mock_redis = AsyncMock()
+    mock_redis.rpush = AsyncMock()
+    mock_redis.expire = AsyncMock()
+    mock_redis.lrange = AsyncMock(return_value=[])
+
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"], redis=mock_redis)
+    await collector._poll()
+
+    mock_redis.rpush.assert_called()
+    call_args = mock_redis.rpush.call_args
+    assert call_args[0][0] == "liq_events:BTC-USDT-SWAP"
+    event = json.loads(call_args[0][1])
+    assert event["price"] == 50000.0
+
+
+@pytest.mark.asyncio
+async def test_events_reloaded_from_redis_on_init():
+    mock_client = AsyncMock()
+    now = datetime.now(timezone.utc)
+    stored = json.dumps({
+        "price": 49000.0, "volume": 200.0,
+        "timestamp": now.isoformat(), "side": "sell",
+    })
+    mock_redis = AsyncMock()
+    mock_redis.lrange = AsyncMock(return_value=[stored])
+
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"], redis=mock_redis)
+    await collector.load_from_redis()
+
+    assert len(collector.events["BTC-USDT-SWAP"]) == 1
+    assert collector.events["BTC-USDT-SWAP"][0]["price"] == 49000.0
+
+
+@pytest.mark.asyncio
+async def test_old_events_not_reloaded_from_redis():
+    mock_client = AsyncMock()
+    old = datetime.now(timezone.utc) - timedelta(hours=25)
+    stored = json.dumps({
+        "price": 49000.0, "volume": 200.0,
+        "timestamp": old.isoformat(), "side": "sell",
+    })
+    mock_redis = AsyncMock()
+    mock_redis.lrange = AsyncMock(return_value=[stored])
+
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"], redis=mock_redis)
+    await collector.load_from_redis()
+
     assert len(collector.events["BTC-USDT-SWAP"]) == 0

@@ -91,6 +91,7 @@ def collect_structure_levels(
     indicators: dict,
     atr: float,
     liquidation_clusters: list[dict] | None = None,
+    depth: dict | None = None,
 ) -> list[dict]:
     """Collect all technical structure levels from available data.
 
@@ -141,6 +142,23 @@ def collect_structure_levels(
                 "label": "liq_cluster",
                 "strength": min(10, int(cluster["volume"] / 100)),
             })
+
+    # 5. Depth modulation — amplify levels near heavy bid/ask resting orders
+    if depth and atr > 0:
+        current_price = float(candles["close"].iloc[-1])
+        all_depth_vols = [s for _, s in depth.get("bids", []) + depth.get("asks", [])]
+        avg_depth_vol = sum(all_depth_vols) / len(all_depth_vols) if all_depth_vols else 0
+
+        if avg_depth_vol > 0:
+            for level in levels:
+                is_support = level["price"] < current_price
+                side_levels = depth.get("bids", []) if is_support else depth.get("asks", [])
+
+                nearby_vol = sum(s for p, s in side_levels if abs(p - level["price"]) <= 0.5 * atr)
+
+                if nearby_vol > 2 * avg_depth_vol:
+                    mult = min(1.5, 1.0 + (nearby_vol / avg_depth_vol - 2) * 0.25)
+                    level["strength"] = int(level["strength"] * mult)
 
     levels.sort(key=lambda lv: lv["price"])
     return levels

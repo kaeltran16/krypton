@@ -64,6 +64,62 @@ _OVERRIDE_MAP = {
 }
 
 
+def _update_cvd(cvd: dict, size: float, side: str):
+    """Update CVD accumulator with a single trade."""
+    delta = size if side == "buy" else -size
+    cvd["cumulative"] += delta
+    cvd["candle_delta"] += delta
+    cvd["_last_updated"] = time.time()
+
+
+async def handle_trade(app: FastAPI, data: dict):
+    """Handle incoming trade from OKX trades channel."""
+    pair = data["pair"]
+    cvd = app.state.cvd.setdefault(pair, {
+        "cumulative": 0.0, "candle_delta": 0.0, "_last_updated": 0,
+    })
+    _update_cvd(cvd, data["size"], data["side"])
+
+
+async def handle_depth(app: FastAPI, data: dict):
+    """Handle incoming order book depth from OKX books5 channel."""
+    pair = data["pair"]
+    app.state.order_book[pair] = {
+        "bids": data["bids"],
+        "asks": data["asks"],
+        "_last_updated": time.time(),
+    }
+
+
+async def _seed_order_flow(order_flow: dict, session):
+    """Seed order_flow dict from latest OrderFlowSnapshot per pair."""
+    from sqlalchemy import func
+    subq = (
+        select(
+            OrderFlowSnapshot.pair,
+            func.max(OrderFlowSnapshot.id).label("max_id"),
+        )
+        .group_by(OrderFlowSnapshot.pair)
+        .subquery()
+    )
+    stmt = select(OrderFlowSnapshot).join(
+        subq,
+        (OrderFlowSnapshot.pair == subq.c.pair)
+        & (OrderFlowSnapshot.id == subq.c.max_id),
+    )
+    result = await session.execute(stmt)
+    for snap in result.scalars().all():
+        entry = {}
+        if snap.funding_rate is not None:
+            entry["funding_rate"] = snap.funding_rate
+        if snap.open_interest is not None:
+            entry["open_interest"] = snap.open_interest
+        if snap.long_short_ratio is not None:
+            entry["long_short_ratio"] = snap.long_short_ratio
+        if entry:
+            order_flow[snap.pair] = entry
+
+
 def _apply_pipeline_overrides(settings, ps):
     """Apply non-None PipelineSettings overrides onto in-memory Settings."""
     for db_col, settings_field in _OVERRIDE_MAP.items():
@@ -312,6 +368,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     pair = candle["pair"]
     timeframe = candle["timeframe"]
+    order_book = getattr(app.state, "order_book", {})
+    depth = order_book.get(pair)
 
     try:
         cache_key = f"candles:{pair}:{timeframe}"
@@ -399,6 +457,15 @@ async def run_pipeline(app: FastAPI, candle: dict):
     # Inject price direction for direction-aware OI scoring
     flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] > candle["open"] else (-1 if candle["close"] < candle["open"] else 0)}
 
+    # Inject CVD into flow_metrics before scoring — read+reset adjacent
+    cvd_state = app.state.cvd.get(pair)
+    cvd_delta_val = None
+    if cvd_state:
+        cvd_delta_val = cvd_state["candle_delta"]
+        cvd_state["candle_delta"] = 0.0
+        flow_metrics["cvd_delta"] = cvd_delta_val
+        flow_metrics["avg_candle_volume"] = float(candle.get("volume", 0))
+
     # Query flow history for contrarian bias RoC detection (skip if no flow data)
     flow_history = []
     if flow_metrics:
@@ -431,11 +498,12 @@ async def run_pipeline(app: FastAPI, candle: dict):
                     open_interest=flow_metrics.get("open_interest"),
                     oi_change_pct=flow_metrics.get("open_interest_change_pct"),
                     long_short_ratio=flow_metrics.get("long_short_ratio"),
+                    cvd_delta=cvd_delta_val,
                 )
                 session.add(snap)
                 await session.commit()
         except Exception as e:
-            logger.debug(f"Order flow snapshot save skipped: {e}")
+            logger.warning(f"Order flow snapshot save skipped: {e}")
 
     # Pattern detection
     detected_patterns = []
@@ -476,6 +544,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 events=liq_collector.events.get(pair, []),
                 current_price=current_price,
                 atr=liq_atr,
+                depth=depth,
             )
             liq_score = liq_result["score"]
             liq_conf = liq_result["confidence"]
@@ -831,7 +900,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # Post-process: snap levels to nearby technical structure
     structure = collect_structure_levels(df, tech_result["indicators"], atr,
-                                         liquidation_clusters=liq_clusters)
+                                         liquidation_clusters=liq_clusters,
+                                         depth=depth)
     levels, snap_info = snap_levels_to_structure(
         levels, structure, direction, atr,
         sl_min_atr=settings.ml_sl_min_atr,
@@ -1004,6 +1074,7 @@ async def handle_candle_tick(app: FastAPI, candle: dict):
 async def handle_funding_rate(app: FastAPI, data: dict):
     flow = app.state.order_flow.setdefault(data["pair"], {})
     flow["funding_rate"] = data["funding_rate"]
+    flow["_last_updated"] = time.time()
 
     try:
         from app.engine.alert_evaluator import evaluate_indicator_alerts
@@ -1027,11 +1098,13 @@ async def handle_open_interest(app: FastAPI, data: dict):
     if prev_oi > 0:
         flow["open_interest_change_pct"] = (current_oi - prev_oi) / prev_oi
     flow["open_interest"] = current_oi
+    flow["_last_updated"] = time.time()
 
 
 async def handle_long_short_data(app: FastAPI, data: dict):
     flow = app.state.order_flow.setdefault(data["pair"], {})
     flow["long_short_ratio"] = data["long_short_ratio"]
+    flow["_last_updated"] = time.time()
 
 
 async def check_pending_signals(app: FastAPI):
@@ -1189,6 +1262,14 @@ async def lifespan(app: FastAPI):
     app.state.redis = redis
     app.state.manager = ws_manager
     app.state.order_flow = {}
+    app.state.cvd = {}
+    app.state.order_book = {}
+    try:
+        async with db.session_factory() as session:
+            await _seed_order_flow(app.state.order_flow, session)
+        logger.info("Seeded order flow for %d pairs", len(app.state.order_flow))
+    except Exception as e:
+        logger.warning("Order flow preload failed: %s", e)
     app.state.pipeline_tasks = set()
     app.state.start_time = time.time()
     app.state.last_pipeline_cycle = 0.0
@@ -1303,6 +1384,8 @@ async def lifespan(app: FastAPI):
         on_candle=lambda c: handle_candle_tick(app, c),
         on_funding_rate=lambda d: handle_funding_rate(app, d),
         on_open_interest=lambda d: handle_open_interest(app, d),
+        on_trade=lambda d: handle_trade(app, d),
+        on_depth=lambda d: handle_depth(app, d),
     )
     rest_poller = OKXRestPoller(
         pairs=settings.pairs,
@@ -1344,7 +1427,8 @@ async def lifespan(app: FastAPI):
 
     # Liquidation collector
     from app.collector.liquidation import LiquidationCollector
-    liq_collector = LiquidationCollector(app.state.okx_client, settings.pairs)
+    liq_collector = LiquidationCollector(app.state.okx_client, settings.pairs, redis=app.state.redis)
+    await liq_collector.load_from_redis()
     await liq_collector.start()
     app.state.liquidation_collector = liq_collector
     app.state.learned_thresholds = {}  # populated by optimizer
@@ -1420,6 +1504,10 @@ async def lifespan(app: FastAPI):
     from app.engine.optimizer import run_optimizer_loop
     optimizer_task = asyncio.create_task(run_optimizer_loop(app))
 
+    # Data freshness watchdog
+    from app.collector.watchdog import run_watchdog
+    watchdog_task = asyncio.create_task(run_watchdog(app.state))
+
     # Load per-pair ML predictors if enabled
     app.state.ml_predictors = {}
     if getattr(settings, "ml_enabled", False):
@@ -1441,6 +1529,7 @@ async def lifespan(app: FastAPI):
     account_poller.stop()
     account_task.cancel()
     alert_cleanup_task.cancel()
+    watchdog_task.cancel()
     if onchain_task:
         onchain_collector.stop()
         onchain_task.cancel()

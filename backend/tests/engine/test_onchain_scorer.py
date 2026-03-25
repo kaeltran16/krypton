@@ -92,6 +92,20 @@ class TestGracefulDegradation:
         assert result["score"] == 0
 
 
+class TestAddrTrendPct:
+    @pytest.mark.asyncio
+    async def test_addr_trend_pct_scores_positive(self, mock_redis):
+        _setup_redis(mock_redis, "BTC-USDT-SWAP", {"addr_trend_pct": 0.05})
+        result = await compute_onchain_score("BTC-USDT-SWAP", mock_redis)
+        assert result["score"] > 0
+
+    @pytest.mark.asyncio
+    async def test_addr_trend_pct_scores_negative(self, mock_redis):
+        _setup_redis(mock_redis, "BTC-USDT-SWAP", {"addr_trend_pct": -0.05})
+        result = await compute_onchain_score("BTC-USDT-SWAP", mock_redis)
+        assert result["score"] < 0
+
+
 class TestSigmoidContinuity:
     @pytest.mark.asyncio
     async def test_small_netflow_produces_small_score(self, mock_redis):

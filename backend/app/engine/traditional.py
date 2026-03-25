@@ -346,6 +346,7 @@ from app.engine.constants import ORDER_FLOW, INDICATOR_PERIODS
 FUNDING_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["funding"]
 OI_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["oi"]
 LS_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["ls_ratio"]
+CVD_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["cvd"]
 TRENDING_FLOOR = ORDER_FLOW["trending_floor"]
 RECENT_WINDOW = ORDER_FLOW["recent_window"]
 BASELINE_WINDOW = ORDER_FLOW["baseline_window"]
@@ -417,9 +418,9 @@ def compute_order_flow_score(
     conviction_dampening = 1.0 - trend_conviction
     final_mult = min(final_mult, conviction_dampening)
 
-    # Funding rate — contrarian (max +/-35)
+    # Funding rate — contrarian (max +/-30)
     funding = metrics.get("funding_rate", 0.0)
-    funding_score = sigmoid_score(-funding, center=0, steepness=FUNDING_STEEPNESS) * 35 * final_mult
+    funding_score = sigmoid_score(-funding, center=0, steepness=FUNDING_STEEPNESS) * 30 * final_mult
 
     # OI change — direction-aware (max +/-20), NOT affected by regime/RoC
     oi_change = metrics.get("open_interest_change_pct", 0.0)
@@ -429,11 +430,20 @@ def compute_order_flow_score(
     else:
         oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=OI_STEEPNESS) * 20
 
-    # L/S ratio — contrarian (max +/-35)
+    # L/S ratio — contrarian (max +/-30)
     ls = metrics.get("long_short_ratio", 1.0)
-    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=LS_STEEPNESS) * 35 * final_mult
+    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=LS_STEEPNESS) * 30 * final_mult
 
-    total = funding_score + oi_score + ls_score
+    # CVD — directional, NOT affected by contrarian or regime (max +/-20)
+    cvd_delta = metrics.get("cvd_delta")
+    avg_vol = metrics.get("avg_candle_volume", 0)
+    if cvd_delta is not None and avg_vol > 0:
+        cvd_normalized = cvd_delta / avg_vol
+        cvd_score = sigmoid_score(cvd_normalized, center=0, steepness=CVD_STEEPNESS) * 20
+    else:
+        cvd_score = 0.0
+
+    total = funding_score + oi_score + ls_score + cvd_score
     score = max(min(round(total), 100), -100)
 
     details = {
@@ -445,6 +455,7 @@ def compute_order_flow_score(
         "funding_score": round(funding_score, 1),
         "oi_score": round(oi_score, 1),
         "ls_score": round(ls_score, 1),
+        "cvd_score": round(cvd_score, 1),
         "contrarian_mult": round(contrarian_mult, 4),
         "roc_boost": round(roc_boost, 4),
         "final_mult": round(final_mult, 4),
@@ -454,12 +465,15 @@ def compute_order_flow_score(
         "trend_conviction": round(trend_conviction, 2),
     }
 
-    # confidence: proportion of available inputs (3 possible: funding, OI, L/S)
+    # dynamic confidence: inputs_present / sources_available
+    # Legacy 3 sources always counted. CVD only counted when data is flowing.
     inputs_present = sum([
         funding != 0.0,
         oi_change != 0.0 and price_dir != 0,
         ls != 1.0,
+        cvd_delta is not None and avg_vol > 0 and cvd_delta != 0.0,
     ])
-    flow_confidence = round(inputs_present / 3.0, 4)
+    sources_available = 3 + (1 if cvd_delta is not None else 0)
+    flow_confidence = round(inputs_present / max(sources_available, 1), 4)
 
     return {"score": score, "details": details, "confidence": flow_confidence}

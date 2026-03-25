@@ -231,6 +231,7 @@ class OrderFlowSnapshot(Base):
     open_interest: Mapped[float | None] = mapped_column(Float)
     oi_change_pct: Mapped[float | None] = mapped_column(Float)
     long_short_ratio: Mapped[float | None] = mapped_column(Float)
+    cvd_delta: Mapped[float | None] = mapped_column(Float)
 
     __table_args__ = (
         Index("ix_oflow_pair_ts", "pair", "timestamp"),

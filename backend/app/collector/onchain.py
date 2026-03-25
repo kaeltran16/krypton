@@ -236,5 +236,28 @@ class OnChainCollector:
         await self.redis.ltrim(hist_key, -288, -1)  # 288 = 24h at 5-min intervals
         await self.redis.expire(hist_key, 86400)
 
+        if metric == "active_addresses":
+            await self._compute_addr_trend(pair, hist_key)
+
+    async def _compute_addr_trend(self, pair: str, hist_key: str):
+        try:
+            endpoints = await asyncio.gather(
+                self.redis.lrange(hist_key, 0, 0),
+                self.redis.lrange(hist_key, -1, -1),
+            )
+            if not endpoints[0] or not endpoints[1]:
+                return
+            oldest = json.loads(endpoints[0][0])["v"]
+            latest = json.loads(endpoints[1][0])["v"]
+            if oldest > 0:
+                trend_pct = (latest - oldest) / oldest
+                key = _redis_key(pair, "addr_trend_pct")
+                await self.redis.set(key, json.dumps({
+                    "value": trend_pct,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), ex=REDIS_TTL)
+        except Exception as e:
+            logger.warning(f"addr_trend_pct computation failed for {pair}: {e}")
+
     def stop(self):
         self._running = False
