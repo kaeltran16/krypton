@@ -1,5 +1,6 @@
 import { useState } from "react";
 import ParameterRow from "./ParameterRow";
+import type { ParameterSource, ParamDescription } from "../types";
 
 type Variant = "hero" | "standard" | "sub";
 
@@ -26,7 +27,10 @@ interface Props {
   variant?: Variant;
   defaultOpen?: boolean;
   children?: React.ReactNode;
-  params?: Record<string, { value: unknown; source: "hardcoded" | "configurable" }>;
+  params?: Record<string, { value: unknown; source: ParameterSource }>;
+  descriptions?: Record<string, ParamDescription>;
+  onEdit?: (dotPath: string, value: number) => void;
+  dotPathPrefix?: string;
 }
 
 export default function ParameterCategory({
@@ -35,6 +39,9 @@ export default function ParameterCategory({
   defaultOpen = false,
   children,
   params,
+  descriptions,
+  onEdit,
+  dotPathPrefix,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const styles = VARIANT_STYLES[variant];
@@ -61,6 +68,9 @@ export default function ParameterCategory({
                 name={key}
                 value={param.value}
                 source={param.source}
+                descriptions={descriptions}
+                dotPath={dotPathPrefix ? `${dotPathPrefix}.${key}` : undefined}
+                onEdit={onEdit}
                 last={i === entries.length - 1 && !children}
               />
             ))}

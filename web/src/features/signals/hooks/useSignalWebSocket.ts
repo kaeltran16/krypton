@@ -6,6 +6,7 @@ import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
 import { useNewsStore } from "../../news/store";
 import { useAlertStore } from "../../alerts/store";
+import { useEngineStore } from "../../engine/store";
 import { api } from "../../../shared/lib/api";
 import { hapticPulse } from "../../../shared/lib/haptics";
 
@@ -59,6 +60,8 @@ export function useSignalWebSocket() {
         useNewsStore.getState().addAlert(data.news);
       } else if (data.type === "alert_triggered") {
         useAlertStore.getState().addTriggeredAlert(data);
+      } else if (data.type === "pipeline_scores" && data.scores) {
+        useEngineStore.getState().pushScores(data.scores);
       }
     };
 

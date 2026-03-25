@@ -4,6 +4,7 @@ interface NodeData {
   label: string;
   score?: number | null;
   details?: Record<string, number>;
+  emitted?: boolean;
 }
 
 interface Props {
@@ -51,6 +52,9 @@ function ScoreNode({
         <div className={`font-mono font-medium ${color}`}>
           {score > 0 ? "+" : ""}{score.toFixed(1)}
         </div>
+      )}
+      {data.emitted && (
+        <div className="text-[10px] text-long font-medium mt-0.5">EMITTED</div>
       )}
     </button>
   );

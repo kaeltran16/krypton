@@ -1,12 +1,7 @@
 import { useState, useRef, useLayoutEffect } from "react";
 import { Info } from "lucide-react";
 import { useClickOutside } from "../../../shared/hooks/useClickOutside";
-
-interface ParamDescription {
-  description: string;
-  pipeline_stage: string;
-  range: string;
-}
+import type { ParamDescription } from "../types";
 
 interface Props {
   name: string;

@@ -62,3 +62,9 @@ class ConnectionManager:
     async def broadcast_alert(self, alert: dict):
         """Broadcast an alert to all connected clients."""
         await self._broadcast_to_all(alert)
+
+    async def broadcast_scores(self, scores: dict):
+        """Broadcast pipeline score breakdown to all connected clients."""
+        if not self.connections:
+            return
+        await self._broadcast_to_all({"type": "pipeline_scores", "scores": scores})

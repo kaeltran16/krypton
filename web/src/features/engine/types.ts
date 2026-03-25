@@ -1,6 +1,14 @@
+export type ParameterSource = "hardcoded" | "configurable";
+
+export interface ParamDescription {
+  description: string;
+  pipeline_stage: string;
+  range: string;
+}
+
 export interface ParameterValue {
   value: number | number[] | string | Record<string, number>;
-  source: "hardcoded" | "configurable";
+  source: ParameterSource;
 }
 
 export interface ParameterDiff {
@@ -33,6 +41,20 @@ export interface LearnedAtrEntry {
   signal_count: number;
 }
 
+export interface PipelineScores {
+  pair: string;
+  timeframe: string;
+  technical: number | null;
+  order_flow: number | null;
+  onchain: number | null;
+  patterns: number | null;
+  regime_blend: number | null;
+  ml_gate: number | null;
+  llm_gate: number | null;
+  signal: number | null;
+  emitted: boolean;
+}
+
 export interface EngineParameters {
   technical: {
     indicator_periods: Record<string, ParameterValue>;
@@ -58,5 +80,5 @@ export interface EngineParameters {
   regime_weights: Record<string, Record<string, Record<string, RegimeCapWeights>>>;
   learned_atr: Record<string, Record<string, LearnedAtrEntry>>;
   performance_tracker: Record<string, Record<string, ParameterValue>>;
-  descriptions?: Record<string, { description: string; pipeline_stage: string; range: string }>;
+  descriptions?: Record<string, ParamDescription>;
 }
