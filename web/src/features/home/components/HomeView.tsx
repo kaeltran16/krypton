@@ -4,7 +4,7 @@ import { useSignalStats } from "../hooks/useSignalStats";
 import { useRecentNews } from "../../news/hooks/useNews";
 import { RecentSignals } from "./RecentSignals";
 import { MiniSparkline } from "./MiniSparkline";
-import { formatPrice, formatRelativeTime, formatPair, formatElapsed } from "../../../shared/lib/format";
+import { formatPrice, formatPricePrecision, formatRelativeTime, formatPair, formatElapsed } from "../../../shared/lib/format";
 import { TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import { type Portfolio, type Position } from "../../../shared/lib/api";
 import { Button } from "../../../shared/components/Button";
@@ -129,7 +129,6 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
             const isLong = pos.side === "long";
             const DirIcon = isLong ? TrendingUp : TrendingDown;
             const roi = pos.margin > 0 ? (pos.unrealized_pnl / pos.margin) * 100 : 0;
-            const notional = Math.abs(pos.size * pos.mark_price);
             const liqDist = pos.liquidation_price && pos.mark_price > 0
               ? Math.abs((pos.mark_price - pos.liquidation_price) / pos.mark_price * 100)
               : null;
@@ -172,7 +171,7 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
                   </div>
                 </div>
                 <div className="flex items-center gap-4 mt-2 text-xs text-on-surface-variant">
-                  <span className="tabular">${formatPrice(notional)}</span>
+                  <span className="tabular">Mark ${formatPricePrecision(pos.mark_price, pos.pair)}</span>
                   {liqDist != null && (
                     <span className="tabular text-short/80">Liq {liqDist.toFixed(1)}%</span>
                   )}

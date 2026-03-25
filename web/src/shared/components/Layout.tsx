@@ -3,6 +3,7 @@ import { Home, BarChart3, Zap, Layers, MoreHorizontal } from "lucide-react";
 import { TickerBar } from "./TickerBar";
 import { hapticTap } from "../lib/haptics";
 import { useNavigationStore, type Tab } from "../stores/navigation";
+import { useAccount } from "../../features/dashboard/hooks/useAccount";
 
 interface LayoutProps {
   home: ReactNode;
@@ -41,6 +42,8 @@ export function Layout({
   const tab = useNavigationStore((s) => s.tab);
   const setTab = useNavigationStore((s) => s.setTab);
   const mainRef = useRef<HTMLElement>(null);
+  const { portfolio } = useAccount();
+  const totalPnl = tab === "positions" ? (portfolio?.unrealized_pnl ?? null) : null;
 
   const views = { home, chart, signals, positions, more } as const;
 
@@ -62,6 +65,7 @@ export function Layout({
         change24h={change24h}
         pair={selectedPair}
         onPairChange={onPairChange}
+        totalPnl={totalPnl}
       />
 
       <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto pb-20 scroll-container relative">

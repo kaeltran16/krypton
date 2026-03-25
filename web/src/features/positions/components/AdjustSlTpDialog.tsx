@@ -56,10 +56,10 @@ export function AdjustSlTpDialog({ position, onClose, onSuccess }: Props) {
         setWarning("Previous SL/TP was removed but new placement failed. Tap Retry to re-submit.");
         setError(result.error || "Placement failed");
       } else {
-        setError(result.error || "Failed to adjust SL/TP");
+        setError(result.error || "Failed to adjust SL/TP — verify prices and retry");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed");
+      setError(e instanceof Error ? e.message : "Network error — check connection and retry");
     } finally {
       setSubmitting(false);
     }
@@ -79,7 +79,7 @@ export function AdjustSlTpDialog({ position, onClose, onSuccess }: Props) {
       }
       await handleSubmit();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Retry failed");
+      setError(e instanceof Error ? e.message : "Retry failed — check connection");
       setSubmitting(false);
     }
   }
@@ -108,7 +108,7 @@ export function AdjustSlTpDialog({ position, onClose, onSuccess }: Props) {
               value={slPrice}
               onChange={(e) => setSlPrice(e.target.value)}
               placeholder="SL price"
-              className="w-full p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/10 font-mono focus:border-short/50 focus:outline-none"
+              className="w-full p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/10 font-mono focus:border-short/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           </div>
 
@@ -120,7 +120,7 @@ export function AdjustSlTpDialog({ position, onClose, onSuccess }: Props) {
               value={tpPrice}
               onChange={(e) => setTpPrice(e.target.value)}
               placeholder="TP price"
-              className="w-full p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/10 font-mono focus:border-long/50 focus:outline-none"
+              className="w-full p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/10 font-mono focus:border-long/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           </div>
 

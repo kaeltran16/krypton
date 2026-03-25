@@ -31,10 +31,10 @@ export function AddToPositionDialog({ position, onClose, onSuccess }: Props) {
         setSuccess(true);
         setTimeout(onSuccess, 800);
       } else {
-        setError(result.error || "Order failed");
+        setError(result.error || "Order failed — verify size and try again");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed");
+      setError(e instanceof Error ? e.message : "Network error — check connection and retry");
     } finally {
       setSubmitting(false);
     }
@@ -54,7 +54,7 @@ export function AddToPositionDialog({ position, onClose, onSuccess }: Props) {
           value={size}
           onChange={(e) => setSize(e.target.value)}
           placeholder="0"
-          className="w-full p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/10 font-mono focus:border-primary/50 focus:outline-none"
+          className="w-full p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/10 font-mono focus:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         />
       </div>
 

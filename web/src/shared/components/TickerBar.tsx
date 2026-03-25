@@ -7,10 +7,12 @@ interface TickerBarProps {
   change24h: number | null;
   pair: string;
   onPairChange: (pair: string) => void;
+  totalPnl?: number | null;
 }
 
-export function TickerBar({ price, change24h, pair, onPairChange }: TickerBarProps) {
-  const isPositive = (change24h ?? 0) >= 0;
+export function TickerBar({ price, change24h, pair, onPairChange, totalPnl }: TickerBarProps) {
+  const showPnl = totalPnl != null;
+  const isPositive = showPnl ? totalPnl >= 0 : (change24h ?? 0) >= 0;
 
   return (
     <header className="bg-surface flex justify-between items-center w-full px-4 min-h-14 z-40 sticky top-0 safe-top">
@@ -34,19 +36,30 @@ export function TickerBar({ price, change24h, pair, onPairChange }: TickerBarPro
         </div>
       </div>
       <div className="flex items-center gap-4">
-        {change24h !== null && (
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-surface-container rounded-lg">
-            <span className={`text-[10px] font-headline font-bold tracking-widest uppercase ${
-              isPositive ? "text-tertiary-dim" : "text-error"
-            }`}>
-              {isPositive ? "+" : ""}{change24h.toFixed(2)}%
+        {showPnl ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-on-surface-variant">P&L</span>
+            <span className={`font-mono text-sm font-bold tabular ${isPositive ? "text-long" : "text-short"}`}>
+              {isPositive ? "+" : ""}${formatPrice(Math.abs(totalPnl))}
             </span>
           </div>
-        )}
-        {price !== null && (
-          <span className="font-mono text-sm tabular text-on-surface">
-            ${formatPrice(price)}
-          </span>
+        ) : (
+          <>
+            {price !== null && (
+              <span className="font-mono text-sm tabular text-on-surface">
+                ${formatPrice(price)}
+              </span>
+            )}
+            {change24h !== null && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-surface-container rounded-lg">
+                <span className={`text-xs font-headline font-bold tracking-widest uppercase ${
+                  isPositive ? "text-tertiary-dim" : "text-error"
+                }`}>
+                  {isPositive ? "+" : ""}{change24h.toFixed(2)}%
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </header>

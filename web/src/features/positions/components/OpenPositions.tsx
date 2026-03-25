@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { api, type Position } from "../../../shared/lib/api";
 import { formatPrice, formatPricePrecision, formatPair, formatElapsed } from "../../../shared/lib/format";
@@ -80,11 +80,17 @@ export function OpenPositions({ positions, loading, error, onRefresh }: Props) {
   );
 }
 
-type Dialog = "close" | "partial" | "sltp" | "add" | null;
+type Dialog = "partial" | "sltp" | "add" | null;
 
 function PositionCard({ position: pos, fundingTotal, onRefresh }: { position: Position; fundingTotal: number | null; onRefresh: () => void }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [closing, setClosing] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    return () => { if (confirmTimer.current) clearTimeout(confirmTimer.current); };
+  }, []);
 
   const isLong = pos.side === "long";
   const DirIcon = isLong ? TrendingUp : TrendingDown;
@@ -95,8 +101,20 @@ function PositionCard({ position: pos, fundingTotal, onRefresh }: { position: Po
     : null;
   const timeOpen = formatElapsed(pos.created_at);
 
-  async function handleFullClose() {
+  function handleCloseClick() {
+    if (!confirmClose) {
+      setConfirmClose(true);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirmClose(false), 3000);
+      return;
+    }
+    executeClose();
+  }
+
+  async function executeClose() {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
     setClosing(true);
+    setConfirmClose(false);
     try {
       await api.closePosition(pos.pair, pos.side);
       onRefresh();
@@ -164,17 +182,17 @@ function PositionCard({ position: pos, fundingTotal, onRefresh }: { position: Po
 
         {/* Action buttons */}
         <div className="px-4 pb-4 grid grid-cols-2 gap-2">
-          <Button variant="short" size="sm" loading={closing} onClick={handleFullClose}>
-            Close
+          <Button variant="secondary" size="sm" onClick={() => setDialog("sltp")}>
+            Adjust SL/TP
           </Button>
           <Button variant="secondary" size="sm" onClick={() => setDialog("partial")}>
             Partial Close
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setDialog("sltp")}>
-            Adjust SL/TP
-          </Button>
           <Button variant="primary" size="sm" onClick={() => setDialog("add")}>
             Add to Position
+          </Button>
+          <Button variant="short" size="sm" loading={closing} onClick={handleCloseClick}>
+            {confirmClose ? "Confirm Close?" : "Close"}
           </Button>
         </div>
       </div>
@@ -207,9 +225,9 @@ function PositionCard({ position: pos, fundingTotal, onRefresh }: { position: Po
 function DataCell({ label, value, sub, subColor }: { label: string; value: string; sub?: string; subColor?: string }) {
   return (
     <div>
-      <span className="text-[10px] text-on-surface-variant uppercase tracking-wider block">{label}</span>
+      <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block">{label}</span>
       <span className="text-xs font-medium tabular">{value}</span>
-      {sub && <span className={`text-[10px] ml-1 tabular ${subColor ?? ""}`}>{sub}</span>}
+      {sub && <span className={`text-[11px] ml-1 tabular ${subColor ?? ""}`}>{sub}</span>}
     </div>
   );
 }
