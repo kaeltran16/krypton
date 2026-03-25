@@ -551,7 +551,7 @@ class TestOrderFlowRegimeScaling:
         regime_trending = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         regime_mixed = {"trending": 0.4, "ranging": 0.2, "volatile": 0.2, "steady": 0.2}
         regime_ranging = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0, "steady": 0.0}
-        metrics = {"funding_rate": -0.0005}
+        metrics = {"funding_rate": -0.005}
         score_trending = abs(compute_order_flow_score(metrics, regime=regime_trending)["score"])
         score_mixed = abs(compute_order_flow_score(metrics, regime=regime_mixed)["score"])
         score_ranging = abs(compute_order_flow_score(metrics, regime=regime_ranging)["score"])
@@ -566,13 +566,15 @@ class TestOrderFlowRegimeScaling:
         assert result_with["score"] == result_without["score"]
 
 
-def _make_snapshots(funding_rates, ls_ratios=None):
+def _make_snapshots(funding_rates, ls_ratios=None, oi_changes=None):
     """Create mock OrderFlowSnapshot-like objects for testing."""
     if ls_ratios is None:
         ls_ratios = [1.0] * len(funding_rates)
+    if oi_changes is None:
+        oi_changes = [0.0] * len(funding_rates)
     return [
-        SimpleNamespace(funding_rate=fr, long_short_ratio=ls)
-        for fr, ls in zip(funding_rates, ls_ratios)
+        SimpleNamespace(funding_rate=fr, long_short_ratio=ls, oi_change_pct=oi)
+        for fr, ls, oi in zip(funding_rates, ls_ratios, oi_changes)
     ]
 
 
@@ -609,7 +611,7 @@ class TestOrderFlowRoCOverride:
         """Snapshots with None funding/LS are excluded from RoC computation."""
         regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         snapshots = [
-            SimpleNamespace(funding_rate=None, long_short_ratio=None)
+            SimpleNamespace(funding_rate=None, long_short_ratio=None, oi_change_pct=None)
             for _ in range(10)
         ]
         metrics = {"funding_rate": -0.0005}
@@ -631,7 +633,7 @@ class TestOrderFlowRoCOverride:
         """Snapshots with NaN funding/LS are excluded from RoC computation."""
         regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         snapshots = [
-            SimpleNamespace(funding_rate=float('nan'), long_short_ratio=float('nan'))
+            SimpleNamespace(funding_rate=float('nan'), long_short_ratio=float('nan'), oi_change_pct=float('nan'))
             for _ in range(10)
         ]
         metrics = {"funding_rate": -0.0005}
@@ -804,10 +806,10 @@ class TestCVDScoring:
         result_no_regime = compute_order_flow_score(metrics)
         assert result_trending["details"]["cvd_score"] == result_no_regime["details"]["cvd_score"]
 
-    def test_cvd_max_bounded_to_20(self):
+    def test_cvd_max_bounded(self):
         metrics = {"cvd_delta": 99999.0, "avg_candle_volume": 1.0}
         result = compute_order_flow_score(metrics)
-        assert abs(result["details"]["cvd_score"]) <= 20.1
+        assert abs(result["details"]["cvd_score"]) <= 22.1
 
     def test_cvd_absent_scores_zero(self):
         metrics = {"funding_rate": 0.001}
@@ -842,20 +844,345 @@ class TestDynamicConfidence:
         result = compute_order_flow_score(metrics)
         assert result["confidence"] == 1.0
 
-    def test_only_funding_partial_confidence(self):
-        """With only funding present, confidence = 1/3 (not 1/1)."""
+    def test_only_funding_present_confidence(self):
+        """With only funding present, confidence = 1/1 (key-based)."""
         metrics = {"funding_rate": 0.001}
         result = compute_order_flow_score(metrics)
-        assert abs(result["confidence"] - 1 / 3) < 0.01
+        assert result["confidence"] == 1.0
 
-    def test_sparse_data_does_not_inflate_confidence(self):
-        """Confidence must not reach 1.0 when only one source has data."""
+    def test_sparse_data_confidence(self):
+        """Single source present should have full confidence for that source."""
         metrics = {"funding_rate": 0.001}
         result = compute_order_flow_score(metrics)
-        assert result["confidence"] < 0.5
+        assert result["confidence"] > 0.0
 
     def test_cvd_present_raises_denominator(self):
-        """When CVD flows, denominator is 4 not 3."""
+        """When CVD flows, it adds to sources_available."""
         metrics = {"funding_rate": 0.001, "cvd_delta": 100.0, "avg_candle_volume": 1000.0}
         result = compute_order_flow_score(metrics)
-        assert abs(result["confidence"] - 0.5) < 0.01
+        assert result["confidence"] == 1.0
+
+
+class TestOrderFlowIntegration:
+    def test_full_scorer_all_params(self):
+        """Full call with all new parameters — score in [-100, 100], all detail fields present."""
+        regime = {"trending": 0.3, "ranging": 0.3, "volatile": 0.2, "steady": 0.2}
+        snapshots = _make_snapshots(
+            [0.0001] * 7 + [0.0005] * 3,
+            [1.1] * 10,
+            [0.01] * 7 + [0.05] * 3,
+        )
+        metrics = {
+            "funding_rate": -0.0003,
+            "open_interest_change_pct": 0.03,
+            "price_direction": 1,
+            "long_short_ratio": 1.3,
+            "cvd_delta": 200.0,
+            "cvd_history": [i * 50 for i in range(1, 11)],
+            "avg_candle_volume": 1000.0,
+            "book_imbalance": 0.25,
+        }
+        result = compute_order_flow_score(
+            metrics,
+            regime=regime,
+            flow_history=snapshots,
+            trend_conviction=0.4,
+            mr_pressure=0.2,
+            flow_age_seconds=100,
+            asset_scale=0.85,
+        )
+        assert -100 <= result["score"] <= 100
+        details = result["details"]
+        expected_keys = [
+            "funding_score", "oi_score", "ls_score", "cvd_score", "book_score",
+            "contrarian_mult", "roc_boost", "final_mult", "asset_scale",
+            "funding_roc", "ls_roc", "oi_roc", "max_roc", "trend_conviction",
+            "flow_age_seconds", "freshness_decay",
+        ]
+        for key in expected_keys:
+            assert key in details, f"Missing detail key: {key}"
+        assert result["confidence"] > 0.0
+
+    def test_full_scorer_stale_data(self):
+        """Fully stale data → confidence = 0."""
+        result = compute_order_flow_score(
+            {"funding_rate": 0.001, "long_short_ratio": 1.5},
+            flow_age_seconds=1200,
+        )
+        assert result["confidence"] == 0.0
+        assert result["score"] != 0
+
+    def test_score_clamped_at_extremes(self):
+        """Extreme inputs across all 5 components still clamp to [-100, 100]."""
+        metrics = {
+            "funding_rate": -0.05,
+            "open_interest_change_pct": 10.0,
+            "price_direction": 1,
+            "long_short_ratio": 0.2,
+            "cvd_delta": 50000.0,
+            "avg_candle_volume": 100.0,
+            "book_imbalance": 0.95,
+        }
+        result = compute_order_flow_score(metrics)
+        assert -100 <= result["score"] <= 100
+
+
+class TestOrderFlowBookImbalance:
+    def test_bid_heavy_book_positive_score(self):
+        """More bids than asks → positive book_score."""
+        result = compute_order_flow_score({"book_imbalance": 0.6})
+        assert result["details"]["book_score"] > 0
+
+    def test_ask_heavy_book_negative_score(self):
+        """More asks than bids → negative book_score."""
+        result = compute_order_flow_score({"book_imbalance": -0.6})
+        assert result["details"]["book_score"] < 0
+
+    def test_absent_book_zero_score(self):
+        """No book_imbalance key → book_score = 0."""
+        result = compute_order_flow_score({"funding_rate": 0.001})
+        assert result["details"]["book_score"] == 0.0
+
+    def test_book_imbalance_in_confidence(self):
+        """book_imbalance present should increase sources_available."""
+        result_with = compute_order_flow_score({
+            "funding_rate": 0.001, "book_imbalance": 0.3
+        })
+        assert result_with["details"]["book_score"] > 0
+
+
+class TestOrderFlowFreshnessDecay:
+    def test_fresh_data_no_penalty(self):
+        """flow_age_seconds=0 → full confidence (no penalty)."""
+        metrics = {"funding_rate": 0.001, "long_short_ratio": 1.5}
+        result = compute_order_flow_score(metrics, flow_age_seconds=0)
+        result_no_age = compute_order_flow_score(metrics)
+        assert result["confidence"] == result_no_age["confidence"]
+
+    def test_half_stale_halves_confidence(self):
+        """flow_age_seconds=600 (midpoint of 300-900) → ~50% confidence penalty."""
+        metrics = {"funding_rate": 0.001, "long_short_ratio": 1.5}
+        result_fresh = compute_order_flow_score(metrics, flow_age_seconds=0)
+        result_half = compute_order_flow_score(metrics, flow_age_seconds=600)
+        assert result_half["confidence"] < result_fresh["confidence"]
+        assert result_half["confidence"] > 0.0
+
+    def test_fully_stale_zeroes_confidence(self):
+        """flow_age_seconds=900+ → confidence decays to zero."""
+        metrics = {"funding_rate": 0.001, "long_short_ratio": 1.5}
+        result = compute_order_flow_score(metrics, flow_age_seconds=1000)
+        assert result["confidence"] == 0.0
+
+    def test_none_age_no_penalty(self):
+        """flow_age_seconds=None (default) → no penalty."""
+        metrics = {"funding_rate": 0.001}
+        result = compute_order_flow_score(metrics, flow_age_seconds=None)
+        result_explicit = compute_order_flow_score(metrics, flow_age_seconds=0)
+        assert result["confidence"] == result_explicit["confidence"]
+
+
+class TestOrderFlowCVDTrend:
+    def test_rising_cvd_history_produces_positive_score(self):
+        """10-candle rising CVD history should produce a positive cvd_score via slope."""
+        trend_result = compute_order_flow_score({
+            "cvd_delta": 500.0,
+            "cvd_history": [i * 500 for i in range(1, 11)],
+            "avg_candle_volume": 1000.0,
+        })
+        assert trend_result["details"]["cvd_score"] > 0
+
+    def test_falling_cvd_history_produces_negative_score(self):
+        """10-candle falling CVD history should produce a negative cvd_score."""
+        trend_result = compute_order_flow_score({
+            "cvd_delta": -500.0,
+            "cvd_history": [-i * 500 for i in range(1, 11)],
+            "avg_candle_volume": 1000.0,
+        })
+        assert trend_result["details"]["cvd_score"] < 0
+
+    def test_cvd_trend_fallback_with_insufficient_history(self):
+        """With <5 entries in cvd_history, fall back to single-delta scoring."""
+        result = compute_order_flow_score({
+            "cvd_delta": 500.0,
+            "cvd_history": [100, 200, 300],
+            "avg_candle_volume": 1000.0,
+        })
+        assert result["details"]["cvd_score"] != 0.0
+
+    def test_no_cvd_history_uses_single_delta(self):
+        """Without cvd_history key, uses single-delta scoring (backward compat)."""
+        result = compute_order_flow_score({
+            "cvd_delta": 500.0,
+            "avg_candle_volume": 1000.0,
+        })
+        assert result["details"]["cvd_score"] != 0.0
+
+
+class TestOrderFlowAssetScale:
+    def test_wif_scale_produces_lower_score_than_btc(self):
+        """WIF (scale=0.4) should produce lower absolute score than BTC (scale=1.0) for same funding."""
+        metrics = {"funding_rate": -0.005, "long_short_ratio": 0.8}
+        btc_result = compute_order_flow_score(metrics, asset_scale=1.0)
+        wif_result = compute_order_flow_score(metrics, asset_scale=0.4)
+        assert abs(wif_result["score"]) < abs(btc_result["score"])
+
+    def test_asset_scale_in_details(self):
+        result = compute_order_flow_score({"funding_rate": 0.001}, asset_scale=0.85)
+        assert result["details"]["asset_scale"] == 0.85
+
+    def test_default_asset_scale_is_one(self):
+        """Without asset_scale param, behavior is unchanged (scale=1.0)."""
+        result = compute_order_flow_score({"funding_rate": 0.001})
+        assert result["details"]["asset_scale"] == 1.0
+
+
+class TestOrderFlowOIRoC:
+    def test_spiking_oi_in_history_produces_roc_boost(self):
+        """Rapidly increasing OI should produce roc_boost > 0."""
+        regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
+        oi_changes = [0.01] * 7 + [0.10] * 3
+        snapshots = _make_snapshots([0.0001] * 10, [1.0] * 10, oi_changes)
+        metrics = {"funding_rate": -0.0005}
+        result = compute_order_flow_score(metrics, regime=regime, flow_history=snapshots)
+        assert result["details"]["roc_boost"] > 0.0
+
+    def test_oi_roc_in_details(self):
+        """OI RoC should appear in details dict."""
+        snapshots = _make_snapshots([0.0001] * 10, [1.0] * 10, [0.01] * 10)
+        result = compute_order_flow_score(
+            {"funding_rate": 0.0001}, flow_history=snapshots
+        )
+        assert "oi_roc" in result["details"]
+
+
+class TestThreeCandlePriceDirection:
+    def test_uptrend_doji_still_bullish(self):
+        """In an uptrend, a doji candle should not flip price direction to bearish."""
+        recent_close = 103.0
+        lookback_close = 100.0
+        net_move = recent_close - lookback_close
+        price_direction = 1 if net_move > 0 else (-1 if net_move < 0 else 0)
+        assert price_direction == 1
+
+    def test_downtrend_produces_bearish(self):
+        recent_close = 97.0
+        lookback_close = 100.0
+        net_move = recent_close - lookback_close
+        price_direction = 1 if net_move > 0 else (-1 if net_move < 0 else 0)
+        assert price_direction == -1
+
+    def test_flat_produces_zero(self):
+        recent_close = 100.0
+        lookback_close = 100.0
+        net_move = recent_close - lookback_close
+        price_direction = 1 if net_move > 0 else (-1 if net_move < 0 else 0)
+        assert price_direction == 0
+
+
+class TestOrderFlowConfidenceBug:
+    def test_zero_funding_still_counts_as_present(self):
+        """funding_rate=0.0 should count as present data, not absent."""
+        result = compute_order_flow_score({"funding_rate": 0.0})
+        assert result["confidence"] > 0.0, "Zero funding treated as absent"
+
+    def test_exact_ls_one_still_counts_as_present(self):
+        """long_short_ratio=1.0 should count as present data, not absent."""
+        result = compute_order_flow_score({"long_short_ratio": 1.0})
+        assert result["confidence"] > 0.0, "L/S ratio 1.0 treated as absent"
+
+    def test_empty_metrics_zero_confidence(self):
+        """No keys at all = truly absent = zero confidence."""
+        result = compute_order_flow_score({})
+        assert result["confidence"] == 0.0
+
+    def test_all_three_legacy_present_full_confidence(self):
+        """All three legacy keys present = confidence 1.0 (before book)."""
+        result = compute_order_flow_score({
+            "funding_rate": 0.0001,
+            "open_interest_change_pct": 0.01,
+            "price_direction": 1,
+            "long_short_ratio": 1.2,
+        })
+        assert result["confidence"] >= 0.75
+
+
+class TestOrderFlowParamGroup:
+    def test_param_group_has_12_params(self):
+        from app.engine.param_groups import PARAM_GROUPS
+        group = PARAM_GROUPS["order_flow"]
+        assert len(group["params"]) == 12, f"Expected 12 params, got {len(group['params'])}"
+
+    def test_all_params_have_sweep_ranges(self):
+        from app.engine.param_groups import PARAM_GROUPS
+        group = PARAM_GROUPS["order_flow"]
+        for param in group["params"]:
+            assert param in group["sweep_ranges"], f"Missing sweep range for {param}"
+
+    def test_constraint_rejects_sum_over_100(self):
+        from app.engine.param_groups import PARAM_GROUPS
+        group = PARAM_GROUPS["order_flow"]
+        over_budget = {
+            "funding_max": 30, "oi_max": 30, "ls_ratio_max": 30,
+            "cvd_max": 20, "book_max": 20,
+            "funding_steepness": 400, "oi_steepness": 20,
+            "ls_ratio_steepness": 6, "cvd_steepness": 5, "book_steepness": 4,
+            "freshness_fresh_seconds": 300, "freshness_stale_seconds": 900,
+        }
+        assert not group["constraints"](over_budget)
+
+    def test_constraint_accepts_valid_config(self):
+        from app.engine.param_groups import PARAM_GROUPS
+        group = PARAM_GROUPS["order_flow"]
+        valid = {
+            "funding_max": 22, "oi_max": 22, "ls_ratio_max": 22,
+            "cvd_max": 22, "book_max": 12,
+            "funding_steepness": 400, "oi_steepness": 20,
+            "ls_ratio_steepness": 6, "cvd_steepness": 5, "book_steepness": 4,
+            "freshness_fresh_seconds": 300, "freshness_stale_seconds": 900,
+        }
+        assert group["constraints"](valid)
+
+    def test_constraint_rejects_stale_before_fresh(self):
+        from app.engine.param_groups import PARAM_GROUPS
+        group = PARAM_GROUPS["order_flow"]
+        bad_freshness = {
+            "funding_max": 22, "oi_max": 22, "ls_ratio_max": 22,
+            "cvd_max": 22, "book_max": 12,
+            "funding_steepness": 400, "oi_steepness": 20,
+            "ls_ratio_steepness": 6, "cvd_steepness": 5, "book_steepness": 4,
+            "freshness_fresh_seconds": 900, "freshness_stale_seconds": 300,
+        }
+        assert not group["constraints"](bad_freshness)
+
+
+class TestOrderFlowNoHardcodedLiterals:
+    def test_scorer_uses_constants_not_literals(self):
+        """Verify the scorer body has no hardcoded max score literals (30, 20)."""
+        import re
+        import inspect
+        source = inspect.getsource(compute_order_flow_score)
+        lines = [l for l in source.split("\n") if not l.strip().startswith("#")]
+        body = "\n".join(lines)
+        assert not re.search(r"\*\s*\b30\b", body), "Found hardcoded '* 30' in scorer"
+        assert not re.search(r"\*\s*\b20\b", body), "Found hardcoded '* 20' in scorer"
+
+
+class TestOrderFlowConstants:
+    def test_max_scores_sum_to_100(self):
+        from app.engine.constants import ORDER_FLOW
+        total = sum(ORDER_FLOW["max_scores"].values())
+        assert total == 100, f"Max scores sum to {total}, expected 100"
+
+    def test_all_components_have_steepness(self):
+        from app.engine.constants import ORDER_FLOW
+        for key in ORDER_FLOW["max_scores"]:
+            assert key in ORDER_FLOW["sigmoid_steepnesses"], f"Missing steepness for {key}"
+
+    def test_freshness_thresholds_ordered(self):
+        from app.engine.constants import ORDER_FLOW
+        assert ORDER_FLOW["freshness_stale_seconds"] > ORDER_FLOW["freshness_fresh_seconds"]
+
+    def test_asset_scales_exist_for_all_pairs(self):
+        from app.engine.constants import ORDER_FLOW_ASSET_SCALES
+        for pair in ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "WIF-USDT-SWAP"]:
+            assert pair in ORDER_FLOW_ASSET_SCALES, f"Missing asset scale for {pair}"

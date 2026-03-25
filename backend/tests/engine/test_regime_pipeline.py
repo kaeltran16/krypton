@@ -47,12 +47,14 @@ def _make_app(regime_weights=None):
     mock_db, mock_session = _mock_db()
     app.state.db = mock_db
     app.state.order_flow = {}
+    app.state.order_book = {}
     app.state.prompt_template = ""
 
     # WebSocket manager
     app.state.manager = MagicMock()
     app.state.manager.broadcast = AsyncMock()
     app.state.manager.broadcast_candle = AsyncMock()
+    app.state.manager.broadcast_scores = AsyncMock()
 
     # Regime weights (the feature under test)
     app.state.regime_weights = regime_weights or {}

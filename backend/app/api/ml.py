@@ -428,6 +428,18 @@ async def get_ml_status(request: Request):
     }
 
 
+@router.post("/reload", dependencies=[require_auth()])
+async def reload_predictors(request: Request):
+    """Hot-reload ML predictors from disk (e.g. after syncing new model files)."""
+    settings = request.app.state.settings
+    _reload_predictors(request.app, settings)
+    predictors = getattr(request.app.state, "ml_predictors", {})
+    return {
+        "reloaded": True,
+        "loaded_pairs": list(predictors.keys()),
+    }
+
+
 OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H"}
 
 

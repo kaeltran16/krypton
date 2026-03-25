@@ -218,22 +218,35 @@ PARAM_GROUPS: dict[str, dict] = {
             "funding_max": "order_flow.max_scores.funding",
             "oi_max": "order_flow.max_scores.oi",
             "ls_ratio_max": "order_flow.max_scores.ls_ratio",
+            "cvd_max": "order_flow.max_scores.cvd",
+            "book_max": "order_flow.max_scores.book",
             "funding_steepness": "order_flow.sigmoid_steepnesses.funding",
             "oi_steepness": "order_flow.sigmoid_steepnesses.oi",
             "ls_ratio_steepness": "order_flow.sigmoid_steepnesses.ls_ratio",
+            "cvd_steepness": "order_flow.sigmoid_steepnesses.cvd",
+            "book_steepness": "order_flow.sigmoid_steepnesses.book",
+            "freshness_fresh_seconds": "order_flow.freshness_fresh_seconds",
+            "freshness_stale_seconds": "order_flow.freshness_stale_seconds",
         },
         "sweep_method": "de",
         "sweep_ranges": {
-            "funding_max": (15, 50, None),
+            "funding_max": (10, 35, None),
             "oi_max": (10, 35, None),
-            "ls_ratio_max": (15, 50, None),
+            "ls_ratio_max": (10, 35, None),
+            "cvd_max": (10, 35, None),
+            "book_max": (5, 20, None),
             "funding_steepness": (200, 800, None),
             "oi_steepness": (10, 40, None),
             "ls_ratio_steepness": (2, 12, None),
+            "cvd_steepness": (2, 10, None),
+            "book_steepness": (2, 8, None),
+            "freshness_fresh_seconds": (120, 600, None),
+            "freshness_stale_seconds": (600, 1800, None),
         },
         "constraints": lambda c: (
-            c.get("funding_max", 0) + c.get("oi_max", 0) + c.get("ls_ratio_max", 0) <= 100
+            sum(c.get(k, 0) for k in ("funding_max", "oi_max", "ls_ratio_max", "cvd_max", "book_max")) <= 100
             and all(v > 0 for v in c.values())
+            and c.get("freshness_stale_seconds", 900) > c.get("freshness_fresh_seconds", 300)
         ),
         "priority": _priority_for("order_flow"),
     },

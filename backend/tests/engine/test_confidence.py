@@ -29,16 +29,15 @@ class TestOrderFlowConfidence:
         assert "confidence" in result
         assert 0.0 <= result["confidence"] <= 1.0
 
-    def test_all_inputs_present_higher_confidence(self):
-        """All 3 inputs present should give higher confidence than single input."""
-        result_single = compute_order_flow_score({"funding_rate": 0.001})
+    def test_all_inputs_present_full_confidence(self):
+        """All inputs present should give full confidence (key-based detection)."""
         result_all = compute_order_flow_score({
             "funding_rate": 0.001,
             "open_interest_change_pct": 5.0,
             "price_direction": 1,
             "long_short_ratio": 1.2,
         })
-        assert result_all["confidence"] > result_single["confidence"]
+        assert result_all["confidence"] == 1.0
 
     def test_empty_metrics_low_confidence(self):
         result = compute_order_flow_score({})

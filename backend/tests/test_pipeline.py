@@ -94,7 +94,7 @@ def test_pipeline_with_regime_and_flow_history():
         "price_direction": 1,
     }
     snapshots = [
-        SimpleNamespace(funding_rate=0.00005, long_short_ratio=1.05)
+        SimpleNamespace(funding_rate=0.00005, long_short_ratio=1.05, oi_change_pct=0.0)
         for _ in range(10)
     ]
     flow_result = compute_order_flow_score(

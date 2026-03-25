@@ -37,6 +37,7 @@ export default function OptimizerPage() {
   } = useOptimizerStore();
   const { params, fetch: fetchEngine } = useEngineStore();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -60,8 +61,6 @@ export default function OptimizerPage() {
   if (error) {
     return <div className="p-4 text-error text-sm">Error: {error}</div>;
   }
-  const [showGuide, setShowGuide] = useState(false);
-
   if (!status) return null;
 
   const hasActivity = pendingProposals.length > 0 || status.active_shadow;

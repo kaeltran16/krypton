@@ -95,6 +95,23 @@ export default function EnginePage() {
     if (scoreKeys.length > 0 && !scorePair) setScorePair(scoreKeys[0]);
   }, [scoreKeys.length, scorePair]);
 
+  const activeScores = scorePair ? liveScores[scorePair] : null;
+  const pipelineNodes = useMemo(() =>
+    activeScores
+      ? {
+          technical: { label: "Technical", score: activeScores.technical },
+          order_flow: { label: "Order Flow", score: activeScores.order_flow },
+          onchain: { label: "On-Chain", score: activeScores.onchain },
+          patterns: { label: "Patterns", score: activeScores.patterns },
+          regime_blend: { label: "Regime Blend", score: activeScores.regime_blend },
+          ml_gate: { label: "ML Gate", score: activeScores.ml_gate },
+          llm_gate: { label: "LLM Gate", score: activeScores.llm_gate },
+          signal: { label: "Signal", score: activeScores.signal, emitted: activeScores.emitted },
+        }
+      : undefined,
+    [activeScores],
+  );
+
   if (loading && !params) {
     return (
       <div className="p-3 space-y-3">
@@ -113,23 +130,6 @@ export default function EnginePage() {
   if (!params) return null;
 
   const descriptions = params.descriptions;
-
-  const activeScores = scorePair ? liveScores[scorePair] : null;
-  const pipelineNodes = useMemo(() =>
-    activeScores
-      ? {
-          technical: { label: "Technical", score: activeScores.technical },
-          order_flow: { label: "Order Flow", score: activeScores.order_flow },
-          onchain: { label: "On-Chain", score: activeScores.onchain },
-          patterns: { label: "Patterns", score: activeScores.patterns },
-          regime_blend: { label: "Regime Blend", score: activeScores.regime_blend },
-          ml_gate: { label: "ML Gate", score: activeScores.ml_gate },
-          llm_gate: { label: "LLM Gate", score: activeScores.llm_gate },
-          signal: { label: "Signal", score: activeScores.signal, emitted: activeScores.emitted },
-        }
-      : undefined,
-    [activeScores],
-  );
 
   const regimeData = selectedPair && selectedTf
     ? params.regime_weights?.[selectedPair]?.[selectedTf]

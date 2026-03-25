@@ -34,12 +34,12 @@ export default function ProposalHistory({ proposals }: Props) {
               className="flex items-center justify-between px-2 py-1.5 text-xs bg-surface-container/50 rounded"
             >
               <div className="flex items-center gap-2">
-                <span className={
-                  p.status === "promoted" ? "text-long" :
-                  p.status === "rejected" ? "text-error" :
-                  "text-accent"
-                }>
-                  {p.status}
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                  p.status === "promoted" ? "bg-long/15 text-long" :
+                  p.status === "rejected" || p.status === "rolled_back" ? "bg-error/15 text-error" :
+                  "bg-accent/15 text-accent"
+                }`}>
+                  {p.status === "rolled_back" ? "rolled back" : p.status}
                 </span>
                 <span className="text-muted">{humanizeKey(p.parameter_group)}</span>
               </div>

@@ -32,9 +32,10 @@ from app.db.models import Candle, MLTrainingRun, NewsEvent, OrderFlowSnapshot, P
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
+from app.api.connections import ConnectionManager
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
-from app.engine.constants import MR_PRESSURE as MR_PRESSURE_CONST
+from app.engine.constants import MR_PRESSURE as MR_PRESSURE_CONST, ORDER_FLOW_ASSET_SCALES
 from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
@@ -370,7 +371,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
     pair = candle["pair"]
     timeframe = candle["timeframe"]
     order_book = getattr(app.state, "order_book", {})
-    depth = order_book.get(pair)
 
     try:
         cache_key = f"candles:{pair}:{timeframe}"
@@ -458,8 +458,12 @@ async def run_pipeline(app: FastAPI, candle: dict):
         logger.debug(f"Indicator alert evaluation skipped: {e}")
 
     flow_metrics = order_flow.get(pair, {})
-    # Inject price direction for direction-aware OI scoring
-    flow_metrics = {**flow_metrics, "price_direction": 1 if candle["close"] > candle["open"] else (-1 if candle["close"] < candle["open"] else 0)}
+    # 3-candle net move smooths doji / small counter-trend noise
+    recent_close = float(candle["close"])
+    lookback_close = float(candles_data[-4]["close"]) if len(candles_data) >= 4 else float(candle["open"])
+    net_move = recent_close - lookback_close
+    price_direction = 1 if net_move > 0 else (-1 if net_move < 0 else 0)
+    flow_metrics = {**flow_metrics, "price_direction": price_direction}
 
     # Inject CVD into flow_metrics before scoring — read+reset adjacent
     cvd_state = app.state.cvd.get(pair)
@@ -467,7 +471,15 @@ async def run_pipeline(app: FastAPI, candle: dict):
     if cvd_state:
         cvd_delta_val = cvd_state["candle_delta"]
         cvd_state["candle_delta"] = 0.0
+
+        # Maintain rolling CVD history for trend scoring
+        history = cvd_state.setdefault("history", [])
+        history.append(cvd_delta_val)
+        if len(history) > 10:
+            history.pop(0)
+
         flow_metrics["cvd_delta"] = cvd_delta_val
+        flow_metrics["cvd_history"] = list(history)
         flow_metrics["avg_candle_volume"] = float(candle.get("volume", 0))
 
     # Query flow history for contrarian bias RoC detection (skip if no flow data)
@@ -476,7 +488,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         try:
             async with db.session_factory() as session:
                 result = await session.execute(
-                    select(OrderFlowSnapshot.funding_rate, OrderFlowSnapshot.long_short_ratio)
+                    select(OrderFlowSnapshot.funding_rate, OrderFlowSnapshot.long_short_ratio, OrderFlowSnapshot.oi_change_pct)
                     .where(OrderFlowSnapshot.pair == pair)
                     .order_by(OrderFlowSnapshot.timestamp.desc())
                     .limit(10)
@@ -485,12 +497,32 @@ async def run_pipeline(app: FastAPI, candle: dict):
         except Exception as e:
             logger.debug(f"Flow history query skipped: {e}")
 
+    # Compute flow age and asset scale for scoring
+    flow_updated = flow_metrics.get("_last_updated")
+    flow_age = (time.time() - flow_updated) if flow_updated else None
+    asset_scale = ORDER_FLOW_ASSET_SCALES.get(pair, 1.0)
+
+    # Inject book imbalance if fresh depth data available
+    # 30s hard limit is a data-validity gate (not a tunable scoring param) —
+    # stale depth snapshots are unreliable due to spoofing/cancellation
+    depth = app.state.order_book.get(pair)
+    if depth and depth.get("bids") and depth.get("asks"):
+        book_age = time.time() - depth.get("_last_updated", 0)
+        if book_age <= 30:
+            bid_vol = sum(size for _, size in depth["bids"])
+            ask_vol = sum(size for _, size in depth["asks"])
+            total_vol = bid_vol + ask_vol
+            if total_vol > 0:
+                flow_metrics["book_imbalance"] = (bid_vol - ask_vol) / total_vol
+
     flow_result = compute_order_flow_score(
         flow_metrics,
         regime=tech_result["regime"],
         flow_history=flow_history,
         trend_conviction=tech_result["indicators"].get("trend_conviction", 0.0),
         mr_pressure=tech_result.get("mr_pressure", 0.0),
+        flow_age_seconds=flow_age,
+        asset_scale=asset_scale,
     )
 
     # Persist order flow snapshot for ML training data
@@ -849,6 +881,21 @@ async def run_pipeline(app: FastAPI, candle: dict):
         llm_contribution=llm_contribution, ml_available=ml_available,
         agreement=agreement, emitted=emitted,
     )
+
+    manager: ConnectionManager = app.state.manager
+    await manager.broadcast_scores({
+        "pair": pair,
+        "timeframe": timeframe,
+        "technical": round(tech_result["score"], 1),
+        "order_flow": round(flow_result["score"], 1),
+        "onchain": round(onchain_score, 1) if onchain_available else None,
+        "patterns": round(pat_score, 1) if pat_score else None,
+        "regime_blend": round(indicator_preliminary, 1),
+        "ml_gate": round(ml_score, 1) if ml_score is not None else None,
+        "llm_gate": round(llm_contribution, 2) if llm_contribution else None,
+        "signal": round(final, 1),
+        "emitted": emitted,
+    })
 
     app.state.last_pipeline_cycle = time.time()
 

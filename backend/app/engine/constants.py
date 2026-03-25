@@ -28,14 +28,22 @@ SIGMOID_PARAMS = {
 
 # -- Order flow scoring --
 ORDER_FLOW = {
-    "max_scores": {"funding": 30, "oi": 20, "ls_ratio": 30, "cvd": 20},
-    "sigmoid_steepnesses": {"funding": 400, "oi": 20, "ls_ratio": 6, "cvd": 3},
+    "max_scores": {"funding": 22, "oi": 22, "ls_ratio": 22, "cvd": 22, "book": 12},
+    "sigmoid_steepnesses": {"funding": 400, "oi": 20, "ls_ratio": 6, "cvd": 5, "book": 4},
     "trending_floor": 0.3,
     "recent_window": 3,
     "baseline_window": 7,
     "roc_threshold": 0.0005,
     "roc_steepness": 8000,
     "ls_roc_scale": 0.003,
+    "freshness_fresh_seconds": 300,
+    "freshness_stale_seconds": 900,
+}
+
+ORDER_FLOW_ASSET_SCALES = {
+    "BTC-USDT-SWAP": 1.0,
+    "ETH-USDT-SWAP": 0.85,
+    "WIF-USDT-SWAP": 0.4,
 }
 
 # -- On-chain scoring --
@@ -252,7 +260,7 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "funding_max": {
         "description": "Maximum score contribution from funding rate. Caps how much extreme funding can influence the signal",
         "pipeline_stage": "Order Flow Scoring",
-        "range": "15-50 — funding + oi + ls_ratio max scores must sum <= 100",
+        "range": "10-35 — all five max scores must sum <= 100",
     },
     "oi_max": {
         "description": "Maximum score contribution from open interest changes",
@@ -288,6 +296,26 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "description": "Sigmoid steepness for CVD delta scoring. Higher = more sensitive to volume imbalance",
         "pipeline_stage": "Order Flow Scoring",
         "range": "1-8",
+    },
+    "book_max": {
+        "description": "Maximum score contribution from order book bid/ask imbalance. Low cap because top-5 depth is shallow and spoofable",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "5-20",
+    },
+    "book_steepness": {
+        "description": "Sigmoid steepness for book imbalance scoring. Input is already normalized to [-1, +1]",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "2-8",
+    },
+    "freshness_fresh_seconds": {
+        "description": "Age in seconds below which flow data is considered fully fresh (no confidence penalty)",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "120-600",
+    },
+    "freshness_stale_seconds": {
+        "description": "Age in seconds at which flow data is considered fully stale (confidence decays to zero). Must be greater than freshness_fresh_seconds",
+        "pipeline_stage": "Order Flow Scoring",
+        "range": "600-1800",
     },
     # ── ATR / Levels ──
     "sl": {
@@ -577,6 +605,11 @@ def get_engine_constants() -> dict:
         "order_flow": {
             "max_scores": _wrap(ORDER_FLOW["max_scores"]),
             "sigmoid_steepnesses": _wrap(ORDER_FLOW["sigmoid_steepnesses"]),
+            "asset_scales": _wrap(ORDER_FLOW_ASSET_SCALES),
+            "freshness": _wrap({
+                "fresh_seconds": ORDER_FLOW["freshness_fresh_seconds"],
+                "stale_seconds": ORDER_FLOW["freshness_stale_seconds"],
+            }),
             "regime_params": _wrap({
                 "trending_floor": ORDER_FLOW["trending_floor"],
                 "roc_threshold": ORDER_FLOW["roc_threshold"],

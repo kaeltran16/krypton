@@ -23,6 +23,54 @@ interface Props {
   onRollback?: (id: number) => void;
 }
 
+const PIPELINE_STEPS = ["pending", "shadow", "promoted"] as const;
+const PIPELINE_LABELS: Record<string, string> = {
+  pending: "Review",
+  shadow: "Shadow",
+  promoted: "Live",
+};
+
+function StatusPipeline({ status }: { status: string }) {
+  const isFailed = status === "rejected" || status === "rolled_back";
+  const activeIdx = PIPELINE_STEPS.indexOf(status as typeof PIPELINE_STEPS[number]);
+
+  return (
+    <div className="flex items-center gap-1">
+      {PIPELINE_STEPS.map((step, i) => {
+        const isActive = step === status;
+        const isPast = activeIdx > i;
+        const isFutureOfFailed = isFailed && i > 0;
+        return (
+          <div key={step} className="flex items-center gap-1">
+            {i > 0 && (
+              <div className={`w-3 h-px ${isPast ? "bg-long" : "bg-surface-container"}`} />
+            )}
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+              isActive
+                ? STATUS_STYLE[status] || "bg-dim/15 text-muted"
+                : isPast
+                  ? "bg-long/15 text-long"
+                  : isFutureOfFailed
+                    ? "bg-surface-container text-muted/40"
+                    : "bg-surface-container text-muted"
+            }`}>
+              {PIPELINE_LABELS[step]}
+            </span>
+          </div>
+        );
+      })}
+      {isFailed && (
+        <>
+          <div className="w-3 h-px bg-error/30" />
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-error/15 text-error">
+            {status === "rejected" ? "Rejected" : "Rolled Back"}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ProposalCard({
   proposal,
   descriptions,
@@ -62,11 +110,6 @@ export default function ProposalCard({
           <span className="text-sm font-medium text-on-surface">
             {humanizeKey(p.parameter_group)}
           </span>
-          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${
-            STATUS_STYLE[p.status] || "bg-dim/15 text-muted"
-          }`}>
-            {p.status}
-          </span>
         </div>
         {p.created_at && (
           <span className="text-[10px] text-muted">
@@ -74,6 +117,7 @@ export default function ProposalCard({
           </span>
         )}
       </div>
+      <StatusPipeline status={p.status} />
 
       {/* Diff table */}
       <div className="space-y-0.5">
@@ -132,61 +176,78 @@ export default function ProposalCard({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
-        {p.status === "pending" && (
-          <>
-            <Button
-              variant="primary"
-              size="sm"
-              loading={actionLoading}
-              onClick={() => onApprove?.(p.id)}
-              className="flex-1"
-            >
-              Approve
-            </Button>
+      <div className="space-y-1.5">
+        <div className="flex gap-2">
+          {p.status === "pending" && (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={actionLoading}
+                onClick={() => onApprove?.(p.id)}
+                className="flex-1"
+              >
+                Approve
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={actionLoading}
+                onClick={handleReject}
+                className="flex-1"
+              >
+                {confirmAction === "reject" ? "Confirm Reject?" : "Reject"}
+              </Button>
+            </>
+          )}
+          {p.status === "shadow" && (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={actionLoading}
+                onClick={() => onPromote?.(p.id)}
+                className="flex-1"
+              >
+                Promote Live
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={actionLoading}
+                onClick={handleReject}
+                className="flex-1"
+              >
+                {confirmAction === "reject" ? "Confirm Reject?" : "Reject"}
+              </Button>
+            </>
+          )}
+          {p.status === "promoted" && (
             <Button
               variant="danger"
               size="sm"
               disabled={actionLoading}
-              onClick={handleReject}
+              onClick={handleRollback}
               className="flex-1"
             >
-              {confirmAction === "reject" ? "Confirm Reject?" : "Reject"}
+              {confirmAction === "rollback" ? "Confirm Rollback?" : "Rollback"}
             </Button>
-          </>
+          )}
+        </div>
+        {p.status === "pending" && (
+          <div className="text-[10px] text-muted text-center">
+            Approve starts shadow testing against live signals
+          </div>
         )}
         {p.status === "shadow" && (
-          <>
-            <Button
-              variant="primary"
-              size="sm"
-              loading={actionLoading}
-              onClick={() => onPromote?.(p.id)}
-              className="flex-1"
-            >
-              Promote Early
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              disabled={actionLoading}
-              onClick={handleReject}
-              className="flex-1"
-            >
-              {confirmAction === "reject" ? "Confirm Reject?" : "Reject"}
-            </Button>
-          </>
+          <div className="text-[10px] text-muted text-center">
+            Promote applies these parameters to the live engine
+          </div>
         )}
         {p.status === "promoted" && (
-          <Button
-            variant="danger"
-            size="sm"
-            disabled={actionLoading}
-            onClick={handleRollback}
-            className="flex-1"
-          >
-            {confirmAction === "rollback" ? "Confirm Rollback?" : "Rollback"}
-          </Button>
+          <div className="text-[10px] text-muted text-center">
+            Rollback reverts to previous parameter values
+          </div>
         )}
       </div>
     </div>

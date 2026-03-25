@@ -35,7 +35,9 @@ export default function GroupHealthTable({ groups }: Props) {
                 {g.signals_since_last_opt} signals ago
               </span>
               {g.profit_factor != null && (
-                <span className="text-xs font-mono text-on-surface">
+                <span className={`text-xs font-mono ${
+                  g.profit_factor >= 1.5 ? "text-long" : g.profit_factor >= 1.0 ? "text-on-surface" : "text-short"
+                }`}>
                   PF {g.profit_factor === Infinity ? "\u221E" : g.profit_factor.toFixed(2)}
                 </span>
               )}

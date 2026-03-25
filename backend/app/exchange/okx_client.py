@@ -335,22 +335,25 @@ class OKXClient:
     async def get_funding_costs(self, pair: str) -> list[dict]:
         """Fetch funding fee bills for a pair."""
         path = f"/api/v5/account/bills?type=8&instId={pair}"
-        sign_path = path.split("?")[0]
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
-            resp = await client.get(path, headers=self._headers("GET", sign_path))
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("code") != "0" or not data.get("data"):
-                return []
-            bills = []
-            for b in data["data"]:
-                bills.append({
-                    "pair": b.get("instId"),
-                    "pnl": _safe_float(b.get("pnl")),
-                    "fee": _safe_float(b.get("fee")),
-                    "ts": int(b.get("ts", 0)),
-                })
-            return bills
+        try:
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
+                resp = await client.get(path, headers=self._headers("GET", path))
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("code") != "0" or not data.get("data"):
+                    return []
+                bills = []
+                for b in data["data"]:
+                    bills.append({
+                        "pair": b.get("instId"),
+                        "pnl": _safe_float(b.get("pnl")),
+                        "fee": _safe_float(b.get("fee")),
+                        "ts": int(b.get("ts", 0)),
+                    })
+                return bills
+        except Exception:
+            logger.warning("Failed to fetch funding costs for %s", pair, exc_info=True)
+            return []
 
     async def close_position(self, pair: str, pos_side: str) -> dict:
         """Market-close a position. pos_side is 'long' or 'short'."""
@@ -375,7 +378,7 @@ class OKXClient:
 
     async def get_liquidation_orders(self, inst_id: str) -> list[dict]:
         """Fetch recent liquidation orders for an instrument. Public endpoint, no auth required."""
-        path = f"/api/v5/public/liquidation-orders?instType=SWAP&instId={inst_id}&state=filled"
+        path = f"/api/v5/public/liquidation-orders?instType=SWAP&instId={inst_id}"
         try:
             async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
                 resp = await client.get(path)

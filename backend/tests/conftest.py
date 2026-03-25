@@ -66,6 +66,7 @@ async def _test_lifespan(app: FastAPI):
     app.state.manager.broadcast = AsyncMock()
     app.state.start_time = 1000000.0
     app.state.last_pipeline_cycle = 1000000.0
+    app.state.order_book = {}
 
     mock_db = MagicMock()
     mock_session = AsyncMock()

@@ -53,6 +53,7 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     settings.pairs = ["BTC-USDT-SWAP"]
     app.state.settings = settings
     app.state.order_flow = {"BTC-USDT-SWAP": {}}
+    app.state.order_book = {}
     app.state.prompt_template = prompt_template
     app.state.manager = AsyncMock()
     app.state.db = MagicMock()

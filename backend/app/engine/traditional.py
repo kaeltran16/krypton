@@ -400,6 +400,14 @@ FUNDING_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["funding"]
 OI_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["oi"]
 LS_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["ls_ratio"]
 CVD_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["cvd"]
+FUNDING_MAX = ORDER_FLOW["max_scores"]["funding"]
+OI_MAX = ORDER_FLOW["max_scores"]["oi"]
+LS_MAX = ORDER_FLOW["max_scores"]["ls_ratio"]
+CVD_MAX = ORDER_FLOW["max_scores"]["cvd"]
+BOOK_MAX = ORDER_FLOW["max_scores"]["book"]
+BOOK_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["book"]
+FRESH_SECONDS = ORDER_FLOW["freshness_fresh_seconds"]
+STALE_SECONDS = ORDER_FLOW["freshness_stale_seconds"]
 TRENDING_FLOOR = ORDER_FLOW["trending_floor"]
 RECENT_WINDOW = ORDER_FLOW["recent_window"]
 BASELINE_WINDOW = ORDER_FLOW["baseline_window"]
@@ -428,6 +436,8 @@ def compute_order_flow_score(
     flow_history: list | None = None,
     trend_conviction: float = 0.0,
     mr_pressure: float = 0.0,
+    flow_age_seconds: float | None = None,
+    asset_scale: float = 1.0,
 ) -> dict:
     """Compute order flow score from funding rate, OI changes, and L/S ratio.
 
@@ -457,6 +467,7 @@ def compute_order_flow_score(
     roc_boost = 0.0
     funding_roc = 0.0
     ls_roc = 0.0
+    oi_roc = 0.0
     max_roc = 0.0
 
     if flow_history and len(flow_history) >= TOTAL_SNAPSHOTS:
@@ -465,10 +476,11 @@ def compute_order_flow_score(
 
         funding_roc, has_funding = _field_roc(baseline, recent, lambda s: s.funding_rate)
         ls_roc, has_ls = _field_roc(baseline, recent, lambda s: s.long_short_ratio)
+        oi_roc, has_oi = _field_roc(baseline, recent, lambda s: s.oi_change_pct)
 
-        if has_funding or has_ls:
+        if has_funding or has_ls or has_oi:
             ls_roc_scaled = ls_roc * LS_ROC_SCALE
-            max_roc = max(abs(funding_roc), abs(ls_roc_scaled))
+            max_roc = max(abs(funding_roc), abs(ls_roc_scaled), abs(oi_roc))
             roc_boost = sigmoid_scale(max_roc, center=ROC_THRESHOLD, steepness=ROC_STEEPNESS)
 
     final_mult = contrarian_mult + roc_boost * (1.0 - contrarian_mult)
@@ -477,9 +489,10 @@ def compute_order_flow_score(
     conviction_dampening = 1.0 - effective_conviction
     final_mult = min(final_mult, conviction_dampening)
 
-    # Funding rate — contrarian (max +/-30)
+    # Funding rate — contrarian, asset-scaled
     funding = metrics.get("funding_rate", 0.0)
-    funding_score = sigmoid_score(-funding, center=0, steepness=FUNDING_STEEPNESS) * 30 * final_mult
+    funding_steepness = FUNDING_STEEPNESS * asset_scale
+    funding_score = sigmoid_score(-funding, center=0, steepness=funding_steepness) * FUNDING_MAX * final_mult
 
     # OI change — direction-aware (max +/-20), NOT affected by regime/RoC
     oi_change = metrics.get("open_interest_change_pct", 0.0)
@@ -487,22 +500,38 @@ def compute_order_flow_score(
     if price_dir == 0:
         oi_score = 0.0
     else:
-        oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=OI_STEEPNESS) * 20
+        oi_score = price_dir * sigmoid_score(oi_change, center=0, steepness=OI_STEEPNESS) * OI_MAX
 
-    # L/S ratio — contrarian (max +/-30)
+    # L/S ratio — contrarian, asset-scaled
     ls = metrics.get("long_short_ratio", 1.0)
-    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=LS_STEEPNESS) * 30 * final_mult
+    ls_steepness = LS_STEEPNESS * asset_scale
+    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=ls_steepness) * LS_MAX * final_mult
 
-    # CVD — directional, NOT affected by contrarian or regime (max +/-20)
+    # CVD — directional, trend-based when history available (max +/-CVD_MAX)
     cvd_delta = metrics.get("cvd_delta")
     avg_vol = metrics.get("avg_candle_volume", 0)
-    if cvd_delta is not None and avg_vol > 0:
+    cvd_history = metrics.get("cvd_history")
+
+    if cvd_history and len(cvd_history) >= 5 and avg_vol > 0:
+        arr = np.array(cvd_history[-10:], dtype=float)
+        x = np.arange(len(arr))
+        slope = np.polynomial.polynomial.polyfit(x, arr, 1)[1]
+        cvd_normalized = slope / avg_vol
+        cvd_score = sigmoid_score(cvd_normalized, center=0, steepness=CVD_STEEPNESS) * CVD_MAX
+    elif cvd_delta is not None and avg_vol > 0:
         cvd_normalized = cvd_delta / avg_vol
-        cvd_score = sigmoid_score(cvd_normalized, center=0, steepness=CVD_STEEPNESS) * 20
+        cvd_score = sigmoid_score(cvd_normalized, center=0, steepness=CVD_STEEPNESS) * CVD_MAX
     else:
         cvd_score = 0.0
 
-    total = funding_score + oi_score + ls_score + cvd_score
+    # Book imbalance — directional, NOT contrarian (max +/-BOOK_MAX)
+    book_imbalance = metrics.get("book_imbalance")
+    if book_imbalance is not None:
+        book_score = sigmoid_score(book_imbalance, center=0, steepness=BOOK_STEEPNESS) * BOOK_MAX
+    else:
+        book_score = 0.0
+
+    total = funding_score + oi_score + ls_score + cvd_score + book_score
     score = max(min(round(total), 100), -100)
 
     details = {
@@ -515,24 +544,42 @@ def compute_order_flow_score(
         "oi_score": round(oi_score, 1),
         "ls_score": round(ls_score, 1),
         "cvd_score": round(cvd_score, 1),
+        "book_score": round(book_score, 1),
         "contrarian_mult": round(contrarian_mult, 4),
         "roc_boost": round(roc_boost, 4),
         "final_mult": round(final_mult, 4),
         "funding_roc": round(funding_roc, 8),
         "ls_roc": round(ls_roc, 8),
+        "oi_roc": round(oi_roc, 8),
         "max_roc": round(max_roc, 8),
         "trend_conviction": round(trend_conviction, 2),
+        "asset_scale": round(asset_scale, 4),
     }
 
-    # dynamic confidence: inputs_present / sources_available
-    # Legacy 3 sources always counted. CVD only counted when data is flowing.
+    # dynamic confidence: key-based presence detection
     inputs_present = sum([
-        funding != 0.0,
-        oi_change != 0.0 and price_dir != 0,
-        ls != 1.0,
-        cvd_delta is not None and avg_vol > 0 and cvd_delta != 0.0,
+        "funding_rate" in metrics,
+        "open_interest_change_pct" in metrics and price_dir != 0,
+        "long_short_ratio" in metrics,
+        cvd_delta is not None and avg_vol > 0,
+        book_imbalance is not None,
     ])
-    sources_available = 3 + (1 if cvd_delta is not None else 0)
+    sources_available = sum([
+        "funding_rate" in metrics,
+        "open_interest_change_pct" in metrics,
+        "long_short_ratio" in metrics,
+        cvd_delta is not None,
+        book_imbalance is not None,
+    ])
     flow_confidence = round(inputs_present / max(sources_available, 1), 4)
+
+    # Freshness decay — penalize confidence for stale flow data
+    freshness_decay = 0.0
+    if flow_age_seconds is not None and flow_age_seconds > FRESH_SECONDS:
+        freshness_decay = min(1.0, (flow_age_seconds - FRESH_SECONDS) / (STALE_SECONDS - FRESH_SECONDS))
+        flow_confidence = round(flow_confidence * (1.0 - freshness_decay), 4)
+
+    details["flow_age_seconds"] = round(flow_age_seconds, 1) if flow_age_seconds is not None else None
+    details["freshness_decay"] = round(freshness_decay, 4)
 
     return {"score": score, "details": details, "confidence": flow_confidence}

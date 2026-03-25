@@ -203,7 +203,7 @@ Returns 0-1.0 confidence. Scored separately from the main technical score.
 
 **File:** `engine/traditional.py` (`compute_order_flow_score`)
 
-Applies contrarian bias on derivatives market metrics, modulated by regime and rate-of-change detection.
+Applies contrarian bias on derivatives market metrics, modulated by regime and rate-of-change detection. Directional metrics (OI, CVD, book) are regime-independent.
 
 ### 4.1 Regime-Aware Contrarian Multiplier
 
@@ -214,17 +214,18 @@ contrarian_mult = 1.0 - (trending_strength * (1.0 - trending_floor))
 - `trending_floor = 0.3`: even in strong trends, at least 30% contrarian signal preserved
 - Ranging market: full contrarian (1.0x)
 - Strong trending market: reduced contrarian (~0.3x)
+- Mean-reversion pressure relaxes the floor toward 1.0
 
 ### 4.2 Rate-of-Change Override
 
-Tracks 10 candle flow history (3 recent + 7 baseline). If funding rate or L/S ratio changes rapidly:
+Tracks 10 candle flow history (3 recent + 7 baseline). If funding rate, L/S ratio, or OI change rapidly:
 
 ```
 roc_boost = sigmoid_scale(max_roc, center=0.0005, steepness=8000)
 final_mult = contrarian_mult + roc_boost * (1 - contrarian_mult)
 ```
 
-Rapid shifts in crowd positioning increase contrarian sensitivity even in trends.
+Rapid shifts in crowd positioning or commitment increase contrarian sensitivity even in trends.
 
 ### 4.3 Trend Conviction Dampening
 
@@ -234,21 +235,57 @@ final_mult = min(final_mult, 1.0 - trend_conviction)
 
 High trend conviction further suppresses contrarian order flow signals.
 
-### 4.4 Three Scoring Components
+### 4.4 Five Scoring Components
 
-| Component | Max Score | Logic | Regime-Affected |
-|-----------|-----------|-------|-----------------|
-| Funding Rate | +/-35 | Contrarian: negative funding = bullish | Yes |
-| Open Interest Change | +/-20 | Directional: agrees with price direction | No |
-| Long/Short Ratio | +/-35 | Contrarian: ratio > 1 (more longs) = bearish | Yes |
+| Component | Max Score | Logic | Type | Regime-Affected |
+|-----------|-----------|-------|------|-----------------|
+| Funding Rate | +/-22 | Contrarian: negative funding = bullish | Contrarian | Yes |
+| Open Interest Change | +/-22 | Directional: agrees with price direction | Directional | No |
+| Long/Short Ratio | +/-22 | Contrarian: ratio > 1 (more longs) = bearish | Contrarian | Yes |
+| CVD (trend) | +/-22 | Slope of last 5-10 candle deltas, normalized by volume | Directional | No |
+| Book Imbalance | +/-12 | Top-5 bid/ask volume ratio | Directional | No |
 
-### 4.5 Confidence
+Total max: +/-100. Contrarian components (funding, L/S) have per-asset sigmoid scaling to account for different market microstructure (e.g., WIF funding is 5-10x more volatile than BTC).
+
+### 4.5 Price Direction
+
+Uses 3-candle net move (`candles[-1].close - candles[-4].close`) instead of single-candle body to filter noise from dojis and small counter-trend candles.
+
+### 4.6 CVD Trend Scoring
+
+When >= 5 candle deltas are available, computes linear slope of last 10 deltas normalized by average volume. Falls back to single-candle delta/volume when insufficient history.
+
+### 4.7 Confidence
 
 ```
-confidence = inputs_present / 3.0
+inputs_present = count of keys that produced a scoring contribution
+sources_available = count of keys present in metrics dict
+confidence = inputs_present / sources_available
 ```
 
-Proportional to how many of the three metrics are available.
+Key-based presence detection: `funding_rate=0.0` counts as present (not absent). OI requires nonzero price direction to produce a scoring contribution but still counts as available.
+
+### 4.8 Freshness Decay
+
+Stale flow data (WebSocket dropped) gets confidence-penalized, not score-penalized:
+
+```
+if age > fresh_seconds (300):
+    decay = min(1.0, (age - 300) / (900 - 300))
+    confidence *= (1.0 - decay)
+```
+
+This causes the combiner to redistribute weight to fresher sources (tech, patterns) rather than zeroing out the directional signal.
+
+### 4.9 Per-Asset Sigmoid Calibration
+
+Asset scales multiply contrarian steepnesses (funding, L/S):
+
+| Asset | Scale | Effect |
+|-------|-------|--------|
+| BTC-USDT-SWAP | 1.0 | Baseline |
+| ETH-USDT-SWAP | 0.85 | Slightly wider S-curve |
+| WIF-USDT-SWAP | 0.4 | Much wider — preserves discrimination at extreme funding |
 
 ---
 
