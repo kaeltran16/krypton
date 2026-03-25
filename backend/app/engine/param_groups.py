@@ -22,7 +22,8 @@ PRIORITY_LAYERS: list[set[str]] = [
     {"source_weights", "thresholds"},           # layer 0: biggest impact, fewest params
     {"regime_caps", "regime_outer", "atr_levels"},  # layer 1
     {"sigmoid_curves", "order_flow", "pattern_strengths",
-     "indicator_periods", "mean_reversion", "llm_factors", "onchain"},  # layer 2
+     "indicator_periods", "mean_reversion", "llm_factors", "onchain",
+     "mr_pressure"},  # layer 2
 ]
 
 
@@ -344,6 +345,34 @@ PARAM_GROUPS: dict[str, dict] = {
         "constraints": _onchain_ok,
         "priority": _priority_for("onchain"),
     },
+}
+
+
+def _mr_pressure_ok(c: dict[str, Any]) -> bool:
+    return (
+        c["max_cap_shift"] > 0
+        and 0 < c["confluence_dampening"] < 1
+        and 0 < c["obv_weight"] < 1
+        and 0 < c["mr_llm_trigger"] < 1
+    )
+
+
+PARAM_GROUPS["mr_pressure"] = {
+    "params": {
+        "max_cap_shift": "technical.mr_pressure.max_cap_shift",
+        "confluence_dampening": "technical.mr_pressure.confluence_dampening",
+        "obv_weight": "technical.vol_multiplier.obv_weight",
+        "mr_llm_trigger": "technical.mr_pressure.mr_llm_trigger",
+    },
+    "sweep_method": "grid",
+    "sweep_ranges": {
+        "max_cap_shift": (8, 24, 4),
+        "confluence_dampening": (0.30, 0.90, 0.15),
+        "obv_weight": (0.30, 0.80, 0.10),
+        "mr_llm_trigger": (0.20, 0.45, 0.05),
+    },
+    "constraints": _mr_pressure_ok,
+    "priority": _priority_for("mr_pressure"),
 }
 
 

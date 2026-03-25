@@ -34,6 +34,7 @@ from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
+from app.engine.constants import MR_PRESSURE as MR_PRESSURE_CONST
 from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
@@ -437,6 +438,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
             child_direction, parent_indicators,
             max_score=settings.engine_confluence_max_score,
         )
+        mr_pressure_val = tech_result.get("mr_pressure", 0.0)
+        if mr_pressure_val > 0 and confluence_score != 0:
+            confluence_score = round(confluence_score * (1 - mr_pressure_val * MR_PRESSURE_CONST["confluence_dampening"]))
         tech_result["score"] = max(min(tech_result["score"] + confluence_score, 100), -100)
 
     # Evaluate indicator alerts on this candle's indicators
@@ -486,6 +490,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         regime=tech_result["regime"],
         flow_history=flow_history,
         trend_conviction=tech_result["indicators"].get("trend_conviction", 0.0),
+        mr_pressure=tech_result.get("mr_pressure", 0.0),
     )
 
     # Persist order flow snapshot for ML training data
@@ -768,7 +773,11 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # ── Step 5: LLM gate (on blended score) ──
     llm_result = None
-    if abs(blended) >= settings.engine_llm_threshold and prompt_template:
+    should_call_llm = (
+        abs(blended) >= settings.engine_llm_threshold
+        or mr_pressure_val >= settings.engine_mr_llm_trigger
+    )
+    if should_call_llm and prompt_template:
         direction_label = "LONG" if blended > 0 else "SHORT"
 
         if ml_available and ml_prediction:

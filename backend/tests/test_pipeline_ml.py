@@ -32,6 +32,7 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     settings.engine_onchain_weight = 0.23
     settings.engine_pattern_weight = 0.15
     settings.engine_llm_threshold = 40
+    settings.engine_mr_llm_trigger = 0.30
     settings.engine_llm_timeout_seconds = 30
     settings.engine_ml_weight = 0.25
     settings.ml_sl_min_atr = 0.5

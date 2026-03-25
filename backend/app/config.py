@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     engine_onchain_weight: float = 0.23
     engine_pattern_weight: float = 0.15
     engine_confluence_max_score: int = 15
+    engine_mr_llm_trigger: float = 0.30
 
     # on-chain data
     onchain_enabled: bool = True

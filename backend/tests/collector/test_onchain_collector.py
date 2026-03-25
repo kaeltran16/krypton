@@ -15,7 +15,15 @@ async def test_addr_trend_pct_computed_from_history():
         json.dumps({"v": 850000, "ts": "2026-03-25T01:00:00Z"}),
         json.dumps({"v": 900000, "ts": "2026-03-25T02:00:00Z"}),
     ]
-    mock_redis.lrange = AsyncMock(return_value=history)
+
+    async def _lrange_side_effect(key, start, end):
+        if start == 0 and end == 0:
+            return [history[0]]
+        if start == -1 and end == -1:
+            return [history[-1]]
+        return history
+
+    mock_redis.lrange = AsyncMock(side_effect=_lrange_side_effect)
     mock_redis.rpush = AsyncMock()
     mock_redis.ltrim = AsyncMock()
     mock_redis.expire = AsyncMock()

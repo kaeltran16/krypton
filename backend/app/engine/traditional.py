@@ -5,8 +5,21 @@ import pandas as pd
 
 from app.engine.scoring import sigmoid_score, sigmoid_scale
 from app.engine.regime import compute_regime_mix, blend_caps
+from app.engine.constants import ORDER_FLOW, INDICATOR_PERIODS, MR_PRESSURE, VOL_MULTIPLIER
 
 _HTF_TIMEFRAMES = {"4h", "1D"}
+
+
+def compute_mr_pressure(rsi: float, bb_pos: float, config: dict | None = None) -> float:
+    """Measure mean-reversion indicator extremity (0.0-1.0).
+
+    Multiplicative gate: BOTH RSI and BB position must be extreme.
+    Symmetric for overbought and oversold.
+    """
+    cfg = config or MR_PRESSURE
+    rsi_extremity = max(0, abs(rsi - 50) - cfg["rsi_offset"]) / cfg["rsi_range"]
+    bb_extremity = max(0, abs(bb_pos - 0.5) - cfg["bb_offset"]) / cfg["bb_range"]
+    return min(1.0, rsi_extremity * bb_extremity)
 
 
 def compute_trend_conviction(
@@ -178,7 +191,7 @@ def _obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (direction * volume).cumsum()
 
 
-def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_params: dict | None = None, timeframe: str | None = None) -> dict:
+def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_params: dict | None = None, timeframe: str | None = None, overrides: dict | None = None) -> dict:
     """Compute technical analysis score using orthogonal indicator dimensions.
 
     Returns dict with 'score' (-100 to +100) and 'indicators' dict.
@@ -276,6 +289,17 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     regime = compute_regime_mix(trend_strength, vol_expansion)
     caps = blend_caps(regime, regime_weights)
 
+    _mr_ovr = overrides.get("mr_pressure") if overrides else None
+    mr = {**MR_PRESSURE, **_mr_ovr} if _mr_ovr else MR_PRESSURE
+    _vol_ovr = overrides.get("vol_multiplier") if overrides else None
+    vol = {**VOL_MULTIPLIER, **_vol_ovr} if _vol_ovr else VOL_MULTIPLIER
+
+    mr_pressure_val = compute_mr_pressure(rsi_val, bb_pos, config=mr)
+    if mr_pressure_val > 0:
+        shift = mr_pressure_val * mr["max_cap_shift"]
+        caps["mean_rev_cap"] += shift
+        caps["trend_cap"] -= shift
+
     # === Scoring parameters (shape + blend) ===
     sp = scoring_params or {}
     mr_rsi_steep = sp.get("mean_rev_rsi_steepness", 0.25)
@@ -297,11 +321,33 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     mean_rev_sign = 1 if mean_rev_score > 0 else (-1 if mean_rev_score < 0 else 0)
     squeeze_score = mean_rev_sign * sigmoid_scale(50 - bb_width_pct, center=0, steepness=sq_steep) * caps["squeeze_cap"]
 
-    # 4. Volume confirmation (60/40 split)
-    obv_score = sigmoid_score(obv_slope_norm, center=0, steepness=4) * (caps["volume_cap"] * 0.6)
-    vol_score = candle_direction * sigmoid_score(vol_ratio - 1, center=0, steepness=3.0) * (caps["volume_cap"] * 0.4)
+    # 4. Multiplicative volume confirmation
+    directional = trend_score + mean_rev_score + squeeze_score
 
-    total = trend_score + mean_rev_score + squeeze_score + obv_score + vol_score
+    if directional == 0:
+        total = 0.0
+    else:
+        score_sign = 1 if directional > 0 else -1
+
+        obv_dir = 1 if obv_slope_norm > 0 else -1
+        obv_confirms = (obv_dir == score_sign)
+        obv_strength = sigmoid_scale(abs(obv_slope_norm), center=0, steepness=4)
+
+        candle_confirms = (candle_direction == score_sign)
+        vol_strength = sigmoid_scale(vol_ratio - 1, center=0, steepness=3)
+
+        obv_w = vol["obv_weight"]
+        vol_w = 1.0 - obv_w
+        confirmation = (
+            obv_w * (obv_strength if obv_confirms else 1 - obv_strength)
+            + vol_w * (vol_strength if candle_confirms else 1 - vol_strength)
+        )
+
+        vol_mult_ceil = 1.0 + caps["volume_cap"] / 100
+        vol_mult_floor = 2.0 - vol_mult_ceil
+        vol_mult = vol_mult_floor + (vol_mult_ceil - vol_mult_floor) * confirmation
+        total = directional * vol_mult
+
     score = max(min(round(total), 100), -100)
 
     indicators = {
@@ -329,20 +375,26 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         "ema_50": round(ema_50_val, 2),
         "trend_conviction": round(trend_conviction, 2),
         "divergence": round(divergence, 2),
+        "mr_pressure": round(mr_pressure_val, 4),
     }
 
-    # confidence: combine trend strength + conviction + indicator agreement
-    # indicator_conflict is high when trend and mean-rev scores cancel each other
+    # confidence: directional — either strong trend or strong exhaustion can produce confidence
     indicator_conflict = 1.0 - abs(trend_score + mean_rev_score) / max(abs(trend_score) + abs(mean_rev_score), 1e-6)
-    confidence = (trend_strength * 0.4 + trend_conviction * 0.4 + (1.0 - indicator_conflict) * 0.2)
+    final_sign = 1 if total > 0 else (-1 if total < 0 else 0)
+
+    trend_conf = trend_strength * 0.5 + trend_conviction * 0.5
+    if final_sign != 0 and di_sign != final_sign:
+        trend_conf *= 0.2
+
+    mr_conf = mr_pressure_val
+    thesis_conf = max(trend_conf, mr_conf)
+    confidence = thesis_conf * 0.8 + (1.0 - indicator_conflict) * 0.2
     confidence = max(0.0, min(1.0, confidence))
 
-    return {"score": score, "indicators": indicators, "regime": regime, "caps": caps, "confidence": round(confidence, 4)}
+    return {"score": score, "indicators": indicators, "regime": regime, "caps": caps, "confidence": round(confidence, 4), "mr_pressure": round(mr_pressure_val, 4)}
 
 
 # --- Order flow contrarian bias constants ---
-from app.engine.constants import ORDER_FLOW, INDICATOR_PERIODS
-
 FUNDING_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["funding"]
 OI_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["oi"]
 LS_STEEPNESS = ORDER_FLOW["sigmoid_steepnesses"]["ls_ratio"]
@@ -374,6 +426,7 @@ def compute_order_flow_score(
     regime: dict | None = None,
     flow_history: list | None = None,
     trend_conviction: float = 0.0,
+    mr_pressure: float = 0.0,
 ) -> dict:
     """Compute order flow score from funding rate, OI changes, and L/S ratio.
 
@@ -395,6 +448,10 @@ def compute_order_flow_score(
     else:
         contrarian_mult = 1.0
 
+    if mr_pressure > 0:
+        relaxed_floor = TRENDING_FLOOR + mr_pressure * (1.0 - TRENDING_FLOOR)
+        contrarian_mult = max(contrarian_mult, relaxed_floor)
+
     # rate-of-change override from flow history
     roc_boost = 0.0
     funding_roc = 0.0
@@ -415,7 +472,8 @@ def compute_order_flow_score(
 
     final_mult = contrarian_mult + roc_boost * (1.0 - contrarian_mult)
 
-    conviction_dampening = 1.0 - trend_conviction
+    effective_conviction = trend_conviction * (1.0 - mr_pressure)
+    conviction_dampening = 1.0 - effective_conviction
     final_mult = min(final_mult, conviction_dampening)
 
     # Funding rate — contrarian (max +/-30)

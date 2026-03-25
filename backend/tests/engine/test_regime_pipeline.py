@@ -31,6 +31,7 @@ def _make_app(regime_weights=None):
     app.state.settings.engine_confluence_max_score = 15
     app.state.settings.engine_signal_threshold = 40
     app.state.settings.engine_llm_threshold = 40
+    app.state.settings.engine_mr_llm_trigger = 0.30
     app.state.settings.engine_ml_weight = 0.25
     app.state.settings.ml_confidence_threshold = 0.65
     app.state.settings.onchain_enabled = False
@@ -59,6 +60,9 @@ def _make_app(regime_weights=None):
 
     # Pipeline task tracking
     app.state.pipeline_tasks = set()
+
+    # CVD state
+    app.state.cvd = {}
 
     # Optional subsystems
     app.state.ml_predictors = {}

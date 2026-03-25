@@ -111,6 +111,21 @@ PERFORMANCE_TRACKER = {
     },
 }
 
+# -- Mean-reversion pressure (exhaustion-aware scoring) --
+MR_PRESSURE = {
+    "rsi_offset": 10,
+    "rsi_range": 30,
+    "bb_offset": 0.2,
+    "bb_range": 0.3,
+    "max_cap_shift": 18,
+    "confluence_dampening": 0.7,
+    "mr_llm_trigger": 0.30,
+}
+
+VOL_MULTIPLIER = {
+    "obv_weight": 0.6,
+}
+
 
 PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     # ── Blending / Source Weights ──
@@ -501,9 +516,9 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "range": "10-45",
     },
     "volume_cap": {
-        "description": "Maximum score contribution from volume confirmation within this regime",
+        "description": "Defines the volume confirmation multiplier amplitude. A value of 28 creates a multiplier range of 0.72x-1.28x applied to the directional score",
         "pipeline_stage": "Regime Detection -> Inner Caps",
-        "range": "10-45",
+        "range": "10-45 — larger values create more aggressive volume confirmation/contradiction",
     },
     # ── Regime Outer Weights ──
     "tech_weight": {
@@ -556,6 +571,8 @@ def get_engine_constants() -> dict:
         "technical": {
             "indicator_periods": _wrap(INDICATOR_PERIODS),
             "sigmoid_params": _wrap(SIGMOID_PARAMS),
+            "mr_pressure": _wrap(MR_PRESSURE),
+            "vol_multiplier": _wrap(VOL_MULTIPLIER),
         },
         "order_flow": {
             "max_scores": _wrap(ORDER_FLOW["max_scores"]),

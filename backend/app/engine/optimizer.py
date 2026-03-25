@@ -317,10 +317,21 @@ async def run_counterfactual_eval(
                         import asyncio
 
                         config = BacktestConfig(
-                            pair=pair,
-                            timeframe="15m",
                             signal_threshold=candidate.get("signal", settings.engine_signal_threshold),
                         )
+                        if group_name == "mr_pressure":
+                            config.param_overrides = {
+                                "mr_pressure": {
+                                    k: candidate[k]
+                                    for k in ("max_cap_shift", "confluence_dampening", "mr_llm_trigger")
+                                    if k in candidate
+                                },
+                                "vol_multiplier": {
+                                    k: candidate[k]
+                                    for k in ("obv_weight",)
+                                    if k in candidate
+                                },
+                            }
                         loop = asyncio.get_event_loop()
                         results = await loop.run_in_executor(
                             None,

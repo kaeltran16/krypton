@@ -80,6 +80,7 @@ class BacktestConfig:
     max_concurrent_positions: int = 3
     ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
     confluence_max_score: int = 15
+    param_overrides: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -152,7 +153,7 @@ def run_backtest(
 
         # ── Rule-based scoring (always runs) ──
         try:
-            tech_result = compute_technical_score(df, regime_weights=regime_weights)
+            tech_result = compute_technical_score(df, regime_weights=regime_weights, overrides=config.param_overrides or None)
         except Exception:
             continue
 
