@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # engine
     engine_signal_threshold: int = 40
-    engine_llm_threshold: int = 20
+    engine_llm_threshold: int = 40
     engine_llm_timeout_seconds: int = 30
     engine_traditional_weight: float = 0.40
     engine_flow_weight: float = 0.22

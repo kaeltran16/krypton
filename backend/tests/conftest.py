@@ -38,7 +38,7 @@ async def _test_lifespan(app: FastAPI):
     mock_settings.engine_pattern_weight = 0.15
     mock_settings.engine_ml_weight = 0.25
     mock_settings.engine_signal_threshold = 40
-    mock_settings.engine_llm_threshold = 20
+    mock_settings.engine_llm_threshold = 40
     mock_settings.ml_confidence_threshold = 0.65
     mock_settings.llm_factor_weights = {
         "support_proximity": 6.0, "resistance_proximity": 6.0,

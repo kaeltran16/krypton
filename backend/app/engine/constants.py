@@ -138,12 +138,12 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "signal_threshold": {
         "description": "Minimum absolute blended score required to emit a trading signal. Lower = more signals but lower quality",
         "pipeline_stage": "Combiner -> Signal Emission",
-        "range": "20-60 — must be greater than llm_threshold",
+        "range": "20-60",
     },
     "llm_threshold": {
-        "description": "Score above which LLM analysis is triggered. Scores below this skip LLM entirely",
+        "description": "Score above which LLM analysis is triggered. Scores below this skip LLM entirely. When equal to signal_threshold, LLM acts as a filter on signals that would already emit rather than promoting weak ones",
         "pipeline_stage": "Combiner -> LLM Gate",
-        "range": "10-40 — must be less than signal_threshold",
+        "range": "10-60 — set equal to signal_threshold for filter-only mode",
     },
     "ml_confidence_threshold": {
         "description": "Minimum ML model confidence required for ML predictions to blend into the score",

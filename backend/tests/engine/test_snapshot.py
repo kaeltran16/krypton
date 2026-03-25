@@ -14,7 +14,7 @@ def test_build_engine_snapshot_keys():
         engine_pattern_weight = 0.15
         engine_ml_weight = 0.25
         engine_signal_threshold = 40
-        engine_llm_threshold = 20
+        engine_llm_threshold = 40
         ml_confidence_threshold = 0.65
         llm_factor_weights = {"support_proximity": 6.0}
         llm_factor_total_cap = 35.0
