@@ -257,19 +257,30 @@ async def start_training(body: TrainRequest, request: Request):
                     train_jobs[job_id]["progress"][_pair] = info
 
                 from app.ml.features import get_feature_names
+
+                btc_used = not is_btc and btc_candles_list is not None
                 train_feature_names = get_feature_names(
                     flow_used=flow_used,
                     regime_used=True,
-                    btc_used=not is_btc and btc_candles_list is not None,
+                    btc_used=btc_used,
                 )
+
+                actual_cols = features.shape[1]
+                if len(train_feature_names) != actual_cols:
+                    logger.warning(
+                        "Feature name/matrix mismatch for %s: %d names vs %d columns — "
+                        "predictor will use positional fallback",
+                        pair, len(train_feature_names), actual_cols,
+                    )
+                    train_feature_names = [f"feature_{i}" for i in range(actual_cols)]
 
                 trainer = Trainer(train_config)
                 pair_result = await asyncio.to_thread(
                     trainer.train, features, direction, sl, tp1, tp2, on_progress, train_feature_names,
                 )
 
-                # Patch model_config.json with feature flags so inference
-                # knows which optional feature groups were used
+                # Patch config with feature flags so inference knows which
+                # optional feature groups were used
                 config_path = os.path.join(pair_checkpoint_dir, "model_config.json")
                 if os.path.isfile(config_path):
                     import json as _j
@@ -277,7 +288,7 @@ async def start_training(body: TrainRequest, request: Request):
                         meta = _j.load(f)
                     meta["flow_used"] = flow_used
                     meta["regime_used"] = True
-                    meta["btc_used"] = not is_btc and btc_candles_list is not None
+                    meta["btc_used"] = btc_used
                     with open(config_path, "w") as f:
                         _j.dump(meta, f, indent=2)
 

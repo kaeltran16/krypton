@@ -45,6 +45,13 @@ class Predictor:
         self.btc_used = config.get("btc_used", False)
         self._temperature = config.get("temperature", 1.0)
         self._expected_features = config.get("feature_names", [])
+        if self._expected_features and len(self._expected_features) != self.input_size:
+            logger.warning(
+                "Config inconsistency in %s: input_size=%d but feature_names has %d entries — truncating",
+                os.path.basename(os.path.dirname(checkpoint_path)),
+                self.input_size, len(self._expected_features),
+            )
+            self._expected_features = self._expected_features[:self.input_size]
         self._feature_map = None
         self._available_features = None
 
@@ -94,8 +101,11 @@ class Predictor:
             logger.warning("Missing features for model (filled with 0): %s", missing)
 
         # Precompute numpy index arrays for vectorized gather in _map_features
-        self._out_idx = np.array([i for i, c in enumerate(raw_map) if c >= 0], dtype=np.intp)
-        self._in_idx = np.array([c for c in raw_map if c >= 0], dtype=np.intp)
+        out_idx = np.array([i for i, c in enumerate(raw_map) if c >= 0], dtype=np.intp)
+        in_idx = np.array([c for c in raw_map if c >= 0], dtype=np.intp)
+        valid = out_idx < self.input_size
+        self._out_idx = out_idx[valid]
+        self._in_idx = in_idx[valid]
         self._feature_map = raw_map
 
     def _map_features(self, features: np.ndarray) -> np.ndarray:
@@ -106,7 +116,7 @@ class Predictor:
             return features
 
         n_rows = features.shape[0]
-        mapped = np.zeros((n_rows, len(self._feature_map)), dtype=np.float32)
+        mapped = np.zeros((n_rows, self.input_size), dtype=np.float32)
         mapped[:, self._out_idx] = features[:, self._in_idx]
         return mapped
 
