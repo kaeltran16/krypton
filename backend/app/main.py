@@ -832,9 +832,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 onchain=f"Score: {onchain_score}" if onchain_available else "On-chain data not available.",
                 ml_context=ml_context,
                 news=news_context,
-                preliminary_score=str(indicator_preliminary),
-                blended_score=str(blended),
-                agreement=agreement,
                 candles=json.dumps(candles_data[-20:], indent=2),
             )
             llm_result = await call_openrouter(

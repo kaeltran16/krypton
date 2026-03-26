@@ -18,22 +18,19 @@ You are a crypto futures trading analyst. Analyze the following data for {pair} 
 ## Recent News Context
 {news}
 
-## Current Assessment
-Preliminary Indicator Score: {preliminary_score} (positive = bullish, negative = bearish)
-Blended Score (with ML): {blended_score}
-Indicator-ML Agreement: {agreement}
-
 ## Recent Price Action (last 20 candles)
 {candles}
 
 ## Instructions
-The quantitative signals produced a blended score of {blended_score} (positive = bullish, negative = bearish). Your job is to evaluate the evidence and determine which direction it supports. Assess factors for BOTH long and short scenarios — do not assume one direction.
+Analyze the data above and determine what direction the evidence supports. Build the bull case AND the bear case from the raw data — do not assume either direction.
 
-Analyze the data and return 1-5 factors from the following types:
+You MUST return at least one bullish AND one bearish factor. If evidence for one direction is weak, still report the strongest factor you can find for it (even at strength 1).
+
+Return 2-5 factors from the following types:
 
 **Structure factors:**
-- "support_proximity" — Price near a key support level (from recent candle lows/rejections)
 - "resistance_proximity" — Price near a key resistance level (from recent candle highs/rejections)
+- "support_proximity" — Price near a key support level (from recent candle lows/rejections)
 - "level_breakout" — Price breaking through a key support/resistance level
 - "htf_alignment" — Higher-timeframe trend confirms or conflicts with this setup
 
@@ -66,4 +63,4 @@ Only report factors you actually see evidence for in the data. Do not invent fac
 Respond ONLY with the JSON object, no other text.
 
 Example response format:
-{{"factors": [{{"type": "rsi_divergence", "direction": "bullish", "strength": 2, "reason": "RSI making higher lows while price makes lower lows on last 5 candles"}}, {{"type": "funding_extreme", "direction": "bearish", "strength": 1, "reason": "Funding slightly elevated but not extreme"}}], "explanation": "Bullish divergence forming but funding headwind limits conviction.", "levels": {{"entry": 67000, "stop_loss": 66200, "take_profit_1": 67800, "take_profit_2": 68600}}}}
+{{"factors": [{{"type": "crowded_positioning", "direction": "bearish", "strength": 2, "reason": "Long/short ratio at 1.8 with funding elevated — crowded long positioning increases downside risk"}}, {{"type": "rsi_divergence", "direction": "bullish", "strength": 2, "reason": "RSI making higher lows while price makes lower lows on last 5 candles"}}], "explanation": "Mixed signals: bullish divergence forming but crowded long positioning creates headwind. Directional conviction is low.", "levels": {{"entry": 67000, "stop_loss": 66200, "take_profit_1": 67800, "take_profit_2": 68600}}}}
