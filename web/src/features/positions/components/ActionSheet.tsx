@@ -27,7 +27,7 @@ export function ActionSheet({ title, onClose, children }: Props) {
       ref={dialogRef}
       onClose={handleClose}
       onClick={(e) => { if (e.target === dialogRef.current) handleClose(); }}
-      className="fixed inset-0 m-0 p-0 w-full max-w-full h-full max-h-full bg-transparent border-none flex items-end justify-center backdrop:bg-black/70 backdrop:backdrop-blur-sm backdrop:transition-opacity backdrop:duration-200"
+      className="fixed inset-0 m-0 p-0 w-full max-w-full h-full max-h-full bg-transparent border-none rounded-none overflow-hidden [translate:none] flex items-end justify-center backdrop:bg-black/70 backdrop:backdrop-blur-sm backdrop:transition-opacity backdrop:duration-200"
     >
       <div
         className={`w-full max-w-md bg-surface-container-high rounded-t-xl transition-transform duration-200 ease-out ${
