@@ -95,18 +95,13 @@ def compute_agreement(indicator_preliminary: int, ml_score: float | None) -> str
 
 def compute_llm_contribution(
     factors: list[LLMFactor],
-    direction: str,
     factor_weights: dict[str, float],
     total_cap: float,
 ) -> int:
     total = 0.0
     for f in factors:
         weight = factor_weights.get(f.type.value, 0.0)
-        aligned = (
-            (f.direction == "bullish" and direction == "LONG")
-            or (f.direction == "bearish" and direction == "SHORT")
-        )
-        sign = 1 if aligned else -1
+        sign = 1 if f.direction == "bullish" else (-1 if f.direction == "bearish" else 0)
         total += sign * weight * f.strength
     return round(max(-total_cap, min(total_cap, total)))
 

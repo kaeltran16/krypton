@@ -810,8 +810,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
         or mr_pressure_val >= settings.engine_mr_llm_trigger
     )
     if should_call_llm and prompt_template:
-        direction_label = "LONG" if blended > 0 else "SHORT"
-
         if ml_available and ml_prediction:
             ml_context = (
                 f"Direction: {ml_prediction['direction']}, "
@@ -835,7 +833,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 ml_context=ml_context,
                 news=news_context,
                 preliminary_score=str(indicator_preliminary),
-                direction=direction_label,
                 blended_score=str(blended),
                 agreement=agreement,
                 candles=json.dumps(candles_data[-20:], indent=2),
@@ -852,10 +849,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
     # ── Step 6: Compute final score ──
     llm_contribution = 0
     if llm_result:
-        direction_label = "LONG" if blended > 0 else "SHORT"
         llm_contribution = compute_llm_contribution(
             llm_result.response.factors,
-            direction_label,
             settings.llm_factor_weights,
             settings.llm_factor_total_cap,
         )

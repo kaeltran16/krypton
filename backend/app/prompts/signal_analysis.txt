@@ -19,7 +19,7 @@ You are a crypto futures trading analyst. Analyze the following data for {pair} 
 {news}
 
 ## Current Assessment
-Preliminary Indicator Score: {preliminary_score} (Direction: {direction})
+Preliminary Indicator Score: {preliminary_score} (positive = bullish, negative = bearish)
 Blended Score (with ML): {blended_score}
 Indicator-ML Agreement: {agreement}
 
@@ -27,7 +27,7 @@ Indicator-ML Agreement: {agreement}
 {candles}
 
 ## Instructions
-The quantitative signals produced a {direction} bias with score {blended_score}. Your job is to independently evaluate whether the data supports this direction, or if factors suggest caution or contradiction.
+The quantitative signals produced a blended score of {blended_score} (positive = bullish, negative = bearish). Your job is to evaluate the evidence and determine which direction it supports. Assess factors for BOTH long and short scenarios — do not assume one direction.
 
 Analyze the data and return 1-5 factors from the following types:
 

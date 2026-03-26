@@ -157,25 +157,25 @@ def test_agreement_ml_none():
 # ── compute_llm_contribution ──
 
 
-def test_llm_contribution_single_aligned_factor():
-    """Single bullish factor on LONG signal = positive contribution."""
+def test_llm_contribution_single_bullish_factor():
+    """Single bullish factor = positive contribution."""
     factors = [LLMFactor(type="rsi_divergence", direction="bullish", strength=2, reason="test")]
-    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
-    assert result == round(7.0 * 2)  # weight=7, strength=2, aligned=+1
+    result = compute_llm_contribution(factors, DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == round(7.0 * 2)
 
 
-def test_llm_contribution_single_opposing_factor():
-    """Bearish factor on LONG signal = negative contribution."""
+def test_llm_contribution_single_bearish_factor():
+    """Bearish factor = negative contribution."""
     factors = [LLMFactor(type="rsi_divergence", direction="bearish", strength=2, reason="test")]
-    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    result = compute_llm_contribution(factors, DEFAULT_FACTOR_WEIGHTS, 35.0)
     assert result == round(-7.0 * 2)
 
 
-def test_llm_contribution_short_direction():
-    """Bearish factor on SHORT signal = positive (aligned)."""
+def test_llm_contribution_bearish_always_negative():
+    """Bearish factor always produces negative contribution regardless of context."""
     factors = [LLMFactor(type="funding_extreme", direction="bearish", strength=3, reason="test")]
-    result = compute_llm_contribution(factors, "SHORT", DEFAULT_FACTOR_WEIGHTS, 35.0)
-    assert result == round(5.0 * 3)  # aligned with SHORT
+    result = compute_llm_contribution(factors, DEFAULT_FACTOR_WEIGHTS, 35.0)
+    assert result == round(-5.0 * 3)
 
 
 def test_llm_contribution_multiple_factors():
@@ -185,7 +185,7 @@ def test_llm_contribution_multiple_factors():
         LLMFactor(type="rsi_divergence", direction="bullish", strength=1, reason="mild div"),
         LLMFactor(type="funding_extreme", direction="bearish", strength=2, reason="elevated"),
     ]
-    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    result = compute_llm_contribution(factors, DEFAULT_FACTOR_WEIGHTS, 35.0)
     expected = round((8.0 * 3) + (7.0 * 1) + (-5.0 * 2))  # 24 + 7 - 10 = 21
     assert result == expected
 
@@ -197,8 +197,7 @@ def test_llm_contribution_capped_positive():
         LLMFactor(type="htf_alignment", direction="bullish", strength=3, reason="b"),
         LLMFactor(type="rsi_divergence", direction="bullish", strength=3, reason="c"),
     ]
-    # Raw: 24 + 21 + 21 = 66, should be capped at 35
-    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    result = compute_llm_contribution(factors, DEFAULT_FACTOR_WEIGHTS, 35.0)
     assert result == 35
 
 
@@ -209,13 +208,13 @@ def test_llm_contribution_capped_negative():
         LLMFactor(type="htf_alignment", direction="bearish", strength=3, reason="b"),
         LLMFactor(type="rsi_divergence", direction="bearish", strength=3, reason="c"),
     ]
-    result = compute_llm_contribution(factors, "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    result = compute_llm_contribution(factors, DEFAULT_FACTOR_WEIGHTS, 35.0)
     assert result == -35
 
 
 def test_llm_contribution_empty_factors():
     """Empty factor list returns 0."""
-    result = compute_llm_contribution([], "LONG", DEFAULT_FACTOR_WEIGHTS, 35.0)
+    result = compute_llm_contribution([], DEFAULT_FACTOR_WEIGHTS, 35.0)
     assert result == 0
 
 
@@ -223,8 +222,8 @@ def test_llm_contribution_custom_weights():
     """Custom weight dict overrides defaults."""
     custom = {"rsi_divergence": 10.0}
     factors = [LLMFactor(type="rsi_divergence", direction="bullish", strength=2, reason="test")]
-    result = compute_llm_contribution(factors, "LONG", custom, 35.0)
-    assert result == 20  # 10.0 * 2
+    result = compute_llm_contribution(factors, custom, 35.0)
+    assert result == 20
 
 
 # ── compute_final_score (new signature) ──

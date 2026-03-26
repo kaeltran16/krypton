@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.engine.scoring import sigmoid_score, sigmoid_scale
 from app.engine.regime import compute_regime_mix, blend_caps
-from app.engine.constants import ORDER_FLOW, INDICATOR_PERIODS, MR_PRESSURE, VOL_MULTIPLIER
+from app.engine.constants import ORDER_FLOW, INDICATOR_PERIODS, MR_PRESSURE, VOL_MULTIPLIER, SIGMOID_PARAMS
 
 _HTF_TIMEFRAMES = {"4h", "1D"}
 
@@ -28,17 +28,16 @@ def compute_trend_conviction(
     ema_21: float,
     ema_50: float,
     adx: float,
-    di_plus: float,
-    di_minus: float,
+    di_direction: float,
     atr: float = 1.0,
 ) -> dict:
     """Compute trend conviction from EMA alignment, ADX strength, and price position.
 
     Returns dict with:
         conviction: 0.0 (no trend) to 1.0 (strong directional trend)
-        direction: +1 (bullish) or -1 (bearish), from DI+/DI-
+        direction: +1 (bullish) or -1 (bearish), from di_direction
     """
-    direction = 1 if di_plus > di_minus else -1
+    direction = 1 if di_direction > 0 else -1
 
     # 1. Continuous EMA alignment: normalized distance between EMA pairs through sigmoid
     if atr > 0:
@@ -271,10 +270,18 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     ema_50_val = float(ema_50[last])
     close_val = float(close[last])
 
+    di_sum = di_plus_val + di_minus_val
+    di_spread = (di_plus_val - di_minus_val) / di_sum if di_sum > 0 else 0.0
+
+    # === Scoring parameters (shape + blend) ===
+    sp = scoring_params or {}
+
+    di_direction = sigmoid_score(di_spread, center=0, steepness=sp.get("di_spread_steepness", SIGMOID_PARAMS["di_spread_steepness"]))
+
     tc = compute_trend_conviction(
         close=close_val,
         ema_9=ema_9_val, ema_21=ema_21_val, ema_50=ema_50_val,
-        adx=adx_val, di_plus=di_plus_val, di_minus=di_minus_val,
+        adx=adx_val, di_direction=di_direction,
         atr=atr_val,
     )
     trend_conviction = tc["conviction"]
@@ -282,9 +289,6 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     divergence = 0.0
     if timeframe in _HTF_TIMEFRAMES:
         divergence = detect_divergence(close, rsi, lookback=50, order=3)
-
-    # === Scoring parameters (shape + blend) ===
-    sp = scoring_params or {}
 
     adx_center = getattr(regime_weights, "adx_center", 20.0) if regime_weights else 20.0
     trend_strength = sigmoid_scale(adx_val, center=sp.get("trend_strength_center", adx_center), steepness=sp.get("trend_strength_steepness", 0.25))
@@ -310,8 +314,7 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
 
     # === Scoring (caps from regime-aware blending) ===
     # 1. Trend
-    di_sign = 1 if di_plus_val > di_minus_val else -1
-    trend_score = di_sign * sigmoid_scale(adx_val, center=15, steepness=sp.get("trend_score_steepness", 0.30)) * caps["trend_cap"]
+    trend_score = di_direction * sigmoid_scale(adx_val, center=15, steepness=sp.get("trend_score_steepness", 0.30)) * caps["trend_cap"]
 
     # 2. Unified mean reversion (RSI + BB position)
     rsi_raw = sigmoid_score(50 - rsi_val, center=0, steepness=mr_rsi_steep)
@@ -319,8 +322,9 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     mean_rev_score = (blend_ratio * rsi_raw + (1 - blend_ratio) * bb_pos_raw) * caps["mean_rev_cap"]
 
     # 3. Squeeze / expansion
-    mean_rev_sign = 1 if mean_rev_score > 0 else (-1 if mean_rev_score < 0 else 0)
-    squeeze_score = mean_rev_sign * sigmoid_scale(50 - bb_width_pct, center=0, steepness=sq_steep) * caps["squeeze_cap"]
+    directional_sum = trend_score + mean_rev_score
+    directional_sign = 1 if directional_sum > 0 else (-1 if directional_sum < 0 else 0)
+    squeeze_score = directional_sign * sigmoid_scale(50 - bb_width_pct, center=0, steepness=sq_steep) * caps["squeeze_cap"]
 
     # 4. Multiplicative volume confirmation
     directional = trend_score + mean_rev_score + squeeze_score
@@ -365,6 +369,8 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
         "atr": round(atr_val, 4),
         "mean_rev_score": round(mean_rev_score, 2),
         "squeeze_score": round(squeeze_score, 2),
+        "trend_score": round(trend_score, 2),
+        "di_direction": round(di_direction, 4),
         "mean_rev_rsi_raw": round(rsi_raw, 4),
         "mean_rev_bb_pos_raw": round(bb_pos_raw, 4),
         "regime_trending": round(regime["trending"], 4),
@@ -384,6 +390,7 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     final_sign = 1 if total > 0 else (-1 if total < 0 else 0)
 
     trend_conf = trend_strength * 0.5 + trend_conviction * 0.5
+    di_sign = 1 if di_direction > 0 else (-1 if di_direction < 0 else 0)
     if final_sign != 0 and di_sign != final_sign:
         trend_conf *= 0.2
 
@@ -492,7 +499,7 @@ def compute_order_flow_score(
     # Funding rate — contrarian, asset-scaled
     funding = metrics.get("funding_rate", 0.0)
     funding_steepness = FUNDING_STEEPNESS * asset_scale
-    funding_score = sigmoid_score(-funding, center=0, steepness=funding_steepness) * FUNDING_MAX * final_mult
+    funding_score = sigmoid_score(-funding, center=0, steepness=funding_steepness) * FUNDING_MAX
 
     # OI change — direction-aware (max +/-20), NOT affected by regime/RoC
     oi_change = metrics.get("open_interest_change_pct", 0.0)
@@ -505,7 +512,7 @@ def compute_order_flow_score(
     # L/S ratio — contrarian, asset-scaled
     ls = metrics.get("long_short_ratio", 1.0)
     ls_steepness = LS_STEEPNESS * asset_scale
-    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=ls_steepness) * LS_MAX * final_mult
+    ls_score = sigmoid_score(1.0 - ls, center=0, steepness=ls_steepness) * LS_MAX
 
     # CVD — directional, trend-based when history available (max +/-CVD_MAX)
     cvd_delta = metrics.get("cvd_delta")
@@ -531,7 +538,7 @@ def compute_order_flow_score(
     else:
         book_score = 0.0
 
-    total = funding_score + oi_score + ls_score + cvd_score + book_score
+    total = (funding_score + oi_score + ls_score + cvd_score + book_score) * final_mult
     score = max(min(round(total), 100), -100)
 
     details = {

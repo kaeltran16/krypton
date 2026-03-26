@@ -199,6 +199,7 @@ PARAM_GROUPS: dict[str, dict] = {
             "trend_score_steepness": "technical.sigmoid_params.trend_score_steepness",
             "obv_slope_steepness": "technical.sigmoid_params.obv_slope_steepness",
             "volume_ratio_steepness": "technical.sigmoid_params.volume_ratio_steepness",
+            "di_spread_steepness": "technical.sigmoid_params.di_spread_steepness",
         },
         "sweep_method": "de",
         "sweep_ranges": {
@@ -209,6 +210,7 @@ PARAM_GROUPS: dict[str, dict] = {
             "trend_score_steepness": (0.10, 0.60, None),
             "obv_slope_steepness": (1.0, 8.0, None),
             "volume_ratio_steepness": (1.0, 6.0, None),
+            "di_spread_steepness": (1.0, 6.0, None),
         },
         "constraints": _positive_values,
         "priority": _priority_for("sigmoid_curves"),

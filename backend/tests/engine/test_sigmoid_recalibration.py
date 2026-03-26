@@ -41,15 +41,17 @@ def test_order_flow_uses_constant_steepness():
     assert abs(result["details"]["oi_score"]) > 2.0, "OI score too small with recalibrated sigmoid"
 
 
+from app.engine.scoring import sigmoid_score
 from app.engine.traditional import compute_trend_conviction
 
 
 def test_ema_alignment_is_continuous():
     """EMA alignment should produce continuous values, not discrete 0/0.5/1.0 steps."""
+    di_dir = sigmoid_score((30 - 15) / (30 + 15), center=0, steepness=3.0)
     r1 = compute_trend_conviction(close=110, ema_9=108, ema_21=105, ema_50=100, atr=2.0,
-                                   adx=25.0, di_plus=30.0, di_minus=15.0)
+                                   adx=25.0, di_direction=di_dir)
     r2 = compute_trend_conviction(close=101, ema_9=100.5, ema_21=100.0, ema_50=99.0, atr=2.0,
-                                   adx=25.0, di_plus=30.0, di_minus=15.0)
+                                   adx=25.0, di_direction=di_dir)
 
     assert r1["direction"] == 1
     assert r2["direction"] == 1
@@ -59,9 +61,10 @@ def test_ema_alignment_is_continuous():
 
 def test_ema_alignment_preserves_direction():
     """Bearish EMA alignment should produce negative direction."""
+    di_dir = sigmoid_score((12 - 28) / (12 + 28), center=0, steepness=3.0)
     r = compute_trend_conviction(
         close=95, ema_9=96, ema_21=98, ema_50=100, atr=2.0,
-        adx=25.0, di_plus=12.0, di_minus=28.0,
+        adx=25.0, di_direction=di_dir,
     )
     assert r["direction"] == -1
     assert r["conviction"] > 0.3
@@ -69,9 +72,10 @@ def test_ema_alignment_preserves_direction():
 
 def test_ema_alignment_atr_zero_no_crash():
     """ATR=0 should not cause division error."""
+    di_dir = sigmoid_score((30 - 15) / (30 + 15), center=0, steepness=3.0)
     r = compute_trend_conviction(
         close=105, ema_9=104, ema_21=102, ema_50=100, atr=0.0,
-        adx=25.0, di_plus=30.0, di_minus=15.0,
+        adx=25.0, di_direction=di_dir,
     )
     assert r["direction"] == 1
     assert 0.0 <= r["conviction"] <= 1.0

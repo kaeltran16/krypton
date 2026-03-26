@@ -24,6 +24,7 @@ SIGMOID_PARAMS = {
     "trend_score_steepness": 0.30,
     "obv_slope_steepness": 4,
     "volume_ratio_steepness": 3.0,
+    "di_spread_steepness": 3.0,
 }
 
 # -- Order flow scoring --
@@ -233,6 +234,11 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "volume_ratio_steepness": {
         "description": "Steepness of the volume ratio sigmoid — controls how relative volume maps to score",
         "pipeline_stage": "Technical Scoring -> Volume",
+        "range": "1.0-6.0",
+    },
+    "di_spread_steepness": {
+        "description": "Sigmoid steepness for continuous DI direction mapping. Controls how DI+/DI- spread maps to directional strength [-1, +1]. Higher = sharper transition near equal DI",
+        "pipeline_stage": "Technical Scoring -> Trend",
         "range": "1.0-6.0",
     },
     # ── Mean Reversion ──

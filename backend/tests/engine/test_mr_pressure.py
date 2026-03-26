@@ -211,13 +211,13 @@ class TestOrderFlowMrPressure:
         result_mr = compute_order_flow_score(metrics, regime=regime, trend_conviction=0.8, mr_pressure=0.69)
         assert abs(result_mr["score"]) > abs(result_no_mr["score"])
 
-    def test_oi_unaffected_by_mr_pressure(self):
-        """OI score is direction-aware, not contrarian — mr_pressure shouldn't affect it."""
+    def test_oi_dampened_by_mr_pressure(self):
+        """Higher mr_pressure relaxes conviction dampening, allowing higher total score."""
         metrics = {"open_interest_change_pct": 0.05, "price_direction": 1}
         regime = {"trending": 0.8, "ranging": 0.1, "volatile": 0.05, "steady": 0.05}
         result_low = compute_order_flow_score(metrics, regime=regime, trend_conviction=0.5, mr_pressure=0.0)
         result_high = compute_order_flow_score(metrics, regime=regime, trend_conviction=0.5, mr_pressure=0.7)
-        assert result_low["score"] == result_high["score"]
+        assert abs(result_high["score"]) >= abs(result_low["score"])
 
 
 from app.engine.constants import MR_PRESSURE as MR_PRESSURE_CONST

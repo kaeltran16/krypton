@@ -23,7 +23,21 @@ Technical Indicators:
 Order Flow:
 {order_flow}
 
-Preliminary Score: {preliminary_score} ({direction})
+Patterns:
+{patterns}
+
+On-chain:
+{onchain}
+
+ML Context:
+{ml_context}
+
+News:
+{news}
+
+Preliminary Score: {preliminary_score} (positive = bullish, negative = bearish)
+Blended Score: {blended_score}
+Agreement: {agreement}
 
 Recent Candles (last 20):
 {candles}
@@ -62,8 +76,13 @@ def test_render_prompt(prompt_file):
         timeframe="15m",
         indicators="RSI: 32, EMA9: 67100",
         order_flow="Funding: 0.0001, L/S: 1.2",
+        patterns="No patterns detected.",
+        onchain="On-chain data not available.",
+        ml_context="ML model not available.",
+        news="No recent news.",
         preliminary_score="72",
-        direction="LONG",
+        blended_score="72",
+        agreement="neutral",
         candles="[candle data here]",
     )
     assert "BTC-USDT-SWAP" in rendered

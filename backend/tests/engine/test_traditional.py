@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
+from app.engine.scoring import sigmoid_score
 from app.engine.traditional import compute_technical_score
 
 
@@ -205,39 +206,43 @@ class TestDetectDivergence:
 class TestTrendConviction:
     def test_full_bearish_conviction(self):
         """Aligned bearish EMAs + strong ADX + price below all EMAs = high conviction."""
+        di_dir = sigmoid_score((10 - 30) / (10 + 30), center=0, steepness=3.0)
         result = compute_trend_conviction(
             close=90.0,
             ema_9=95.0, ema_21=98.0, ema_50=100.0,
-            adx=35.0, di_plus=10.0, di_minus=30.0,
+            adx=35.0, di_direction=di_dir,
         )
         assert result["conviction"] > 0.8
         assert result["direction"] == -1
 
     def test_full_bullish_conviction(self):
         """Aligned bullish EMAs + strong ADX + price above all EMAs = high conviction."""
+        di_dir = sigmoid_score((30 - 10) / (30 + 10), center=0, steepness=3.0)
         result = compute_trend_conviction(
             close=110.0,
             ema_9=105.0, ema_21=102.0, ema_50=100.0,
-            adx=35.0, di_plus=30.0, di_minus=10.0,
+            adx=35.0, di_direction=di_dir,
         )
         assert result["conviction"] > 0.8
         assert result["direction"] == 1
 
     def test_no_trend_low_conviction(self):
         """Tangled EMAs + low ADX = low conviction."""
+        di_dir = sigmoid_score((15 - 14) / (15 + 14), center=0, steepness=3.0)
         result = compute_trend_conviction(
             close=100.0,
             ema_9=100.5, ema_21=99.5, ema_50=100.2,
-            adx=12.0, di_plus=15.0, di_minus=14.0,
+            adx=12.0, di_direction=di_dir,
         )
         assert result["conviction"] < 0.4
 
     def test_partial_alignment_moderate_conviction(self):
         """Two EMAs aligned but not all three = moderate conviction."""
+        di_dir = sigmoid_score((12 - 25) / (12 + 25), center=0, steepness=3.0)
         result = compute_trend_conviction(
             close=97.0,
-            ema_9=96.0, ema_21=99.0, ema_50=98.0,  # 9 < 50 < 21, not fully aligned
-            adx=28.0, di_plus=12.0, di_minus=25.0,
+            ema_9=96.0, ema_21=99.0, ema_50=98.0,
+            adx=28.0, di_direction=di_dir,
         )
         assert 0.3 <= result["conviction"] <= 0.7
 
@@ -247,39 +252,41 @@ class TestTrendConviction:
             result = compute_trend_conviction(
                 close=close,
                 ema_9=100.0, ema_21=100.0, ema_50=100.0,
-                adx=adx, di_plus=20.0, di_minus=20.0,
+                adx=adx, di_direction=0.0,
             )
             assert 0.0 <= result["conviction"] <= 1.0
 
     def test_direction_from_di(self):
-        """Direction follows DI+/DI- regardless of EMA order."""
+        """Direction follows di_direction sign."""
+        di_dir = sigmoid_score((25 - 15) / (25 + 15), center=0, steepness=3.0)
         result = compute_trend_conviction(
             close=100.0,
             ema_9=101.0, ema_21=102.0, ema_50=103.0,
-            adx=25.0, di_plus=25.0, di_minus=15.0,
+            adx=25.0, di_direction=di_dir,
         )
-        assert result["direction"] == 1  # DI+ > DI- = bullish
+        assert result["direction"] == 1  # positive di_direction = bullish
 
     def test_equal_di_low_conviction(self):
-        """When DI+ == DI-, there is no clear trend — conviction should be low."""
+        """When DI+ == DI-, di_direction=0 — conviction should be low."""
         result = compute_trend_conviction(
             close=100.0,
             ema_9=100.0, ema_21=100.0, ema_50=100.0,
-            adx=15.0, di_plus=20.0, di_minus=20.0,
+            adx=15.0, di_direction=0.0,
         )
         assert result["conviction"] < 0.4
 
     def test_price_confirm_requires_direction_alignment(self):
         """Price below all EMAs in a bullish trend should NOT confirm the trend."""
+        di_dir = sigmoid_score((25 - 15) / (25 + 15), center=0, steepness=3.0)
         result_misaligned = compute_trend_conviction(
             close=90.0,
             ema_9=95.0, ema_21=98.0, ema_50=100.0,
-            adx=30.0, di_plus=25.0, di_minus=15.0,  # bullish DI
+            adx=30.0, di_direction=di_dir,
         )
         result_aligned = compute_trend_conviction(
             close=110.0,
             ema_9=105.0, ema_21=102.0, ema_50=100.0,
-            adx=30.0, di_plus=25.0, di_minus=15.0,  # bullish DI
+            adx=30.0, di_direction=di_dir,
         )
         assert result_aligned["conviction"] > result_misaligned["conviction"]
 
@@ -537,14 +544,14 @@ class TestOrderFlowRegimeScaling:
         assert result_with["score"] == result_without["score"]
 
     def test_trending_regime_reduces_contrarian(self):
-        """Pure trending regime (trending=1) reduces contrarian to ~30%."""
+        """Pure trending regime (trending=1) reduces total flow score."""
         regime_trending = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         regime_ranging = {"trending": 0.0, "ranging": 1.0, "volatile": 0.0, "steady": 0.0}
         metrics = {"funding_rate": -0.0005, "long_short_ratio": 0.8}
         score_trending = abs(compute_order_flow_score(metrics, regime=regime_trending)["score"])
         score_ranging = abs(compute_order_flow_score(metrics, regime=regime_ranging)["score"])
         ratio = score_trending / score_ranging
-        assert 0.25 <= ratio <= 0.40, f"Expected ~30% ratio, got {ratio:.2f}"
+        assert 0.20 <= ratio <= 0.50, f"Expected dampened ratio, got {ratio:.2f}"
 
     def test_mixed_regime_interpolates(self):
         """Mixed regime gives intermediate contrarian strength."""
@@ -557,13 +564,13 @@ class TestOrderFlowRegimeScaling:
         score_ranging = abs(compute_order_flow_score(metrics, regime=regime_ranging)["score"])
         assert score_trending < score_mixed < score_ranging
 
-    def test_oi_unaffected_by_regime(self):
-        """OI score is not affected by regime scaling."""
+    def test_oi_dampened_by_regime(self):
+        """OI score is dampened via total when regime is trending."""
         regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         metrics = {"open_interest_change_pct": 0.05, "price_direction": 1}
         result_with = compute_order_flow_score(metrics, regime=regime)
         result_without = compute_order_flow_score(metrics)
-        assert result_with["score"] == result_without["score"]
+        assert abs(result_with["score"]) <= abs(result_without["score"])
 
 
 def _make_snapshots(funding_rates, ls_ratios=None, oi_changes=None):
@@ -673,19 +680,22 @@ class TestUnifiedMeanReversion:
         r2 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.1})
         assert r1["indicators"]["mean_rev_score"] != r2["indicators"]["mean_rev_score"]
 
-    def test_squeeze_sign_matches_mean_rev_sign(self):
-        """Squeeze score sign must match mean_rev_score sign (direction inheritance)."""
+    def test_squeeze_sign_matches_dominant_thesis(self):
+        """Squeeze score sign matches trend_score + mean_rev_score, not just MR."""
         for direction in ("up", "down"):
             df = _make_candles(80, direction)
             result = compute_technical_score(df)
-            mr = result["indicators"]["mean_rev_score"]
-            sq = result["indicators"]["squeeze_score"]
-            if mr > 0:
-                assert sq >= 0, f"{direction}: squeeze should be >= 0 when mean_rev > 0"
-            elif mr < 0:
-                assert sq <= 0, f"{direction}: squeeze should be <= 0 when mean_rev < 0"
+            indicators = result["indicators"]
+            trend = indicators["trend_score"]
+            mr = indicators["mean_rev_score"]
+            sq = indicators["squeeze_score"]
+            directional_sum = trend + mr
+            if directional_sum > 0:
+                assert sq >= 0, f"{direction}: squeeze should be >= 0 when dominant thesis is bullish"
+            elif directional_sum < 0:
+                assert sq <= 0, f"{direction}: squeeze should be <= 0 when dominant thesis is bearish"
             else:
-                assert sq == 0, f"{direction}: squeeze must be 0 when mean_rev == 0"
+                assert sq == 0, f"{direction}: squeeze must be 0 when dominant thesis is neutral"
 
     def test_partial_scoring_params_uses_defaults(self):
         """Missing keys in scoring_params should fall back to defaults, not crash."""
@@ -722,12 +732,12 @@ class TestOrderFlowTrendConviction:
         result_with = compute_order_flow_score(metrics, trend_conviction=0.0)
         assert result_without["score"] == result_with["score"]
 
-    def test_oi_unaffected_by_conviction(self):
-        """OI score is direction-aware, not contrarian, so conviction shouldn't affect it."""
+    def test_oi_dampened_by_conviction(self):
+        """OI score is dampened via total when conviction is high."""
         metrics = {"open_interest_change_pct": 0.05, "price_direction": 1}
         result_low = compute_order_flow_score(metrics, trend_conviction=0.0)
         result_high = compute_order_flow_score(metrics, trend_conviction=0.9)
-        assert result_low["score"] == result_high["score"]
+        assert abs(result_low["score"]) >= abs(result_high["score"])
 
     def test_conviction_stacks_with_regime(self):
         """Trending regime + high conviction should suppress more than either alone."""
@@ -799,12 +809,14 @@ class TestCVDScoring:
         assert result["score"] < 0
         assert result["details"]["cvd_score"] < 0
 
-    def test_cvd_not_affected_by_contrarian_mult(self):
+    def test_cvd_subscore_is_pre_dampening(self):
+        """CVD sub-score in details is the raw pre-dampening value."""
         metrics = {"cvd_delta": 500.0, "avg_candle_volume": 1000.0}
         regime_trending = {"trending": 0.8, "ranging": 0.1, "volatile": 0.05, "steady": 0.05}
         result_trending = compute_order_flow_score(metrics, regime=regime_trending)
         result_no_regime = compute_order_flow_score(metrics)
         assert result_trending["details"]["cvd_score"] == result_no_regime["details"]["cvd_score"]
+        assert abs(result_trending["score"]) < abs(result_no_regime["score"])
 
     def test_cvd_max_bounded(self):
         metrics = {"cvd_delta": 99999.0, "avg_candle_volume": 1.0}
@@ -1186,3 +1198,64 @@ class TestOrderFlowConstants:
         from app.engine.constants import ORDER_FLOW_ASSET_SCALES
         for pair in ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "WIF-USDT-SWAP"]:
             assert pair in ORDER_FLOW_ASSET_SCALES, f"Missing asset scale for {pair}"
+
+
+class TestContinuousDIDirection:
+    """Tests for continuous DI direction via sigmoid_score."""
+
+    def test_sigmoid_score_strong_bullish(self):
+        """DI+=35, DI-=10 -> spread=0.56 -> strong positive direction."""
+        from app.engine.scoring import sigmoid_score
+        di_spread = (35 - 10) / (35 + 10)
+        result = sigmoid_score(di_spread, center=0, steepness=3.0)
+        assert 0.60 <= result <= 0.80
+
+    def test_sigmoid_score_moderate_bullish(self):
+        """DI+=22, DI-=15 -> spread=0.19 -> moderate positive direction."""
+        from app.engine.scoring import sigmoid_score
+        di_spread = (22 - 15) / (22 + 15)
+        result = sigmoid_score(di_spread, center=0, steepness=3.0)
+        assert 0.20 <= result <= 0.40
+
+    def test_sigmoid_score_weak_bullish(self):
+        """DI+=16, DI-=15 -> spread=0.03 -> sigmoid ~0.09."""
+        from app.engine.scoring import sigmoid_score
+        di_spread = (16 - 15) / (16 + 15)
+        result = sigmoid_score(di_spread, center=0, steepness=3.0)
+        assert 0.0 <= result <= 0.20
+
+    def test_sigmoid_score_strong_bearish(self):
+        """DI+=10, DI-=30 -> spread=-0.50 -> strong negative direction."""
+        from app.engine.scoring import sigmoid_score
+        di_spread = (10 - 30) / (10 + 30)
+        result = sigmoid_score(di_spread, center=0, steepness=3.0)
+        assert -0.75 <= result <= -0.55
+
+    def test_sigmoid_score_symmetry(self):
+        """Positive and negative spreads are symmetric."""
+        from app.engine.scoring import sigmoid_score
+        pos = sigmoid_score(0.3, center=0, steepness=3.0)
+        neg = sigmoid_score(-0.3, center=0, steepness=3.0)
+        assert abs(pos + neg) < 1e-10
+
+    def test_sigmoid_score_zero_spread(self):
+        """Equal DI -> spread=0 -> sigmoid=0."""
+        from app.engine.scoring import sigmoid_score
+        result = sigmoid_score(0.0, center=0, steepness=3.0)
+        assert result == 0.0
+
+    def test_di_sum_zero_returns_zero_direction(self):
+        """When DI+ and DI- are both zero, direction should be 0."""
+        from app.engine.scoring import sigmoid_score
+        di_plus, di_minus = 0.0, 0.0
+        di_sum = di_plus + di_minus
+        di_spread = (di_plus - di_minus) / di_sum if di_sum > 0 else 0.0
+        result = sigmoid_score(di_spread, center=0, steepness=3.0)
+        assert result == 0.0
+
+    def test_di_direction_in_indicators(self):
+        """di_direction is exposed in indicators dict."""
+        df = _make_candles(80, "up")
+        result = compute_technical_score(df)
+        assert "di_direction" in result["indicators"]
+        assert -1.0 <= result["indicators"]["di_direction"] <= 1.0
