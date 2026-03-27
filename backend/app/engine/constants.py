@@ -47,6 +47,17 @@ ORDER_FLOW_ASSET_SCALES = {
     "WIF-USDT-SWAP": 0.4,
 }
 
+# -- Liquidation scoring --
+LIQUIDATION = {
+    "bucket_width_atr_mult": 0.25,
+    "mad_multiplier": 2.0,
+    "min_cluster_mean_mult": 1.5,
+    "max_distance_atr": 2.0,
+    "depth_sigmoid_center": 1.0,
+    "depth_sigmoid_steepness": 1.5,
+    "min_asymmetry_events": 10,
+}
+
 # -- On-chain scoring --
 ONCHAIN_PROFILES = {
     "btc": {
@@ -649,4 +660,5 @@ def get_engine_constants() -> dict:
             "optimization_params": _wrap(PERFORMANCE_TRACKER["optimization_params"]),
             "guardrails": _wrap(PERFORMANCE_TRACKER["guardrails"]),
         },
+        "liquidation": _wrap(LIQUIDATION),
     }

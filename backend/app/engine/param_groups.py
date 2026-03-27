@@ -23,7 +23,7 @@ PRIORITY_LAYERS: list[set[str]] = [
     {"regime_caps", "regime_outer", "atr_levels"},  # layer 1
     {"sigmoid_curves", "order_flow", "pattern_strengths", "pattern_boosts",
      "indicator_periods", "mean_reversion", "llm_factors", "onchain",
-     "mr_pressure"},  # layer 2
+     "mr_pressure", "liquidation"},  # layer 2
 ]
 
 
@@ -97,6 +97,14 @@ def _mean_reversion_ok(c: dict[str, Any]) -> bool:
 def _llm_factors_ok(c: dict[str, Any]) -> bool:
     cap = c.get("factor_cap", 35)
     return cap <= 50 and all(v >= 0 for v in c.values())
+
+
+def _liquidation_ok(c: dict[str, Any]) -> bool:
+    return (
+        c["cluster_max_score"] + c["asymmetry_max_score"] <= 100
+        and all(v > 0 for v in c.values())
+        and 0 < c["cluster_weight"] < 1
+    )
 
 
 def _onchain_ok(c: dict[str, Any]) -> bool:
@@ -386,6 +394,28 @@ def _mr_pressure_ok(c: dict[str, Any]) -> bool:
         and 0 < c["mr_llm_trigger"] < 1
     )
 
+
+PARAM_GROUPS["liquidation"] = {
+    "params": {
+        "cluster_max_score": "liquidation.cluster_max_score",
+        "asymmetry_max_score": "liquidation.asymmetry_max_score",
+        "cluster_weight": "liquidation.cluster_weight",
+        "proximity_steepness": "liquidation.proximity_steepness",
+        "decay_half_life_hours": "liquidation.decay_half_life_hours",
+        "asymmetry_steepness": "liquidation.asymmetry_steepness",
+    },
+    "sweep_method": "de",
+    "sweep_ranges": {
+        "cluster_max_score": (15, 45, None),
+        "asymmetry_max_score": (10, 40, None),
+        "cluster_weight": (0.4, 0.8, None),
+        "proximity_steepness": (1.0, 4.0, None),
+        "decay_half_life_hours": (2.0, 8.0, None),
+        "asymmetry_steepness": (1.5, 6.0, None),
+    },
+    "constraints": _liquidation_ok,
+    "priority": _priority_for("liquidation"),
+}
 
 PARAM_GROUPS["mr_pressure"] = {
     "params": {

@@ -63,6 +63,13 @@ _OVERRIDE_MAP = {
     "llm_factor_weights": "llm_factor_weights",
     "llm_factor_total_cap": "llm_factor_total_cap",
     "confluence_max_score": "engine_confluence_max_score",
+    "liquidation_weight": "engine_liquidation_weight",
+    "liquidation_cluster_max_score": "engine_liquidation_cluster_max_score",
+    "liquidation_asymmetry_max_score": "engine_liquidation_asymmetry_max_score",
+    "liquidation_cluster_weight": "engine_liquidation_cluster_weight",
+    "liquidation_proximity_steepness": "engine_liquidation_proximity_steepness",
+    "liquidation_decay_half_life_hours": "engine_liquidation_decay_half_life_hours",
+    "liquidation_asymmetry_steepness": "engine_liquidation_asymmetry_steepness",
 }
 
 
@@ -575,6 +582,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     liq_score = 0
     liq_conf = 0.0
     liq_clusters = []
+    liq_details = {}
     liq_collector = getattr(app.state, "liquidation_collector", None)
     if liq_collector:
         try:
@@ -588,10 +596,17 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 current_price=current_price,
                 atr=liq_atr,
                 depth=depth,
+                cluster_max_score=settings.engine_liquidation_cluster_max_score,
+                asymmetry_max_score=settings.engine_liquidation_asymmetry_max_score,
+                cluster_weight=settings.engine_liquidation_cluster_weight,
+                proximity_steepness=settings.engine_liquidation_proximity_steepness,
+                decay_half_life_hours=settings.engine_liquidation_decay_half_life_hours,
+                asymmetry_steepness=settings.engine_liquidation_asymmetry_steepness,
             )
             liq_score = liq_result["score"]
             liq_conf = liq_result["confidence"]
             liq_clusters = liq_result["clusters"]
+            liq_details = liq_result.get("details", {})
         except Exception as e:
             logger.debug(f"Liquidation scoring skipped: {e}")
 
@@ -1021,6 +1036,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "liquidation_score": liq_score,
             "liquidation_confidence": liq_conf,
             "liquidation_cluster_count": len(liq_clusters),
+            **(liq_details if liq_details else {}),
             "llm_contribution": llm_contribution,
             "llm_prompt_tokens": llm_result.prompt_tokens if llm_result else None,
             "llm_completion_tokens": llm_result.completion_tokens if llm_result else None,

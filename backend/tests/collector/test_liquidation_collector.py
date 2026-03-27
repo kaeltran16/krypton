@@ -102,3 +102,20 @@ async def test_old_events_not_reloaded_from_redis():
     await collector.load_from_redis()
 
     assert len(collector.events["BTC-USDT-SWAP"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_volume_normalized_by_batch_size():
+    """Each event's volume should be divided by the number of events in the batch."""
+    mock_client = AsyncMock()
+    mock_client.get_liquidation_orders.return_value = [
+        {"bkPx": "50000", "sz": "100", "side": "buy", "ts": "0"},
+        {"bkPx": "50100", "sz": "200", "side": "sell", "ts": "0"},
+    ]
+    collector = LiquidationCollector(mock_client, ["BTC-USDT-SWAP"])
+    await collector._poll()
+    events = collector.events["BTC-USDT-SWAP"]
+    assert len(events) == 2
+    # batch had 2 events, so volumes should be halved
+    assert events[0]["volume"] == pytest.approx(50.0)
+    assert events[1]["volume"] == pytest.approx(100.0)

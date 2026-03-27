@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     engine_confluence_max_score: int = 15
     engine_mr_llm_trigger: float = 0.30
 
+    # liquidation scoring
+    engine_liquidation_weight: float = 0.0
+    engine_liquidation_cluster_max_score: float = 30.0
+    engine_liquidation_asymmetry_max_score: float = 25.0
+    engine_liquidation_cluster_weight: float = 0.6
+    engine_liquidation_proximity_steepness: float = 2.0
+    engine_liquidation_decay_half_life_hours: float = 4.0
+    engine_liquidation_asymmetry_steepness: float = 3.0
+
     # on-chain data
     onchain_enabled: bool = True
     onchain_poll_interval_seconds: int = 300

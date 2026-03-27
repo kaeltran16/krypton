@@ -65,10 +65,11 @@ class LiquidationCollector:
                 raw = await self._client.get_liquidation_orders(pair)
                 if raw:
                     new_events = []
+                    batch_size = len(raw)
                     for item in raw:
                         event = {
                             "price": float(item.get("bkPx", 0)),
-                            "volume": float(item.get("sz", 0)),
+                            "volume": float(item.get("sz", 0)) / batch_size,
                             "timestamp": datetime.now(timezone.utc),
                             "side": item.get("side", ""),
                         }

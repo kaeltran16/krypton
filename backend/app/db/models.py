@@ -210,6 +210,13 @@ class PipelineSettings(Base):
     llm_factor_weights: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     llm_factor_total_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
     confluence_max_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    liquidation_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liquidation_cluster_max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liquidation_asymmetry_max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liquidation_cluster_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liquidation_proximity_steepness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liquidation_decay_half_life_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    liquidation_asymmetry_steepness: Mapped[float | None] = mapped_column(Float, nullable=True)
     pattern_strength_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     pattern_boost_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

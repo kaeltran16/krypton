@@ -13,7 +13,7 @@ def test_all_groups_defined():
         "source_weights", "thresholds", "regime_caps", "regime_outer",
         "atr_levels", "sigmoid_curves", "order_flow", "pattern_strengths",
         "pattern_boosts", "indicator_periods", "mean_reversion", "llm_factors",
-        "onchain", "mr_pressure",
+        "onchain", "mr_pressure", "liquidation",
     }
     assert set(PARAM_GROUPS.keys()) == expected
 
@@ -51,6 +51,24 @@ def test_thresholds_constraint_signal_gt_llm():
 def test_priority_layers_ordered():
     assert PRIORITY_LAYERS[0] == {"source_weights", "thresholds"}
     assert len(PRIORITY_LAYERS) >= 3
+
+
+def test_liquidation_constraint_valid():
+    valid = {
+        "cluster_max_score": 30, "asymmetry_max_score": 25,
+        "cluster_weight": 0.6, "proximity_steepness": 2.0,
+        "decay_half_life_hours": 4.0, "asymmetry_steepness": 3.0,
+    }
+    assert validate_candidate("liquidation", valid) is True
+
+
+def test_liquidation_constraint_rejects_high_sum():
+    invalid = {
+        "cluster_max_score": 60, "asymmetry_max_score": 50,
+        "cluster_weight": 0.6, "proximity_steepness": 2.0,
+        "decay_half_life_hours": 4.0, "asymmetry_steepness": 3.0,
+    }
+    assert validate_candidate("liquidation", invalid) is False
 
 
 def test_regime_caps_constraint_sum_per_regime():
