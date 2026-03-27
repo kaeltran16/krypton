@@ -20,10 +20,10 @@ The current confluence system is too simple to meaningfully impact signal qualit
 
 ### Acceptance Criteria
 
-- Backtest on BTC-USDT-SWAP 15m: fewer signals where child direction opposes 1H trend direction compared to baseline (current confluence system)
-- Average confluence confidence > 0.4 when 2+ parent levels are available
-- Confluence score distribution covers the full [-100, +100] range (not clustered near 0 like the old +/-15 system)
-- No regression in overall signal P&L on 30-day backtest vs baseline
+- Backtest on BTC-USDT-SWAP 15m: >=20% fewer signals where child direction opposes 1H trend direction compared to baseline (current confluence system), measured over 30-day window
+- Per-signal confluence confidence averages >0.4 across the 30-day backtest when 2+ parent levels are available at signal emission time
+- Confluence score distribution covers at least 80% of the [-100, +100] range (i.e., observed scores span at least 160 points), measured over 30-day backtest
+- Overall signal P&L on 30-day backtest within -2% of baseline (small regression tolerated given signal count reduction)
 - All existing combiner/pipeline/confluence tests pass with updated signatures
 
 ## Design
@@ -45,6 +45,7 @@ Formula variables and their sources:
 | `parent_adx` | `htf_indicators:{pair}:{tf}` cache → `adx` | Parent's cached ADX value |
 | `parent_regime` | `htf_indicators:{pair}:{tf}` cache → `regime` | Parent's cached regime mix dict |
 | `sigmoid_scale` | `engine/scoring.py:sigmoid_scale()` | Existing unipolar logistic: `1 / (1 + exp(-steepness * (value - center)))`, maps input to [0, 1] |
+| `adx_conviction_ratio` | `CONFLUENCE["adx_conviction_ratio"]` (default 0.60) | Blend coefficient for trend alignment: fraction of alignment strength derived from ADX alone vs. parent trend conviction. Higher = ADX-dominated, lower = conviction-dominated. At 0.60, 40% of the alignment strength comes from parent conviction; at 0.80, only 20% does. |
 
 ### Confluence as Independent Combiner Source
 
@@ -90,6 +91,8 @@ Each child checks all available ancestors, not just the immediate parent:
 
 Missing levels are skipped. Confidence scales with the number of available levels. No chain continuity requirement -- if 4H cache is expired, 15m still uses 1H and 1D.
 
+Parent lookups use `redis.mget()` (single batch call for all ancestor keys), so the increase from 1 to 3 lookups adds negligible latency (~1ms) compared to indicator computation.
+
 ### Per-Parent Alignment Scoring
 
 For each available parent, alignment is computed based on the child's dominant thesis.
@@ -102,10 +105,11 @@ if |child_trend_score| == 0 and |child_mean_rev_score| == 0:
     return {"score": 0, "confidence": 0.0}
 
 child_thesis = "trend" if |child_trend_score| >= |child_mean_rev_score| else "mean_rev"
-child_direction = sign of the dominant sub-score
 ```
 
-When sub-scores are equal (but non-zero), trend takes precedence -- HTF alignment is more meaningful for directional trades. When both are zero, there is no thesis to align against, so confluence produces a neutral result and its weight redistributes via zero confidence.
+When sub-scores are equal (but non-zero), trend takes precedence (`>=`) -- HTF alignment is more meaningful for directional trades. When both are zero, there is no thesis to align against, so confluence produces a neutral result and its weight redistributes via zero confidence.
+
+No minimum magnitude threshold is applied to thesis selection. Near-zero sub-scores (e.g., `child_trend_score = 0.5`) will select a thesis but produce weak alignment because `parent_strength` (sigmoid of ADX) attenuates the result toward zero. This is intentional -- the sigmoid and confidence scaling naturally dampen noise without requiring a hard cutoff.
 
 **Trend-following child:**
 
@@ -118,6 +122,8 @@ conviction_bonus = parent_trend_conviction
 
 alignment = direction_match * parent_strength * (adx_conviction_ratio + (1 - adx_conviction_ratio) * conviction_bonus)
 ```
+
+`adx_conviction_ratio` blends ADX reliability with trend conviction: at default 0.60, 60% of alignment strength comes from ADX alone and 40% from parent conviction. This means weak-ADX parents produce weak alignment even with high conviction, which is intentional -- a weakly trending parent is unreliable regardless of its conviction signal.
 
 Range: [-1, +1]. Fully aligned strong parent = ~+1.0. Opposing strong parent = ~-1.0. Weak parent = near 0.
 
@@ -132,7 +138,11 @@ trend_opposition = parent_regime["trending"] * sign(child_mean_rev_score) * sign
 alignment = clamp(ranging_support - mr_penalty_factor * trend_opposition, -1.0, +1.0)
 ```
 
-The clamp is required because the raw expression can exceed [-1, +1] when `ranging_support` and `trend_opposition` have opposite signs (e.g., 1.0 - 0.8 * -1.0 = 1.8). No sigmoid is used here -- regime probabilities (0-1) already bound each term, and the clamp handles the edge case where both terms reinforce.
+`mr_penalty_factor` (default 0.50) controls how strongly a trending parent penalizes mean-reversion signals. At 0.50, a fully trending parent opposing the MR thesis subtracts 0.50 from alignment.
+
+The clamp is required because the raw expression can exceed [-1, +1] when both terms reinforce (e.g., `ranging_support = +1.0` and `trend_opposition = -1.0` → `1.0 - 0.50 * (-1.0) = 1.50`). `ranging_support` and `trend_opposition` are each bounded by [-1, +1] since regime probabilities are in [0, 1] and sign products are +/-1. The worst case is `|ranging_support| + |mr_penalty_factor * trend_opposition| = 1.0 + 0.80 = 1.80`, hence the clamp.
+
+Regime dict keys (`trending`, `ranging`, `volatile`, `steady`) are guaranteed to exist and sum to ~1.0 -- they are computed by `engine/regime.py:compute_regime_mix()` which always returns all four keys normalized.
 
 Range: [-1, +1]. Ranging parent + aligned extremes = positive. Trending parent opposing MR thesis = negative.
 
@@ -172,6 +182,20 @@ Default level weights (tunable):
 
 Weights renormalize over available levels when parents are missing.
 
+### Default Parameter Values
+
+All defaults are defined in `engine/constants.py:CONFLUENCE` dict:
+
+| Parameter | Default | Sweep Range | Description |
+|-----------|---------|-------------|-------------|
+| `level_weight_1` (immediate) | 0.50 | 0.30 - 0.65 | Weight for immediate parent |
+| `level_weight_2` (grandparent) | 0.30 | 0.15 - 0.45 | Weight for grandparent |
+| `level_weight_3` (great-grandparent) | 0.20 | derived (1 - w1 - w2) | Not swept independently |
+| `trend_alignment_steepness` | 0.30 | 0.10 - 0.50 | Sigmoid steepness for ADX → strength mapping |
+| `adx_strength_center` | 15.0 | 10 - 25 | Sigmoid center for ADX → strength mapping |
+| `adx_conviction_ratio` | 0.60 | 0.40 - 0.80 | ADX vs. conviction blend (higher = ADX-dominated) |
+| `mr_penalty_factor` | 0.50 | 0.20 - 0.80 | How strongly trending parents penalize MR signals |
+
 ### Combiner Integration
 
 `compute_preliminary_score` gains `confluence_score`, `confluence_weight`, `confluence_confidence` parameters. Same confidence-weighted normalization as existing sources -- if confluence confidence is 0 (no parent data), weight redistributes automatically.
@@ -189,7 +213,9 @@ Confluence weighted higher in trending/steady (HTF alignment matters most), lowe
 
 This is a **full rebalance** of all 6x4=24 outer weights, not just adding 4 new confluence values. All existing source weights change (e.g., trending tech drops from 0.42 to 0.36). The `DEFAULT_OUTER_WEIGHTS` dict and `RegimeWeights` DB defaults both update to these values.
 
-**Migration strategy for existing customized RegimeWeights rows**: The Alembic migration adds 4 new `{regime}_confluence_weight` columns with defaults from the table above. Existing rows keep their current 5-source weights unchanged. On first load after migration, `blend_outer_weights` will use the new confluence column values. If the existing 5-source weights were customized (no longer sum to the original 1.0 minus confluence share), the combiner's confidence-weighted normalization handles this gracefully -- weights are always renormalized at runtime. The optimizer will tune all 6 source weights together via the existing `regime_outer` param group.
+**Migration strategy for existing customized RegimeWeights rows**: The Alembic migration adds 4 new `{regime}_confluence_weight` columns with defaults from the table above. Existing rows keep their current 5-source weights unchanged. On first load after migration, `blend_outer_weights` will use the new confluence column values.
+
+This is safe because `compute_preliminary_score` always renormalizes at runtime: each source's outer weight is multiplied by its confidence, then all 6 effective weights are divided by their sum before computing the blended score. If existing 5-source weights sum to 1.0 and the migration adds confluence_weight=0.14, the 6-source raw sum is 1.14 -- but after confidence-weighted renormalization, the proportions are correct. The optimizer will tune all 6 source weights together via the existing `regime_outer` param group, converging customized rows to optimal 6-source proportions over time.
 
 ### Pipeline Flow
 
@@ -209,13 +235,15 @@ This is a **full rebalance** of all 6x4=24 outer weights, not just adding 4 new 
 13. Threshold check -> emit
 ```
 
-### MR Pressure Dampening Removal
+### MR Pressure Dampening
 
-The explicit `confluence_dampening` constant in `MR_PRESSURE` is removed. Dampening is now handled structurally:
+No explicit `confluence_dampening` constant exists in `MR_PRESSURE`. Dampening is handled structurally:
 
 - Ranging regime gives confluence lower outer weight (0.08 vs 0.14 trending)
 - The mean-rev branch in alignment already accounts for parent regime
 - No special-case multiplier needed
+
+The only remaining cleanup is removing the dangling `"confluence_dampening"` key from the optimizer's `mr_pressure` param group tuple in `engine/optimizer.py` (~line 415), which references a key that no longer exists in `MR_PRESSURE`.
 
 ### Optimizer Integration
 
@@ -257,7 +285,7 @@ All params are manually editable via the Engine tab. `api/engine.py` GET exposes
 - Supports multi-level precomputation (immediate + grandparent + great-grandparent)
 - Calls `compute_confluence_score()` as independent source in the backtest loop
 - Passes confluence score + confidence into `compute_preliminary_score`
-- `BacktestConfig.confluence_max_score` removed, replaced by confluence param fields
+- Confluence params use engine defaults; no `BacktestConfig`-specific confluence fields needed
 
 ## Files Changed
 
@@ -265,32 +293,33 @@ All params are manually editable via the Engine tab. `api/engine.py` GET exposes
 
 | File | Changes |
 |------|---------|
-| `engine/confluence.py` | Replace `compute_confluence_score` and remove `di_direction`. New multi-level, regime-aware scoring. Keep `TIMEFRAME_PARENT`, `CONFLUENCE_ONLY_TIMEFRAMES`, `TIMEFRAME_CACHE_TTL`, `TIMEFRAME_PERIOD_HOURS`. |
+| `engine/confluence.py` | Replace `compute_confluence_score` with new multi-level, regime-aware scoring. Keep `TIMEFRAME_PARENT`, `CONFLUENCE_ONLY_TIMEFRAMES`, `TIMEFRAME_CACHE_TTL`, `TIMEFRAME_PERIOD_HOURS`. Add `TIMEFRAME_ANCESTORS` dict for multi-level lookup. |
 | `engine/regime.py` | Add `"confluence"` to `OUTER_KEYS` list. Add `confluence` slot to all 4 regime dicts in `DEFAULT_OUTER_WEIGHTS` with values from the regime weight table. |
 | `engine/combiner.py` | Add `confluence_score=0`, `confluence_weight=0.0`, `confluence_confidence=0.0` to `compute_preliminary_score` (defaulted for backward compat with existing callers). |
-| `engine/constants.py` | Remove `confluence_dampening` from `MR_PRESSURE`. Add `CONFLUENCE` defaults dict. Add to param tree metadata. |
+| `engine/constants.py` | Add `CONFLUENCE` defaults dict with all 6 tunable params. Add to param tree metadata in `PARAMETER_DESCRIPTIONS`. |
 | `engine/param_groups.py` | Add `confluence` param group with DE sweep. Add to `PRIORITY_LAYERS[2]`. |
-| `engine/backtester.py` | Expand `precompute_parent_indicators` payload. Multi-level parent precomputation. Call `compute_confluence_score` independently. Wire into `compute_preliminary_score`. Remove `confluence_max_score` from `BacktestConfig`. |
+| `engine/backtester.py` | Expand `precompute_parent_indicators` payload. Multi-level parent precomputation. Call `compute_confluence_score` independently. Wire into `compute_preliminary_score`. |
 | `main.py` | Enrich HTF cache payload with sub-scores + regime. Call `compute_confluence_score` as step 4. Remove `tech_result["score"] += confluence_score` block. Remove MR pressure confluence dampening block. Pass confluence into `compute_preliminary_score`. Add `confluence_score` (int) and `confluence_confidence` (float) to signal dict and WebSocket broadcast payload. |
 | `api/engine.py` | Expose confluence params as configurable. Update apply endpoint mapping. |
 | `api/backtest.py` | Fetch multi-level parent candles. |
+| `engine/optimizer.py` | Remove `"confluence_dampening"` from the `mr_pressure` param group key tuple (~line 415) -- this key no longer exists in `MR_PRESSURE` dict. |
 | `config.py` | Replace `engine_confluence_max_score` with confluence param fields. |
 | `db/models.py` | Replace `confluence_max_score` on `PipelineSettings` with: `confluence_level_weight_1` (Float), `confluence_level_weight_2` (Float), `confluence_trend_alignment_steepness` (Float), `confluence_adx_strength_center` (Float), `confluence_adx_conviction_ratio` (Float), `confluence_mr_penalty_factor` (Float). All nullable. `level_weight_3` is derived as `1.0 - w1 - w2` at runtime, not stored. Add `{regime}_confluence_weight` (Float, nullable) columns to `RegimeWeights` for all 4 regimes. |
 | `web/src/features/engine/types.ts` | Add confluence params to `EngineParameters` type. |
 | `web/src/features/signals/` | Add `confluence_score` (int, -100 to +100) and `confluence_confidence` (float, 0-1) to signal types. Display in SignalDetail "Intelligence Components" section. Both fields optional for backward compat with old signals. |
 | `web/src/features/backtest/components/ParameterOverridePanel.tsx` | Replace `confluence_max_score` reference with new confluence param fields in override list. |
-| `api/routes.py` | Update debug endpoint `compute_preliminary_score` call to include `confluence_score=0, confluence_weight=0.0, confluence_confidence=0.0` defaults (uses positional args, will break without this). |
+| `api/routes.py` | Convert debug endpoint `compute_preliminary_score` call from positional to keyword args: `compute_preliminary_score(technical_score=tech["score"], order_flow_score=flow["score"], tech_weight=0.50, flow_weight=0.25)` -- remaining params (including confluence) use function defaults. |
 | `tests/conftest.py` | Replace `confluence_max_score` mock in test fixtures with new confluence param fields. |
 
 ### Deleted Code
 
 | What | Where |
 |------|-------|
-| `di_direction()` | `engine/confluence.py` |
-| `confluence_dampening` constant | `engine/constants.py` MR_PRESSURE dict |
-| `engine_confluence_max_score` config field | `config.py`, `db/models.py`, `api/engine.py`, `tests/conftest.py` |
 | `tech_result["score"] += confluence_score` block | `main.py` |
 | MR pressure confluence dampening block | `main.py` |
+| `"confluence_dampening"` key reference | `engine/optimizer.py` mr_pressure param tuple |
+
+Note: `di_direction()` was never a function in `engine/confluence.py` -- the `di_direction` variable in `engine/traditional.py` is unrelated to confluence and remains unchanged. `confluence_dampening` in `MR_PRESSURE` and `engine_confluence_max_score` in config/models were already removed in prior work.
 
 ### New
 
