@@ -209,7 +209,12 @@ class PipelineSettings(Base):
     llm_threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)
     llm_factor_weights: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     llm_factor_total_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
-    confluence_max_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confluence_level_weight_1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confluence_level_weight_2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confluence_trend_alignment_steepness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confluence_adx_strength_center: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confluence_adx_conviction_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confluence_mr_penalty_factor: Mapped[float | None] = mapped_column(Float, nullable=True)
     liquidation_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     liquidation_cluster_max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     liquidation_asymmetry_max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -403,6 +408,12 @@ class RegimeWeights(Base):
     ranging_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.09, server_default="0.09")
     volatile_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.11, server_default="0.11")
     steady_liquidation_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.08, server_default="0.08")
+
+    # Confluence weights (4 regimes x 1 weight)
+    trending_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.14, server_default="0.14")
+    ranging_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.08, server_default="0.08")
+    volatile_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12, server_default="0.12")
+    steady_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.14, server_default="0.14")
 
     # per-pair ADX center for trend strength sigmoid
     adx_center: Mapped[float] = mapped_column(Float, nullable=False, default=20.0, server_default="20.0")

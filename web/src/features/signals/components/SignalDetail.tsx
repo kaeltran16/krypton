@@ -86,6 +86,9 @@ export function SignalDetail({ signal, onClose }: SignalDetailProps) {
       <div className="p-5 border-b border-outline-variant/10 space-y-4">
         <h2 className="text-xs uppercase tracking-widest text-on-surface-variant">Intelligence Components</h2>
         <ScoreBarRow label="Technical Analysis" value={Math.abs(signal.traditional_score)} />
+        {signal.raw_indicators?.confluence_score != null && signal.raw_indicators.confluence_score !== 0 && (
+          <ScoreBarRow label="HTF Confluence" value={Math.min(Math.abs(signal.raw_indicators.confluence_score as number), 100)} />
+        )}
         {signal.llm_contribution != null && (
           <ScoreBarRow label="LLM Consensus" value={Math.min(Math.abs(signal.llm_contribution), 100)} />
         )}

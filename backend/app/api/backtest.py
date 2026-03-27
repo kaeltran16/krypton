@@ -79,7 +79,6 @@ _OVERRIDE_TO_CONFIG = {
     "levels.atr_defaults.sl": "sl_atr_multiplier",
     "levels.atr_defaults.tp1": "tp1_atr_multiplier",
     "levels.atr_defaults.tp2": "tp2_atr_multiplier",
-    "confluence_max_score": "confluence_max_score",
 }
 
 

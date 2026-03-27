@@ -95,10 +95,16 @@ class TestBlendOuterWeights:
         total = sum(weights.values())
         assert abs(total - 1.0) < 1e-9
 
+    def test_returns_six_keys(self):
+        regime = {"trending": 0.3, "ranging": 0.25, "volatile": 0.25, "steady": 0.2}
+        weights = blend_outer_weights(regime, None)
+        assert len(weights) == 6
+
     def test_pure_trending_returns_trending_weights(self):
         regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
         weights = blend_outer_weights(regime, None)
         assert abs(weights["tech"] - DEFAULT_OUTER_WEIGHTS["trending"]["tech"]) < 1e-9
+        assert abs(weights["confluence"] - DEFAULT_OUTER_WEIGHTS["trending"]["confluence"]) < 1e-9
 
     def test_none_weights_uses_defaults(self):
         regime = {"trending": 0.4, "ranging": 0.2, "volatile": 0.2, "steady": 0.2}
@@ -107,3 +113,6 @@ class TestBlendOuterWeights:
         assert "flow" in weights
         assert "onchain" in weights
         assert "pattern" in weights
+        assert "liquidation" in weights
+        assert "confluence" in weights
+        assert len(weights) == 6

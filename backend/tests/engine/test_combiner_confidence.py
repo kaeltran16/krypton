@@ -40,6 +40,29 @@ class TestConfidenceWeightedCombiner:
         )
         assert 0.0 <= result["avg_confidence"] <= 1.0
 
+    def test_confluence_participates_in_blending(self):
+        """Confluence as 6th source contributes when weight and confidence are set."""
+        # baseline: tech=60, flow=40, no confluence
+        baseline = compute_preliminary_score(
+            60, 40, 0.5, 0.5,
+            onchain_weight=0.0, pattern_weight=0.0,
+            tech_confidence=0.8, flow_confidence=0.8,
+            onchain_confidence=0.0, pattern_confidence=0.0,
+        )
+        # with confluence strongly bullish (+90), it should pull score up
+        with_confluence = compute_preliminary_score(
+            60, 40, 0.4, 0.4,
+            onchain_weight=0.0, pattern_weight=0.0,
+            tech_confidence=0.8, flow_confidence=0.8,
+            onchain_confidence=0.0, pattern_confidence=0.0,
+            confluence_score=90,
+            confluence_weight=0.2,
+            confluence_confidence=0.9,
+        )
+        assert with_confluence["score"] > baseline["score"]
+        # avg_confidence should include confluence contribution
+        assert with_confluence["avg_confidence"] > 0.0
+
 
 class TestConfidenceTier:
     def test_high_tier(self):

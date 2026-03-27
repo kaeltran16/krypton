@@ -17,6 +17,9 @@ def compute_preliminary_score(
     liquidation_score: int = 0,
     liquidation_weight: float = 0.0,
     liquidation_confidence: float = 0.0,
+    confluence_score: int = 0,
+    confluence_weight: float = 0.0,
+    confluence_confidence: float = 0.0,
 ) -> dict:
     # confidence-weight each source: effective_weight = base_weight * confidence
     ew_tech = tech_weight * tech_confidence
@@ -24,31 +27,34 @@ def compute_preliminary_score(
     ew_onchain = onchain_weight * onchain_confidence
     ew_pattern = pattern_weight * pattern_confidence
     ew_liq = liquidation_weight * liquidation_confidence
-    total = ew_tech + ew_flow + ew_onchain + ew_pattern + ew_liq
+    ew_conf = confluence_weight * confluence_confidence
+    total = ew_tech + ew_flow + ew_onchain + ew_pattern + ew_liq + ew_conf
     if total > 0:
         ew_tech /= total
         ew_flow /= total
         ew_onchain /= total
         ew_pattern /= total
         ew_liq /= total
+        ew_conf /= total
     else:
-        # fallback to equal weights
-        ew_tech = ew_flow = ew_onchain = ew_pattern = ew_liq = 0.2
+        ew_tech = ew_flow = ew_onchain = ew_pattern = ew_liq = ew_conf = 1 / 6
     score = round(
         technical_score * ew_tech
         + order_flow_score * ew_flow
         + onchain_score * ew_onchain
         + pattern_score * ew_pattern
         + liquidation_score * ew_liq
+        + confluence_score * ew_conf
     )
     # weighted-average confidence (using base weights, not effective weights)
-    total_w = tech_weight + flow_weight + onchain_weight + pattern_weight + liquidation_weight
+    total_w = tech_weight + flow_weight + onchain_weight + pattern_weight + liquidation_weight + confluence_weight
     avg_confidence = (
         tech_confidence * tech_weight
         + flow_confidence * flow_weight
         + onchain_confidence * onchain_weight
         + pattern_confidence * pattern_weight
         + liquidation_confidence * liquidation_weight
+        + confluence_confidence * confluence_weight
     ) / total_w if total_w > 0 else 0.0
     return {"score": score, "avg_confidence": avg_confidence}
 

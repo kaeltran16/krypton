@@ -220,33 +220,6 @@ class TestOrderFlowMrPressure:
         assert abs(result_high["score"]) >= abs(result_low["score"])
 
 
-from app.engine.constants import MR_PRESSURE as MR_PRESSURE_CONST
-
-
-class TestConfluenceDampening:
-    def test_no_dampening_at_zero_pressure(self):
-        """Confluence score should be unchanged when mr_pressure=0."""
-        confluence_score = 13
-        mr_p = 0.0
-        dampened = round(confluence_score * (1 - mr_p * MR_PRESSURE_CONST["confluence_dampening"]))
-        assert dampened == 13
-
-    def test_dampening_at_high_pressure(self):
-        """Confluence score should be reduced when mr_pressure is high."""
-        confluence_score = 13
-        mr_p = 0.69
-        dampened = round(confluence_score * (1 - mr_p * MR_PRESSURE_CONST["confluence_dampening"]))
-        assert dampened < 13
-        assert dampened > 0  # not fully zeroed
-
-    def test_full_pressure_dampening(self):
-        """At mr_pressure=1.0 with dampening=0.7, confluence is reduced by 70%."""
-        confluence_score = 10
-        mr_p = 1.0
-        dampened = round(confluence_score * (1 - mr_p * MR_PRESSURE_CONST["confluence_dampening"]))
-        assert dampened == 3  # 10 * 0.3 = 3
-
-
 class TestLLMDualTrigger:
     def test_score_path_triggers(self):
         """LLM should trigger on score magnitude alone (existing behavior)."""
@@ -342,7 +315,6 @@ class TestMrPressureParamGroup:
         from app.engine.param_groups import validate_candidate
         valid = {
             "max_cap_shift": 18,
-            "confluence_dampening": 0.7,
             "obv_weight": 0.6,
             "mr_llm_trigger": 0.30,
         }
@@ -353,7 +325,6 @@ class TestMrPressureParamGroup:
         from app.engine.param_groups import validate_candidate
         invalid = {
             "max_cap_shift": 0,
-            "confluence_dampening": 0.7,
             "obv_weight": 0.6,
             "mr_llm_trigger": 0.30,
         }
@@ -364,7 +335,6 @@ class TestMrPressureParamGroup:
         from app.engine.param_groups import validate_candidate
         invalid = {
             "max_cap_shift": 18,
-            "confluence_dampening": 0.7,
             "obv_weight": 0,
             "mr_llm_trigger": 0.30,
         }
@@ -380,9 +350,9 @@ class TestMrPressureParamGroup:
         from app.engine.param_groups import PARAM_GROUPS
         ranges = PARAM_GROUPS["mr_pressure"]["sweep_ranges"]
         assert ranges["max_cap_shift"] == (8, 24, 4)
-        assert ranges["confluence_dampening"] == (0.30, 0.90, 0.15)
         assert ranges["obv_weight"] == (0.30, 0.80, 0.10)
         assert ranges["mr_llm_trigger"] == (0.20, 0.45, 0.05)
+        assert "confluence_dampening" not in ranges
 
 
 from app.engine.combiner import compute_preliminary_score

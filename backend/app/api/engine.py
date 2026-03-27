@@ -57,7 +57,17 @@ async def get_parameters(request: Request, _key: str = require_auth()):
             for k, v in settings.llm_factor_weights.items()
         },
         "llm_factor_cap": _configurable(settings.llm_factor_total_cap),
-        "confluence_max_score": _configurable(settings.engine_confluence_max_score),
+        "confluence": {
+            "level_weights": {
+                "immediate": _configurable(settings.engine_confluence_level_weight_1),
+                "grandparent": _configurable(settings.engine_confluence_level_weight_2),
+                "great_grandparent": _configurable(round(max(0.0, 1.0 - settings.engine_confluence_level_weight_1 - settings.engine_confluence_level_weight_2), 4)),
+            },
+            "trend_alignment_steepness": _configurable(settings.engine_confluence_trend_alignment_steepness),
+            "adx_strength_center": _configurable(settings.engine_confluence_adx_strength_center),
+            "adx_conviction_ratio": _configurable(settings.engine_confluence_adx_conviction_ratio),
+            "mr_penalty_factor": _configurable(settings.engine_confluence_mr_penalty_factor),
+        },
     }
 
     regime_data = {}
@@ -114,6 +124,8 @@ def _regime_row_to_dict(rw) -> dict:
                 "flow": getattr(rw, f"{regime}_flow_weight"),
                 "onchain": getattr(rw, f"{regime}_onchain_weight"),
                 "pattern": getattr(rw, f"{regime}_pattern_weight"),
+                "liquidation": getattr(rw, f"{regime}_liquidation_weight"),
+                "confluence": getattr(rw, f"{regime}_confluence_weight"),
             },
         }
     return result
@@ -138,7 +150,12 @@ _PIPELINE_SETTINGS_MAP = {
     "blending.thresholds.ml_confidence": ("ml_confidence_threshold", "ml_confidence_threshold"),
     "blending.llm_factor_weights": ("llm_factor_weights", "llm_factor_weights"),
     "blending.llm_factor_cap": ("llm_factor_total_cap", "llm_factor_total_cap"),
-    "confluence_max_score": ("engine_confluence_max_score", "confluence_max_score"),
+    "blending.confluence.level_weights.immediate": ("engine_confluence_level_weight_1", "confluence_level_weight_1"),
+    "blending.confluence.level_weights.grandparent": ("engine_confluence_level_weight_2", "confluence_level_weight_2"),
+    "blending.confluence.trend_alignment_steepness": ("engine_confluence_trend_alignment_steepness", "confluence_trend_alignment_steepness"),
+    "blending.confluence.adx_strength_center": ("engine_confluence_adx_strength_center", "confluence_adx_strength_center"),
+    "blending.confluence.adx_conviction_ratio": ("engine_confluence_adx_conviction_ratio", "confluence_adx_conviction_ratio"),
+    "blending.confluence.mr_penalty_factor": ("engine_confluence_mr_penalty_factor", "confluence_mr_penalty_factor"),
 }
 
 _SCORING_PARAMS_MAP = {

@@ -35,14 +35,14 @@ from app.api.routes import create_router
 from app.api.connections import ConnectionManager
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
-from app.engine.constants import MR_PRESSURE as MR_PRESSURE_CONST, ORDER_FLOW_ASSET_SCALES
+from app.engine.constants import ORDER_FLOW_ASSET_SCALES
 from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
 from app.engine.confluence import (
-    TIMEFRAME_PARENT, CONFLUENCE_ONLY_TIMEFRAMES,
-    TIMEFRAME_CACHE_TTL, compute_confluence_score, di_direction,
+    CONFLUENCE_ONLY_TIMEFRAMES,
+    TIMEFRAME_CACHE_TTL, TIMEFRAME_ANCESTORS, compute_confluence_score,
 )
 from app.engine.regime import blend_outer_weights, smooth_regime_mix
 from app.engine.structure import collect_structure_levels, snap_levels_to_structure
@@ -62,7 +62,12 @@ _OVERRIDE_MAP = {
     "llm_threshold": "engine_llm_threshold",
     "llm_factor_weights": "llm_factor_weights",
     "llm_factor_total_cap": "llm_factor_total_cap",
-    "confluence_max_score": "engine_confluence_max_score",
+    "confluence_level_weight_1": "engine_confluence_level_weight_1",
+    "confluence_level_weight_2": "engine_confluence_level_weight_2",
+    "confluence_trend_alignment_steepness": "engine_confluence_trend_alignment_steepness",
+    "confluence_adx_strength_center": "engine_confluence_adx_strength_center",
+    "confluence_adx_conviction_ratio": "engine_confluence_adx_conviction_ratio",
+    "confluence_mr_penalty_factor": "engine_confluence_mr_penalty_factor",
     "liquidation_weight": "engine_liquidation_weight",
     "liquidation_cluster_max_score": "engine_liquidation_cluster_max_score",
     "liquidation_asymmetry_max_score": "engine_liquidation_asymmetry_max_score",
@@ -166,7 +171,14 @@ def build_engine_snapshot(
         "mean_reversion": scoring_params or {},
         "llm_factor_weights": dict(settings.llm_factor_weights),
         "llm_factor_cap": settings.llm_factor_total_cap,
-        "confluence_max_score": settings.engine_confluence_max_score,
+        "confluence": {
+            "level_weight_1": settings.engine_confluence_level_weight_1,
+            "level_weight_2": settings.engine_confluence_level_weight_2,
+            "trend_alignment_steepness": settings.engine_confluence_trend_alignment_steepness,
+            "adx_strength_center": settings.engine_confluence_adx_strength_center,
+            "adx_conviction_ratio": settings.engine_confluence_adx_conviction_ratio,
+            "mr_penalty_factor": settings.engine_confluence_mr_penalty_factor,
+        },
     }
 
 
@@ -406,13 +418,17 @@ async def run_pipeline(app: FastAPI, candle: dict):
         logger.error(f"Technical scoring failed for {pair}:{timeframe}: {e}")
         return
 
-    # ── HTF indicator caching ──
+    # ── HTF indicator caching (enriched for multi-level confluence) ──
     indicators = tech_result["indicators"]
     candle_ts = candle.get("timestamp")
     htf_cache = json.dumps({
+        "trend_score": indicators.get("trend_score", 0),
+        "mean_rev_score": indicators.get("mean_rev_score", 0),
+        "trend_conviction": indicators.get("trend_conviction", 0),
         "adx": indicators["adx"],
         "di_plus": indicators["di_plus"],
         "di_minus": indicators["di_minus"],
+        "regime": tech_result.get("regime", {}),
         "timestamp": candle_ts.isoformat()
         if hasattr(candle_ts, "isoformat")
         else candle_ts,
@@ -428,27 +444,43 @@ async def run_pipeline(app: FastAPI, candle: dict):
     if timeframe in CONFLUENCE_ONLY_TIMEFRAMES:
         return
 
-    # ── Confluence scoring ──
-    confluence_score = 0
-    parent_tf = TIMEFRAME_PARENT.get(timeframe)
-    parent_indicators = None
-    if parent_tf:
+    # ── Confluence scoring (multi-level, independent source) ──
+    confluence_result = {"score": 0, "confidence": 0.0}
+    ancestors = TIMEFRAME_ANCESTORS.get(timeframe, [])
+    parent_cache_list = []
+    if ancestors:
+        keys = [f"htf_indicators:{pair}:{anc_tf}" for anc_tf in ancestors]
         try:
-            raw_parent = await redis.get(f"htf_indicators:{pair}:{parent_tf}")
-            if raw_parent:
-                parent_indicators = json.loads(raw_parent)
+            raw_values = await redis.mget(*keys)
         except Exception as e:
-            logger.warning(f"HTF cache read failed for {pair}:{parent_tf}: {e}")
+            logger.warning(f"HTF cache mget failed for {pair}: {e}")
+            raw_values = [None] * len(keys)
+        for i, raw in enumerate(raw_values):
+            try:
+                parent_cache_list.append(json.loads(raw) if raw else None)
+            except Exception as e:
+                logger.warning(f"HTF cache parse failed for {pair}:{ancestors[i]}: {e}")
+                parent_cache_list.append(None)
 
-        child_direction = di_direction(indicators["di_plus"], indicators["di_minus"])
-        confluence_score = compute_confluence_score(
-            child_direction, parent_indicators,
-            max_score=settings.engine_confluence_max_score,
+    if ancestors:
+        child_indicators = {
+            "trend_score": indicators.get("trend_score", 0),
+            "mean_rev_score": indicators.get("mean_rev_score", 0),
+            "trend_conviction": indicators.get("trend_conviction", 0),
+        }
+        confluence_result = compute_confluence_score(
+            child_indicators, parent_cache_list,
+            timeframe=timeframe,
+            level_weight_1=settings.engine_confluence_level_weight_1,
+            level_weight_2=settings.engine_confluence_level_weight_2,
+            trend_alignment_steepness=settings.engine_confluence_trend_alignment_steepness,
+            adx_strength_center=settings.engine_confluence_adx_strength_center,
+            adx_conviction_ratio=settings.engine_confluence_adx_conviction_ratio,
+            mr_penalty_factor=settings.engine_confluence_mr_penalty_factor,
         )
-        mr_pressure_val = tech_result.get("mr_pressure", 0.0)
-        if mr_pressure_val > 0 and confluence_score != 0:
-            confluence_score = round(confluence_score * (1 - mr_pressure_val * MR_PRESSURE_CONST["confluence_dampening"]))
-        tech_result["score"] = max(min(tech_result["score"] + confluence_score, 100), -100)
+    confluence_score = confluence_result["score"]
+    confluence_conf = confluence_result["confidence"]
+    mr_pressure_val = tech_result.get("mr_pressure", 0.0)
 
     # Evaluate indicator alerts on this candle's indicators
     try:
@@ -619,18 +651,21 @@ async def run_pipeline(app: FastAPI, candle: dict):
     # Zero unavailable sources, then renormalize
     flow_available = bool(flow_metrics)
     liq_available = liq_score != 0 or liq_conf > 0
+    conf_available = confluence_conf > 0
     tech_w = outer["tech"]
     flow_w = outer["flow"] if flow_available else 0.0
     onchain_w = outer["onchain"] if onchain_available else 0.0
     pattern_w = outer["pattern"]
     liq_w = outer.get("liquidation", 0.0) if liq_available else 0.0
-    total_w = tech_w + flow_w + onchain_w + pattern_w + liq_w
+    conf_w = outer.get("confluence", 0.0) if conf_available else 0.0
+    total_w = tech_w + flow_w + onchain_w + pattern_w + liq_w + conf_w
     if total_w > 0:
         tech_w /= total_w
         flow_w /= total_w
         onchain_w /= total_w
         pattern_w /= total_w
         liq_w /= total_w
+        conf_w /= total_w
 
     tech_conf = tech_result.get("confidence", 0.5)
     flow_conf = flow_result.get("confidence", 0.5)
@@ -640,13 +675,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
     # Apply IC-based source pruning: zero confidence for pruned sources
     pruned = getattr(app.state, "pruned_sources", set())
     conf_vars = {"tech": tech_conf, "flow": flow_conf, "onchain": onchain_conf,
-                 "pattern": pattern_conf, "liquidation": liq_conf}
+                 "pattern": pattern_conf, "liquidation": liq_conf, "confluence": confluence_conf}
     for src in pruned:
         if src in conf_vars:
             conf_vars[src] = 0.0
-    tech_conf, flow_conf, onchain_conf, pattern_conf, liq_conf = (
+    tech_conf, flow_conf, onchain_conf, pattern_conf, liq_conf, confluence_conf = (
         conf_vars["tech"], conf_vars["flow"], conf_vars["onchain"],
-        conf_vars["pattern"], conf_vars["liquidation"],
+        conf_vars["pattern"], conf_vars["liquidation"], conf_vars["confluence"],
     )
 
     prelim_result = compute_preliminary_score(
@@ -665,6 +700,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
         liquidation_score=liq_score,
         liquidation_weight=liq_w,
         liquidation_confidence=liq_conf,
+        confluence_score=confluence_score,
+        confluence_weight=conf_w,
+        confluence_confidence=confluence_conf,
     )
     indicator_preliminary = prelim_result["score"]
     confidence_tier = compute_confidence_tier(prelim_result["avg_confidence"])
@@ -1015,10 +1053,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             "vol_factor": scaled["vol_factor"],
             "levels_source": levels["levels_source"],
             "confluence_score": confluence_score,
-            "parent_tf": parent_tf,
-            "parent_adx": parent_indicators["adx"] if parent_indicators else None,
-            "parent_di_plus": parent_indicators["di_plus"] if parent_indicators else None,
-            "parent_di_minus": parent_indicators["di_minus"] if parent_indicators else None,
+            "confluence_confidence": confluence_conf,
             "regime_trending": tech_result["indicators"].get("regime_trending"),
             "regime_ranging": tech_result["indicators"].get("regime_ranging"),
             "regime_volatile": tech_result["indicators"].get("regime_volatile"),

@@ -28,7 +28,12 @@ def _make_app(regime_weights=None):
 
     # Settings
     app.state.settings = MagicMock()
-    app.state.settings.engine_confluence_max_score = 15
+    app.state.settings.engine_confluence_level_weight_1 = 0.50
+    app.state.settings.engine_confluence_level_weight_2 = 0.30
+    app.state.settings.engine_confluence_trend_alignment_steepness = 0.30
+    app.state.settings.engine_confluence_adx_strength_center = 15.0
+    app.state.settings.engine_confluence_adx_conviction_ratio = 0.60
+    app.state.settings.engine_confluence_mr_penalty_factor = 0.50
     app.state.settings.engine_signal_threshold = 40
     app.state.settings.engine_llm_threshold = 40
     app.state.settings.engine_mr_llm_trigger = 0.30

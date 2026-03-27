@@ -9,7 +9,8 @@ const BACKTEST_PARAMS = [
   { path: "levels.atr_defaults.sl", label: "SL ATR" },
   { path: "levels.atr_defaults.tp1", label: "TP1 ATR" },
   { path: "levels.atr_defaults.tp2", label: "TP2 ATR" },
-  { path: "confluence_max_score", label: "Confluence Max" },
+  { path: "blending.confluence.trend_alignment_steepness", label: "Confluence Steepness" },
+  { path: "blending.confluence.adx_strength_center", label: "Confluence ADX Center" },
 ];
 
 interface Props {

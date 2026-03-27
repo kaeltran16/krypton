@@ -69,7 +69,12 @@ class Settings(BaseSettings):
     engine_flow_weight: float = 0.22
     engine_onchain_weight: float = 0.23
     engine_pattern_weight: float = 0.15
-    engine_confluence_max_score: int = 15
+    engine_confluence_level_weight_1: float = 0.50
+    engine_confluence_level_weight_2: float = 0.30
+    engine_confluence_trend_alignment_steepness: float = 0.30
+    engine_confluence_adx_strength_center: float = 15.0
+    engine_confluence_adx_conviction_ratio: float = 0.60
+    engine_confluence_mr_penalty_factor: float = 0.50
     engine_mr_llm_trigger: float = 0.30
 
     # liquidation scoring

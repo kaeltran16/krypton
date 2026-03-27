@@ -254,14 +254,10 @@ class TestLLMPromptRendering:
             onchain="On-chain data not available.",
             ml_context="Direction: LONG, Confidence: 0.85, Suggested SL: 1.50x ATR, TP1: 2.00x ATR, TP2: 3.00x ATR",
             news="No recent news available.",
-            preliminary_score="60",
-            blended_score="65",
-            agreement="agree",
             candles='[{"close": 67500}]',
         )
         assert "Direction: LONG, Confidence: 0.85" in rendered
-        assert "agree" in rendered
-        assert "65" in rendered
+        assert "BTC-USDT-SWAP" in rendered
 
     def test_prompt_omits_ml_when_unavailable(self):
         from app.engine.llm import render_prompt, load_prompt_template
@@ -282,10 +278,7 @@ class TestLLMPromptRendering:
             onchain="On-chain data not available.",
             ml_context="ML model not available for this pair.",
             news="No recent news available.",
-            preliminary_score="60",
-            blended_score="60",
-            agreement="neutral",
             candles='[{"close": 67500}]',
         )
         assert "ML model not available" in rendered
-        assert "neutral" in rendered
+        assert "BTC-USDT-SWAP" in rendered

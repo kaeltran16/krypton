@@ -28,7 +28,12 @@ def _make_ps(**overrides):
         "llm_threshold": None,
         "llm_factor_weights": None,
         "llm_factor_total_cap": None,
-        "confluence_max_score": None,
+        "confluence_level_weight_1": None,
+        "confluence_level_weight_2": None,
+        "confluence_trend_alignment_steepness": None,
+        "confluence_adx_strength_center": None,
+        "confluence_adx_conviction_ratio": None,
+        "confluence_mr_penalty_factor": None,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -76,7 +81,8 @@ def test_non_none_override_applies():
     ("llm_threshold", "engine_llm_threshold", 30),
     ("llm_factor_weights", "llm_factor_weights", {"support_proximity": 8.0}),
     ("llm_factor_total_cap", "llm_factor_total_cap", 40.0),
-    ("confluence_max_score", "engine_confluence_max_score", 20),
+    ("confluence_level_weight_1", "engine_confluence_level_weight_1", 0.45),
+    ("confluence_mr_penalty_factor", "engine_confluence_mr_penalty_factor", 0.60),
 ])
 def test_each_override_mapping(db_col, settings_field, value):
     """Verify every entry in _OVERRIDE_MAP routes correctly."""

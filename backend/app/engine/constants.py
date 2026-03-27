@@ -145,12 +145,20 @@ MR_PRESSURE = {
     "bb_offset": 0.2,
     "bb_range": 0.3,
     "max_cap_shift": 18,
-    "confluence_dampening": 0.7,
     "mr_llm_trigger": 0.30,
 }
 
 VOL_MULTIPLIER = {
     "obv_weight": 0.6,
+}
+
+# -- Confluence (multi-timeframe alignment) --
+CONFLUENCE = {
+    "level_weights": {"immediate": 0.50, "grandparent": 0.30, "great_grandparent": 0.20},
+    "trend_alignment_steepness": 0.30,
+    "adx_strength_center": 15.0,
+    "adx_conviction_ratio": 0.60,
+    "mr_penalty_factor": 0.50,
 }
 
 
@@ -593,11 +601,41 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "pipeline_stage": "Regime Detection -> Outer Weights",
         "range": "0.10-0.50",
     },
+    "confluence_weight": {
+        "description": "Weight given to multi-timeframe confluence score in the outer blend",
+        "pipeline_stage": "Regime Detection -> Outer Weights",
+        "range": "0.0-0.30",
+    },
     # ── Confluence ──
-    "confluence_max_score": {
-        "description": "Maximum score bonus from multi-timeframe trend alignment",
-        "pipeline_stage": "Confluence Scoring",
-        "range": "5-25",
+    "confluence_level_weight_1": {
+        "description": "Weight for the immediate parent timeframe in confluence aggregation",
+        "pipeline_stage": "Confluence Scoring -> Level Weights",
+        "range": "0.30-0.65",
+    },
+    "confluence_level_weight_2": {
+        "description": "Weight for the grandparent timeframe in confluence aggregation",
+        "pipeline_stage": "Confluence Scoring -> Level Weights",
+        "range": "0.15-0.45",
+    },
+    "confluence_trend_alignment_steepness": {
+        "description": "Sigmoid steepness for ADX-based trend alignment strength mapping",
+        "pipeline_stage": "Confluence Scoring -> Trend Alignment",
+        "range": "0.10-0.50",
+    },
+    "confluence_adx_strength_center": {
+        "description": "ADX center for parent trend strength sigmoid in confluence scoring",
+        "pipeline_stage": "Confluence Scoring -> Trend Alignment",
+        "range": "10-25",
+    },
+    "confluence_adx_conviction_ratio": {
+        "description": "Ratio of ADX vs conviction bonus in trend alignment. Higher = more ADX-driven",
+        "pipeline_stage": "Confluence Scoring -> Trend Alignment",
+        "range": "0.40-0.80",
+    },
+    "confluence_mr_penalty_factor": {
+        "description": "How strongly a trending parent opposes a mean-reverting child signal",
+        "pipeline_stage": "Confluence Scoring -> Mean Reversion",
+        "range": "0.20-0.80",
     },
 }
 
@@ -661,4 +699,5 @@ def get_engine_constants() -> dict:
             "guardrails": _wrap(PERFORMANCE_TRACKER["guardrails"]),
         },
         "liquidation": _wrap(LIQUIDATION),
+        "confluence": _wrap(CONFLUENCE),
     }

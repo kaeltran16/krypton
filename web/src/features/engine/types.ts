@@ -73,7 +73,13 @@ export interface EngineParameters {
     thresholds: Record<string, ParameterValue>;
     llm_factor_weights: Record<string, ParameterValue>;
     llm_factor_cap: ParameterValue;
-    confluence_max_score: ParameterValue;
+    confluence: {
+      level_weights: Record<string, ParameterValue>;
+      trend_alignment_steepness: ParameterValue;
+      adx_strength_center: ParameterValue;
+      adx_conviction_ratio: ParameterValue;
+      mr_penalty_factor: ParameterValue;
+    };
   };
   levels: Record<string, Record<string, ParameterValue>>;
   patterns: { strengths: Record<string, ParameterValue> };

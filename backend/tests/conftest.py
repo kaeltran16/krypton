@@ -49,7 +49,12 @@ async def _test_lifespan(app: FastAPI):
         "pattern_confirmation": 5.0, "news_catalyst": 7.0,
     }
     mock_settings.llm_factor_total_cap = 35.0
-    mock_settings.engine_confluence_max_score = 15
+    mock_settings.engine_confluence_level_weight_1 = 0.50
+    mock_settings.engine_confluence_level_weight_2 = 0.30
+    mock_settings.engine_confluence_trend_alignment_steepness = 0.30
+    mock_settings.engine_confluence_adx_strength_center = 15.0
+    mock_settings.engine_confluence_adx_conviction_ratio = 0.60
+    mock_settings.engine_confluence_mr_penalty_factor = 0.50
     app.state.settings = mock_settings
     app.state.regime_weights = {}
     app.state.smoothed_regime = {}

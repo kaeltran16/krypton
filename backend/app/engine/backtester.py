@@ -13,7 +13,7 @@ import pandas as pd
 from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
-from app.engine.confluence import compute_confluence_score, di_direction
+from app.engine.confluence import compute_confluence_score, TIMEFRAME_ANCESTORS
 from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS
 from app.engine.regime import blend_outer_weights
 
@@ -32,9 +32,10 @@ _SIGMOID_KEYS = frozenset({
 
 
 def precompute_parent_indicators(parent_candles: list[dict]) -> tuple[list[str], list[dict]]:
-    """Pre-compute ADX/DI indicators for each parent candle.
+    """Pre-compute enriched indicators for each parent candle.
 
     Returns (sorted_timestamps, indicators_list) for bisect lookup.
+    Payload matches the enriched Redis cache shape used by live pipeline.
     """
     if len(parent_candles) < MIN_CANDLES:
         return [], []
@@ -52,9 +53,13 @@ def precompute_parent_indicators(parent_candles: list[dict]) -> tuple[list[str],
                 ts = ts.isoformat()
             timestamps.append(ts)
             indicators.append({
+                "trend_score": result["indicators"].get("trend_score", 0),
+                "mean_rev_score": result["indicators"].get("mean_rev_score", 0),
+                "trend_conviction": result["indicators"].get("trend_conviction", 0),
                 "adx": result["indicators"]["adx"],
                 "di_plus": result["indicators"]["di_plus"],
                 "di_minus": result["indicators"]["di_minus"],
+                "regime": result.get("regime", {}),
             })
         except Exception:
             continue
@@ -89,7 +94,6 @@ class BacktestConfig:
     risk_per_trade_pct: float = 1.0
     max_concurrent_positions: int = 3
     ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
-    confluence_max_score: int = 15
     param_overrides: dict = field(default_factory=dict)
 
 
@@ -119,6 +123,8 @@ def run_backtest(
     ml_predictor=None,
     parent_candles: list[dict] | None = None,
     regime_weights=None,
+    timeframe: str = "15m",
+    parent_candles_by_tf: dict[str, list[dict]] | None = None,
 ) -> dict:
     """Run a backtest on historical candles for a single pair.
 
@@ -128,6 +134,8 @@ def run_backtest(
         pair: Instrument ID.
         config: Backtest parameters. Uses defaults if None.
         cancel_flag: Dict with key "cancelled" (bool) checked each iteration.
+        parent_candles: Legacy single-parent candles (immediate parent only).
+        parent_candles_by_tf: Multi-level parent candles keyed by timeframe.
 
     Returns:
         Dict with trades list and aggregate stats.
@@ -135,11 +143,18 @@ def run_backtest(
     if config is None:
         config = BacktestConfig()
 
-    # Pre-compute parent TF indicators for confluence scoring
-    parent_timestamps: list[str] = []
-    parent_indicators_list: list[dict] = []
-    if parent_candles:
-        parent_timestamps, parent_indicators_list = precompute_parent_indicators(parent_candles)
+    # Pre-compute parent TF indicators for multi-level confluence scoring
+    ancestors = TIMEFRAME_ANCESTORS.get(timeframe, [])
+    precomputed: dict[str, tuple[list[str], list[dict]]] = {}
+
+    if parent_candles_by_tf:
+        for tf, pcandles in parent_candles_by_tf.items():
+            precomputed[tf] = precompute_parent_indicators(pcandles)
+    elif parent_candles:
+        # Legacy single-parent backward compat
+        immediate_parent = ancestors[0] if ancestors else None
+        if immediate_parent:
+            precomputed[immediate_parent] = precompute_parent_indicators(parent_candles)
 
     trades: list[SimulatedTrade] = []
     open_positions: list[SimulatedTrade] = []
@@ -191,18 +206,29 @@ def run_backtest(
         except Exception:
             continue
 
-        # Confluence scoring
-        confluence_score = 0
-        if parent_timestamps:
+        # Confluence scoring (multi-level, independent source)
+        confluence_result = {"score": 0, "confidence": 0.0}
+        if precomputed and ancestors:
             ts = current["timestamp"]
             if isinstance(ts, datetime):
                 ts = ts.isoformat()
-            parent_ind = _lookup_parent_indicators(ts, parent_timestamps, parent_indicators_list)
-            child_dir = di_direction(tech_result["indicators"]["di_plus"], tech_result["indicators"]["di_minus"])
-            confluence_score = compute_confluence_score(
-                child_dir, parent_ind, max_score=config.confluence_max_score,
+            parent_cache_list = []
+            for anc_tf in ancestors:
+                pc = precomputed.get(anc_tf)
+                if pc:
+                    parent_cache_list.append(_lookup_parent_indicators(ts, pc[0], pc[1]))
+                else:
+                    parent_cache_list.append(None)
+            child_indicators = {
+                "trend_score": tech_result["indicators"].get("trend_score", 0),
+                "mean_rev_score": tech_result["indicators"].get("mean_rev_score", 0),
+                "trend_conviction": tech_result["indicators"].get("trend_conviction", 0),
+            }
+            confluence_result = compute_confluence_score(
+                child_indicators, parent_cache_list, timeframe=timeframe,
             )
-            tech_result["score"] = max(min(tech_result["score"] + confluence_score, 100), -100)
+        conf_score = confluence_result["score"]
+        conf_confidence = confluence_result["confidence"]
 
         pat_score = 0
         detected = []
@@ -220,19 +246,23 @@ def run_backtest(
 
         # Outer weights: use regime-blended when regime_weights provided,
         # otherwise preserve config defaults for backward compatibility
+        conf_available = conf_confidence > 0
         if regime_weights is not None:
             regime = tech_result.get("regime")
             outer = blend_outer_weights(regime, regime_weights)
             bt_tech_w = outer["tech"]
             bt_pattern_w = outer["pattern"]
-            # flow and onchain are 0 in backtester, renormalize tech+pattern
-            bt_total = bt_tech_w + bt_pattern_w
+            bt_conf_w = outer.get("confluence", 0.0) if conf_available else 0.0
+            # flow and onchain are 0 in backtester, renormalize available sources
+            bt_total = bt_tech_w + bt_pattern_w + bt_conf_w
             if bt_total > 0:
                 bt_tech_w /= bt_total
                 bt_pattern_w /= bt_total
+                bt_conf_w /= bt_total
         else:
             bt_tech_w = config.tech_weight
             bt_pattern_w = config.pattern_weight
+            bt_conf_w = 0.0
 
         indicator_preliminary = compute_preliminary_score(
             technical_score=tech_result["score"],
@@ -243,6 +273,9 @@ def run_backtest(
             onchain_weight=0.0,
             pattern_score=pat_score,
             pattern_weight=bt_pattern_w,
+            confluence_score=conf_score,
+            confluence_weight=bt_conf_w,
+            confluence_confidence=conf_confidence,
         )["score"]
 
         # ── Optional ML blending ──
