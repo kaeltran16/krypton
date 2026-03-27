@@ -318,6 +318,7 @@
             }
             empty.classList.add('hidden');
 
+            if (seenIds.size > 500) seenIds.clear();
             tbody.innerHTML = errors.map(e => {
                 const isNew = !seenIds.has(e.id);
                 seenIds.add(e.id);

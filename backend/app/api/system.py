@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -7,6 +8,8 @@ from sqlalchemy import func, select, text
 
 from app.api.auth import require_auth
 from app.db.models import ErrorLog, Signal
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system")
 
@@ -214,7 +217,8 @@ async def system_errors(
             rows = result.scalars().all()
             count_result = await session.execute(count_query)
             total = count_result.scalar() or 0
-    except Exception:
+    except Exception as e:
+        logger.error("Error log query failed: %s", e)
         return {"errors": [], "total": 0, "has_more": False}
 
     return {

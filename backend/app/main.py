@@ -1630,17 +1630,12 @@ async def lifespan(app: FastAPI):
                     )
                     total = count_result.scalar() or 0
                     if total > 10000:
-                        excess = total - 10000
-                        oldest = await session.execute(
-                            select(ErrorLog.id)
-                            .order_by(ErrorLog.timestamp)
-                            .limit(excess)
+                        keep_cutoff = select(ErrorLog.timestamp).order_by(
+                            ErrorLog.timestamp.desc()
+                        ).offset(10000).limit(1).scalar_subquery()
+                        await session.execute(
+                            ErrorLog.__table__.delete().where(ErrorLog.timestamp < keep_cutoff)
                         )
-                        ids_to_delete = [row[0] for row in oldest.all()]
-                        if ids_to_delete:
-                            await session.execute(
-                                ErrorLog.__table__.delete().where(ErrorLog.id.in_(ids_to_delete))
-                            )
                     await session.commit()
             except Exception as e:
                 logger.error(f"Error log cleanup failed: {e}")

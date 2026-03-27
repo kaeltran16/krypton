@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-import sys
 import threading
 import traceback as tb_module
 from datetime import datetime, timezone
@@ -105,4 +104,5 @@ class DBErrorHandler(logging.Handler):
                 session.add_all([ErrorLog(**entry) for entry in batch])
                 await session.commit()
         except Exception:
-            print("DBErrorHandler flush failed", file=sys.stderr)
+            with self._lock:
+                self._buffer[:0] = batch[:self.MAX_BUFFER - len(self._buffer)]
