@@ -140,6 +140,66 @@ def _apply_pipeline_overrides(settings, ps):
             object.__setattr__(settings, settings_field, value)
 
 
+def _build_raw_indicators(
+    *, tech_result, tech_conf, flow_result, onchain_score, onchain_conf,
+    pat_score, pattern_conf, liq_score, liq_conf, liq_clusters, liq_details,
+    confluence_score, confluence_conf, ml_score, ml_confidence,
+    blended, indicator_preliminary, scaled, levels, outer, snap_info, llm_contribution,
+    regime=None, llm_result=None,
+) -> dict:
+    """Build the raw_indicators JSONB dict for a signal."""
+    return {
+        **tech_result["indicators"],
+        # ── Per-source scores (for live signal optimizer) ──
+        "tech_score": tech_result["score"],
+        "tech_confidence": tech_conf,
+        "flow_score": flow_result["score"],
+        "flow_confidence": flow_result.get("confidence", 0.5),
+        "onchain_score": onchain_score,
+        "onchain_confidence": onchain_conf,
+        "pattern_score": pat_score,
+        "pattern_confidence": pattern_conf,
+        "liquidation_score": liq_score,
+        "liquidation_confidence": liq_conf,
+        "confluence_score": confluence_score,
+        "confluence_confidence": confluence_conf,
+        "regime_steady": tech_result["indicators"].get("regime_steady"),
+        # ── Existing keys ──
+        "ml_score": ml_score,
+        "ml_confidence": ml_confidence,
+        "blended_score": blended,
+        "indicator_preliminary": indicator_preliminary,
+        "effective_sl_atr": scaled["sl_atr"],
+        "effective_tp1_atr": scaled["tp1_atr"],
+        "effective_tp2_atr": scaled["tp2_atr"],
+        "sl_strength_factor": scaled["sl_strength_factor"],
+        "tp_strength_factor": scaled["tp_strength_factor"],
+        "vol_factor": scaled["vol_factor"],
+        "levels_source": levels["levels_source"],
+        "regime_trending": tech_result["indicators"].get("regime_trending"),
+        "regime_ranging": tech_result["indicators"].get("regime_ranging"),
+        "regime_volatile": tech_result["indicators"].get("regime_volatile"),
+        "effective_caps": {k: round(v, 2) for k, v in tech_result["caps"].items()} if regime else None,
+        "effective_outer_weights": {k: round(v, 4) for k, v in outer.items()} if regime else None,
+        "flow_contrarian_mult": flow_result["details"].get("contrarian_mult"),
+        "flow_roc_boost": flow_result["details"].get("roc_boost"),
+        "flow_final_mult": flow_result["details"].get("final_mult"),
+        "flow_funding_roc": flow_result["details"].get("funding_roc"),
+        "flow_ls_roc": flow_result["details"].get("ls_roc"),
+        "flow_max_roc": flow_result["details"].get("max_roc"),
+        "funding_rate": flow_result["details"].get("funding_rate"),
+        "open_interest_change_pct": flow_result["details"].get("open_interest_change_pct"),
+        "long_short_ratio": flow_result["details"].get("long_short_ratio"),
+        "liquidation_cluster_count": len(liq_clusters),
+        **(liq_details if liq_details else {}),
+        "llm_contribution": llm_contribution,
+        "llm_prompt_tokens": llm_result.prompt_tokens if llm_result else None,
+        "llm_completion_tokens": llm_result.completion_tokens if llm_result else None,
+        "llm_model": llm_result.model if llm_result else None,
+        **({f"snap_{k}": v for k, v in snap_info.items()} if snap_info else {}),
+    }
+
+
 def build_engine_snapshot(
     settings, scoring_params, regime_mix, caps, outer, atr_tuple, atr_source
 ) -> dict:
@@ -1037,45 +1097,17 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "explanation": llm_result.response.explanation if llm_result else None,
         "llm_factors": [f.model_dump() for f in llm_result.response.factors] if llm_result else None,
         **levels,
-        "raw_indicators": {
-            **tech_result["indicators"],
-            "ml_score": ml_score,
-            "ml_confidence": ml_confidence,
-            "blended_score": blended,
-            "indicator_preliminary": indicator_preliminary,
-            "effective_sl_atr": scaled["sl_atr"],
-            "effective_tp1_atr": scaled["tp1_atr"],
-            "effective_tp2_atr": scaled["tp2_atr"],
-            "sl_strength_factor": scaled["sl_strength_factor"],
-            "tp_strength_factor": scaled["tp_strength_factor"],
-            "vol_factor": scaled["vol_factor"],
-            "levels_source": levels["levels_source"],
-            "confluence_score": confluence_score,
-            "confluence_confidence": confluence_conf,
-            "regime_trending": tech_result["indicators"].get("regime_trending"),
-            "regime_ranging": tech_result["indicators"].get("regime_ranging"),
-            "regime_volatile": tech_result["indicators"].get("regime_volatile"),
-            "effective_caps": {k: round(v, 2) for k, v in tech_result["caps"].items()} if regime else None,
-            "effective_outer_weights": {k: round(v, 4) for k, v in outer.items()} if regime else None,
-            "flow_contrarian_mult": flow_result["details"].get("contrarian_mult"),
-            "flow_roc_boost": flow_result["details"].get("roc_boost"),
-            "flow_final_mult": flow_result["details"].get("final_mult"),
-            "flow_funding_roc": flow_result["details"].get("funding_roc"),
-            "flow_ls_roc": flow_result["details"].get("ls_roc"),
-            "flow_max_roc": flow_result["details"].get("max_roc"),
-            "funding_rate": flow_result["details"].get("funding_rate"),
-            "open_interest_change_pct": flow_result["details"].get("open_interest_change_pct"),
-            "long_short_ratio": flow_result["details"].get("long_short_ratio"),
-            "liquidation_score": liq_score,
-            "liquidation_confidence": liq_conf,
-            "liquidation_cluster_count": len(liq_clusters),
-            **(liq_details if liq_details else {}),
-            "llm_contribution": llm_contribution,
-            "llm_prompt_tokens": llm_result.prompt_tokens if llm_result else None,
-            "llm_completion_tokens": llm_result.completion_tokens if llm_result else None,
-            "llm_model": llm_result.model if llm_result else None,
-            **({f"snap_{k}": v for k, v in snap_info.items()} if snap_info else {}),
-        },
+        "raw_indicators": _build_raw_indicators(
+            tech_result=tech_result, tech_conf=tech_conf,
+            flow_result=flow_result, onchain_score=onchain_score, onchain_conf=onchain_conf,
+            pat_score=pat_score, pattern_conf=pattern_conf,
+            liq_score=liq_score, liq_conf=liq_conf, liq_clusters=liq_clusters, liq_details=liq_details,
+            confluence_score=confluence_score, confluence_conf=confluence_conf,
+            ml_score=ml_score, ml_confidence=ml_confidence,
+            blended=blended, indicator_preliminary=indicator_preliminary,
+            scaled=scaled, levels=levels, outer=outer, snap_info=snap_info,
+            llm_contribution=llm_contribution, regime=regime, llm_result=llm_result,
+        ),
         "detected_patterns": detected_patterns or None,
         "engine_snapshot": engine_snapshot,
         "confidence_tier": confidence_tier,
@@ -1365,6 +1397,7 @@ async def lifespan(app: FastAPI):
     app.state.redis = redis
     app.state.manager = ws_manager
 
+    setup_logging()  # re-apply after uvicorn overrides root logger
     from app.logging_config import DBErrorHandler
     db_log_handler = DBErrorHandler(session_factory=db.session_factory)
     logging.getLogger().addHandler(db_log_handler)
