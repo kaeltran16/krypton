@@ -318,22 +318,21 @@ class NewsCollector:
         async with self.db.session_factory() as session:
             for h in scored:
                 try:
-                    stmt = pg_insert(NewsEvent).values(
-                        headline=h["headline"],
-                        source=h["source"],
-                        url=h["url"],
-                        fingerprint=h["fingerprint"],
-                        category=h.get("category", "crypto"),
-                        impact=h.get("impact"),
-                        sentiment=h.get("sentiment"),
-                        affected_pairs=h.get("affected_pairs", []),
-                        llm_summary=h.get("llm_summary"),
-                        content_text=h.get("content_text"),
-                        published_at=h.get("published_at", datetime.now(timezone.utc)),
-                    ).on_conflict_do_nothing(constraint="uq_news_url")
-                    result = await session.execute(stmt)
-                    await session.flush()
-
+                    async with session.begin_nested():
+                        stmt = pg_insert(NewsEvent).values(
+                            headline=h["headline"],
+                            source=h["source"],
+                            url=h["url"],
+                            fingerprint=h["fingerprint"],
+                            category=h.get("category", "crypto"),
+                            impact=h.get("impact"),
+                            sentiment=h.get("sentiment"),
+                            affected_pairs=h.get("affected_pairs", []),
+                            llm_summary=h.get("llm_summary"),
+                            content_text=h.get("content_text"),
+                            published_at=h.get("published_at", datetime.now(timezone.utc)),
+                        ).on_conflict_do_nothing()
+                        await session.execute(stmt)
                 except Exception as e:
                     logger.error(f"Failed to persist news: {h.get('headline', '?')}: {e}")
 
