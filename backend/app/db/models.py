@@ -516,3 +516,22 @@ class SourceICHistory(Base):
     __table_args__ = (
         Index("ix_source_ic_source_pair_date", "source", "pair", "date"),
     )
+
+
+class ErrorLog(Base):
+    __tablename__ = "error_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    level: Mapped[str] = mapped_column(String(10), nullable=False)
+    module: Mapped[str] = mapped_column(String(100), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    traceback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pair: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (
+        Index("ix_error_log_timestamp", "timestamp"),
+    )

@@ -52,6 +52,7 @@ services:
       - certbot-etc:/etc/letsencrypt:ro
       - certbot-var:/var/lib/letsencrypt
       - certbot-webroot:/var/www/certbot:ro
+      - ./monitor:/var/www/monitor:ro
     depends_on:
       - api
     restart: unless-stopped

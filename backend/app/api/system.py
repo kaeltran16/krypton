@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from sqlalchemy import func, select, text
 
 from app.api.auth import require_auth
-from app.db.models import Signal
+from app.db.models import ErrorLog, Signal
 
 router = APIRouter(prefix="/api/system")
 
@@ -174,4 +174,62 @@ async def system_health(request: Request, _user: dict = require_auth()):
             "onchain_seconds_ago": onchain_freshness,
             "ml_models_loaded": len(ml_predictors),
         },
+    }
+
+
+@router.get("/errors")
+async def system_errors(
+    request: Request,
+    _user: dict = require_auth(),
+    level: str | None = None,
+    module: str | None = None,
+    pair: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    since: str | None = None,
+):
+    db = request.app.state.db
+    limit = min(limit, 200)
+
+    filters = []
+    if level:
+        filters.append(ErrorLog.level == level.upper())
+    if module:
+        filters.append(ErrorLog.module.contains(module))
+    if pair:
+        filters.append(ErrorLog.pair == pair)
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            filters.append(ErrorLog.timestamp >= since_dt)
+        except ValueError:
+            pass
+
+    query = select(ErrorLog).where(*filters).order_by(ErrorLog.timestamp.desc()).offset(offset).limit(limit)
+    count_query = select(func.count()).select_from(ErrorLog).where(*filters)
+
+    try:
+        async with db.session_factory() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+            count_result = await session.execute(count_query)
+            total = count_result.scalar() or 0
+    except Exception:
+        return {"errors": [], "total": 0, "has_more": False}
+
+    return {
+        "errors": [
+            {
+                "id": row.id,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "level": row.level,
+                "module": row.module,
+                "message": row.message,
+                "traceback": row.traceback,
+                "pair": row.pair,
+            }
+            for row in rows
+        ],
+        "total": total,
+        "has_more": (offset + limit) < total,
     }

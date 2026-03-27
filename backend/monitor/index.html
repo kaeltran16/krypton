@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Krypton Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0e17;
+            color: #e1e5eb;
+            min-height: 100vh;
+        }
+        .header {
+            padding: 16px 24px;
+            background: #111827;
+            border-bottom: 1px solid #1f2937;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .header h1 { font-size: 18px; color: #F0B90B; }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-healthy { background: #064e3b; color: #0ECB81; }
+        .status-degraded { background: #78350f; color: #F0B90B; }
+        .status-unhealthy { background: #7f1d1d; color: #F6465D; }
+        .login-bar {
+            padding: 24px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-bar input {
+            background: #1f2937;
+            border: 1px solid #374151;
+            color: #e1e5eb;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: inherit;
+            width: 360px;
+        }
+        .login-bar button, .filters button {
+            background: #F0B90B;
+            color: #0a0e17;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .metrics {
+            display: flex;
+            gap: 16px;
+            padding: 16px 24px;
+            flex-wrap: wrap;
+        }
+        .metric-card {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 12px 16px;
+            min-width: 140px;
+        }
+        .metric-card .label { font-size: 11px; color: #6b7280; text-transform: uppercase; }
+        .metric-card .value { font-size: 20px; font-weight: bold; margin-top: 4px; }
+        .filters {
+            padding: 12px 24px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filters select, .filters input {
+            background: #1f2937;
+            border: 1px solid #374151;
+            color: #e1e5eb;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+        }
+        .log-table {
+            margin: 0 24px 24px;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: #111827;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+            color: #6b7280;
+            text-transform: uppercase;
+            position: sticky;
+            top: 0;
+        }
+        td {
+            padding: 8px 12px;
+            border-top: 1px solid #1f2937;
+            font-size: 13px;
+            vertical-align: top;
+        }
+        tr:hover { background: #111827; }
+        tr.new-row { animation: highlight 2s ease-out; }
+        @keyframes highlight {
+            from { background: #1a2332; }
+            to { background: transparent; }
+        }
+        .level-ERROR { color: #F6465D; }
+        .level-WARNING { color: #F0B90B; }
+        .level-CRITICAL { color: #ff4444; font-weight: bold; }
+        .traceback-toggle {
+            color: #6b7280;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: underline;
+        }
+        .traceback-content {
+            display: none;
+            white-space: pre-wrap;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 6px;
+            padding: 8px;
+            background: #0d1117;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .pagination {
+            padding: 12px 24px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+        }
+        .pagination button {
+            background: #1f2937;
+            color: #e1e5eb;
+            border: 1px solid #374151;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .pagination button:disabled { opacity: 0.4; cursor: default; }
+        .empty { text-align: center; padding: 48px; color: #6b7280; }
+        #app.hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div id="login-screen">
+        <div class="header">
+            <h1>Krypton Monitor</h1>
+        </div>
+        <div class="login-bar">
+            <input type="password" id="token-input" placeholder="Paste JWT token">
+            <button onclick="doLogin()">Connect</button>
+        </div>
+    </div>
+
+    <div id="app" class="hidden">
+        <div class="header">
+            <h1>Krypton Monitor</h1>
+            <div>
+                <span id="health-badge" class="status-badge">--</span>
+                <span style="margin-left:12px;font-size:12px;color:#6b7280" id="last-update"></span>
+            </div>
+        </div>
+
+        <div class="metrics" id="metrics-bar"></div>
+
+        <div class="filters">
+            <select id="filter-level">
+                <option value="">All Levels</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+            </select>
+            <input type="text" id="filter-module" placeholder="Module filter...">
+            <select id="filter-pair">
+                <option value="">All Pairs</option>
+                <option value="BTC-USDT-SWAP">BTC-USDT-SWAP</option>
+                <option value="ETH-USDT-SWAP">ETH-USDT-SWAP</option>
+                <option value="WIF-USDT-SWAP">WIF-USDT-SWAP</option>
+            </select>
+            <button onclick="resetFilters()">Reset</button>
+            <label style="font-size:12px;color:#6b7280;margin-left:auto">
+                <input type="checkbox" id="auto-refresh" checked> Auto-refresh (10s)
+            </label>
+        </div>
+
+        <div class="log-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:170px">Timestamp</th>
+                        <th style="width:80px">Level</th>
+                        <th style="width:180px">Module</th>
+                        <th style="width:110px">Pair</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody id="log-body"></tbody>
+            </table>
+        </div>
+        <div id="empty-state" class="empty hidden">No errors found</div>
+
+        <div class="pagination">
+            <button id="btn-prev" onclick="prevPage()" disabled>&lt; Prev</button>
+            <span id="page-info" style="font-size:13px;color:#6b7280"></span>
+            <button id="btn-next" onclick="nextPage()" disabled>Next &gt;</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const PAGE_SIZE = 50;
+        let token = '';
+        let currentOffset = 0;
+        let totalErrors = 0;
+        let seenIds = new Set();
+        let refreshTimer = null;
+
+        function doLogin() {
+            token = document.getElementById('token-input').value.trim();
+            if (!token) return;
+            sessionStorage.setItem('krypton_monitor_token', token);
+            showApp();
+        }
+
+        function showApp() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            fetchHealth();
+            fetchErrors();
+            startAutoRefresh();
+        }
+
+        function headers() {
+            return { 'Cookie': 'krypton_token=' + token };
+        }
+
+        async function fetchHealth() {
+            try {
+                const resp = await fetch(API_BASE + '/api/system/health', {
+                    credentials: 'include',
+                    headers: headers(),
+                });
+                if (resp.status === 401) { logout(); return; }
+                const data = await resp.json();
+
+                const badge = document.getElementById('health-badge');
+                badge.textContent = data.status;
+                badge.className = 'status-badge status-' + data.status;
+
+                const metrics = document.getElementById('metrics-bar');
+                metrics.innerHTML = `
+                    <div class="metric-card"><div class="label">Uptime</div><div class="value">${formatUptime(data.resources.uptime_seconds)}</div></div>
+                    <div class="metric-card"><div class="label">Memory</div><div class="value">${data.resources.memory_mb || '--'}MB</div></div>
+                    <div class="metric-card"><div class="label">Signals Today</div><div class="value">${data.pipeline.signals_today}</div></div>
+                    <div class="metric-card"><div class="label">WS Clients</div><div class="value">${data.resources.ws_clients}</div></div>
+                    <div class="metric-card"><div class="label">DB Pool</div><div class="value">${data.resources.db_pool_active}/${data.resources.db_pool_size}</div></div>
+                    <div class="metric-card"><div class="label">Last Cycle</div><div class="value">${data.pipeline.last_cycle_seconds_ago != null ? data.pipeline.last_cycle_seconds_ago + 's' : '--'}</div></div>
+                `;
+                document.getElementById('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
+            } catch (e) {
+                console.error('Health fetch failed:', e);
+            }
+        }
+
+        async function fetchErrors() {
+            const level = document.getElementById('filter-level').value;
+            const module = document.getElementById('filter-module').value;
+            const pair = document.getElementById('filter-pair').value;
+
+            const params = new URLSearchParams();
+            params.set('limit', PAGE_SIZE);
+            params.set('offset', currentOffset);
+            if (level) params.set('level', level);
+            if (module) params.set('module', module);
+            if (pair) params.set('pair', pair);
+
+            try {
+                const resp = await fetch(API_BASE + '/api/system/errors?' + params, {
+                    credentials: 'include',
+                    headers: headers(),
+                });
+                if (resp.status === 401) { logout(); return; }
+                const data = await resp.json();
+                totalErrors = data.total;
+                renderErrors(data.errors);
+                updatePagination(data.has_more);
+            } catch (e) {
+                console.error('Errors fetch failed:', e);
+            }
+        }
+
+        function renderErrors(errors) {
+            const tbody = document.getElementById('log-body');
+            const empty = document.getElementById('empty-state');
+
+            if (errors.length === 0) {
+                tbody.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            tbody.innerHTML = errors.map(e => {
+                const isNew = !seenIds.has(e.id);
+                seenIds.add(e.id);
+                const ts = e.timestamp ? new Date(e.timestamp).toLocaleString() : '--';
+                const tbHtml = e.traceback
+                    ? `<br><span class="traceback-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">traceback</span><div class="traceback-content">${escapeHtml(e.traceback)}</div>`
+                    : '';
+                return `<tr class="${isNew ? 'new-row' : ''}">
+                    <td>${ts}</td>
+                    <td class="level-${e.level}">${e.level}</td>
+                    <td>${e.module}</td>
+                    <td>${e.pair || '--'}</td>
+                    <td>${escapeHtml(e.message)}${tbHtml}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function updatePagination(hasMore) {
+            document.getElementById('btn-prev').disabled = currentOffset === 0;
+            document.getElementById('btn-next').disabled = !hasMore;
+            const page = Math.floor(currentOffset / PAGE_SIZE) + 1;
+            const totalPages = Math.max(1, Math.ceil(totalErrors / PAGE_SIZE));
+            document.getElementById('page-info').textContent = `Page ${page} of ${totalPages} (${totalErrors} total)`;
+        }
+
+        function prevPage() { currentOffset = Math.max(0, currentOffset - PAGE_SIZE); fetchErrors(); }
+        function nextPage() { currentOffset += PAGE_SIZE; fetchErrors(); }
+
+        function resetFilters() {
+            document.getElementById('filter-level').value = '';
+            document.getElementById('filter-module').value = '';
+            document.getElementById('filter-pair').value = '';
+            currentOffset = 0;
+            fetchErrors();
+        }
+
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            refreshTimer = setInterval(() => {
+                if (document.getElementById('auto-refresh').checked) {
+                    fetchHealth();
+                    fetchErrors();
+                }
+            }, 10000);
+        }
+        function stopAutoRefresh() { if (refreshTimer) clearInterval(refreshTimer); }
+
+        function logout() {
+            sessionStorage.removeItem('krypton_monitor_token');
+            token = '';
+            stopAutoRefresh();
+            document.getElementById('app').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+        }
+
+        function formatUptime(seconds) {
+            if (seconds == null) return '--';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+        }
+
+        function escapeHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        // Filter change listeners
+        document.getElementById('filter-level').addEventListener('change', () => { currentOffset = 0; fetchErrors(); });
+        document.getElementById('filter-module').addEventListener('input', debounce(() => { currentOffset = 0; fetchErrors(); }, 500));
+        document.getElementById('filter-pair').addEventListener('change', () => { currentOffset = 0; fetchErrors(); });
+
+        function debounce(fn, ms) {
+            let timer;
+            return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
+        }
+
+        // Auto-login from session
+        const savedToken = sessionStorage.getItem('krypton_monitor_token');
+        if (savedToken) { token = savedToken; showApp(); }
+    </script>
+</body>
+</html>

@@ -101,3 +101,19 @@ async def test_health_degraded_when_redis_down(health_app, client, auth_cookies)
     assert data["services"]["redis"]["status"] == "down"
     assert data["services"]["redis"]["latency_ms"] is None
     assert data["status"] in ("degraded", "unhealthy")
+
+
+@pytest.mark.asyncio
+async def test_errors_returns_200(health_app, client, auth_cookies):
+    resp = await client.get("/api/system/errors", cookies=auth_cookies)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "errors" in data
+    assert "total" in data
+    assert "has_more" in data
+
+
+@pytest.mark.asyncio
+async def test_errors_requires_auth(client):
+    resp = await client.get("/api/system/errors")
+    assert resp.status_code == 401

@@ -6,10 +6,8 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO").upper()),
-    format="%(levelname)s %(name)s: %(message)s",
-)
+from app.logging_config import setup_logging
+setup_logging()
 
 _direction_counts = {"LONG": 0, "SHORT": 0}
 _direction_lifetime = {"LONG": 0, "SHORT": 0}
@@ -22,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, cast, literal, update
+from sqlalchemy import func, select, cast, literal, update
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.config import Settings
@@ -1366,6 +1364,11 @@ async def lifespan(app: FastAPI):
     app.state.session_factory = db.session_factory
     app.state.redis = redis
     app.state.manager = ws_manager
+
+    from app.logging_config import DBErrorHandler
+    db_log_handler = DBErrorHandler(session_factory=db.session_factory)
+    logging.getLogger().addHandler(db_log_handler)
+    db_log_flush_task = asyncio.create_task(db_log_handler.start_flush_loop())
     app.state.order_flow = {}
     app.state.cvd = {}
     app.state.order_book = {}
@@ -1613,6 +1616,38 @@ async def lifespan(app: FastAPI):
 
     alert_cleanup_task = asyncio.create_task(alert_cleanup_loop())
 
+    async def error_log_cleanup_loop():
+        from app.db.models import ErrorLog
+        while True:
+            try:
+                async with db.session_factory() as session:
+                    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+                    await session.execute(
+                        ErrorLog.__table__.delete().where(ErrorLog.timestamp < cutoff)
+                    )
+                    count_result = await session.execute(
+                        select(func.count()).select_from(ErrorLog)
+                    )
+                    total = count_result.scalar() or 0
+                    if total > 10000:
+                        excess = total - 10000
+                        oldest = await session.execute(
+                            select(ErrorLog.id)
+                            .order_by(ErrorLog.timestamp)
+                            .limit(excess)
+                        )
+                        ids_to_delete = [row[0] for row in oldest.all()]
+                        if ids_to_delete:
+                            await session.execute(
+                                ErrorLog.__table__.delete().where(ErrorLog.id.in_(ids_to_delete))
+                            )
+                    await session.commit()
+            except Exception as e:
+                logger.error(f"Error log cleanup failed: {e}")
+            await asyncio.sleep(3600)
+
+    error_log_cleanup_task = asyncio.create_task(error_log_cleanup_loop())
+
     # Start optimizer background loop
     from app.engine.optimizer import run_optimizer_loop
     optimizer_task = asyncio.create_task(run_optimizer_loop(app))
@@ -1642,6 +1677,9 @@ async def lifespan(app: FastAPI):
     account_poller.stop()
     account_task.cancel()
     alert_cleanup_task.cancel()
+    db_log_flush_task.cancel()
+    error_log_cleanup_task.cancel()
+    logging.getLogger().removeHandler(db_log_handler)
     watchdog_task.cancel()
     if onchain_task:
         onchain_collector.stop()
