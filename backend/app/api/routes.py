@@ -553,7 +553,12 @@ def create_router() -> APIRouter:
             request.app.state.order_flow.get(pair, {}),
             regime=tech["regime"],
         )
-        prelim = compute_preliminary_score(tech["score"], flow["score"], 0.50, 0.25)["score"]
+        prelim = compute_preliminary_score(
+            technical_score=tech["score"],
+            order_flow_score=flow["score"],
+            tech_weight=0.50,
+            flow_weight=0.25,
+        )["score"]
         final = compute_final_score(prelim, 0)
         direction = "LONG" if final > 0 else "SHORT"
         atr = tech["indicators"].get("atr", 200)

@@ -210,6 +210,7 @@ function SnapshotContent({ snapshot }: { snapshot: Record<string, unknown> }) {
   const regimeOuter = snapshot.regime_outer as Record<string, number> | undefined;
   const meanRev = snapshot.mean_reversion as Record<string, unknown> | undefined;
   const llmWeights = snapshot.llm_factor_weights as Record<string, number> | undefined;
+  const confluence = snapshot.confluence as Record<string, number> | undefined;
 
   return (
         <div className="px-5 pb-5 space-y-4">
@@ -311,9 +312,13 @@ function SnapshotContent({ snapshot }: { snapshot: Record<string, unknown> }) {
           )}
 
           {/* Confluence */}
-          {snapshot.confluence_max_score != null && (
+          {confluence && Object.keys(confluence).length > 0 && (
             <SnapGroup title="Confluence">
-              <SnapPill label="max score" value={String(snapshot.confluence_max_score)} />
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(confluence).map(([k, v]) => (
+                  <SnapPill key={k} label={k.replace(/_/g, " ")} value={typeof v === "number" ? v.toFixed(2) : String(v)} />
+                ))}
+              </div>
             </SnapGroup>
           )}
         </div>

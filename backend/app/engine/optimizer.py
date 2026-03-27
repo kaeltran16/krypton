@@ -412,7 +412,7 @@ async def run_counterfactual_eval(
                             config.param_overrides = {
                                 "mr_pressure": {
                                     k: candidate[k]
-                                    for k in ("max_cap_shift", "confluence_dampening", "mr_llm_trigger")
+                                    for k in ("max_cap_shift", "mr_llm_trigger")
                                     if k in candidate
                                 },
                                 "vol_multiplier": {
