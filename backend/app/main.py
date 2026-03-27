@@ -546,9 +546,15 @@ async def run_pipeline(app: FastAPI, candle: dict):
     detected_patterns = []
     pat_result = {"score": 0, "confidence": 0.0}
     try:
-        detected_patterns = detect_candlestick_patterns(df)
         indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-        pat_result = compute_pattern_score(detected_patterns, indicator_ctx)
+        detected_patterns = detect_candlestick_patterns(df, indicator_ctx)
+        regime_mix = tech_result.get("regime") or {}
+        pat_result = compute_pattern_score(
+            detected_patterns, indicator_ctx,
+            strength_overrides=getattr(app.state, "pattern_strength_overrides", None),
+            regime_trending=regime_mix.get("trending", 0),
+            boost_overrides=getattr(app.state, "pattern_boost_overrides", None),
+        )
     except Exception as e:
         logger.debug(f"Pattern detection skipped: {e}")
     pat_score = pat_result["score"]
@@ -1321,6 +1327,8 @@ async def lifespan(app: FastAPI):
     app.state.pipeline_tasks = set()
     app.state.start_time = time.time()
     app.state.last_pipeline_cycle = 0.0
+    app.state.pattern_strength_overrides = None
+    app.state.pattern_boost_overrides = None
     app.state.pipeline_settings_lock = asyncio.Lock()
 
     from app.engine.performance_tracker import PerformanceTracker
@@ -1373,12 +1381,18 @@ async def lifespan(app: FastAPI):
                     "mean_rev_blend_ratio": ps.mean_rev_blend_ratio,
                 }
                 _apply_pipeline_overrides(settings, ps)
+                app.state.pattern_strength_overrides = getattr(ps, "pattern_strength_overrides", None)
+                app.state.pattern_boost_overrides = getattr(ps, "pattern_boost_overrides", None)
             else:
                 logger.warning("No PipelineSettings row found; using config defaults")
                 app.state.scoring_params = None
+                app.state.pattern_strength_overrides = None
+                app.state.pattern_boost_overrides = None
     except Exception as e:
         logger.warning("Failed to load PipelineSettings from DB: %s", e)
         app.state.scoring_params = None
+        app.state.pattern_strength_overrides = None
+        app.state.pattern_boost_overrides = None
 
     # Clean up stale backtest/ML runs orphaned by previous container restarts
     try:

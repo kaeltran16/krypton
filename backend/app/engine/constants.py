@@ -104,6 +104,13 @@ PATTERN_STRENGTHS = {
     "spinning_top": 5,
 }
 
+PATTERN_BOOST_DEFAULTS = {
+    "vol_center": 1.35,
+    "vol_steepness": 8.0,
+    "reversal_boost": 0.3,
+    "continuation_boost": 0.2,
+}
+
 # -- Performance tracker --
 PERFORMANCE_TRACKER = {
     "optimization_params": {
@@ -636,6 +643,7 @@ def get_engine_constants() -> dict:
         },
         "patterns": {
             "strengths": _wrap(PATTERN_STRENGTHS),
+            "boosts": _wrap(PATTERN_BOOST_DEFAULTS),
         },
         "performance_tracker": {
             "optimization_params": _wrap(PERFORMANCE_TRACKER["optimization_params"]),

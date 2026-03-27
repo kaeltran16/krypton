@@ -126,6 +126,50 @@ class TestBacktestParamOverrides:
         assert "profit_factor" in r["stats"]
 
 
+class TestPatternBoostOverrides:
+    def test_boost_override_changes_score(self):
+        """Pattern boost overrides via boost_overrides change output score."""
+        from app.engine.patterns import compute_pattern_score
+        patterns = [
+            {"name": "Hammer", "type": "candlestick", "bias": "bullish", "strength": 12},
+        ]
+        ctx = {"adx": 10, "di_plus": 20, "di_minus": 15, "vol_ratio": 1.5, "bb_pos": 0.5, "close": 50000}
+        r_default = compute_pattern_score(patterns, ctx, regime_trending=0.5)
+        r_override = compute_pattern_score(
+            patterns, ctx, regime_trending=0.5,
+            boost_overrides={"vol_center": 1.0, "vol_steepness": 12.0},
+        )
+        assert r_override["score"] != r_default["score"]
+
+    def test_boost_override_via_backtest(self):
+        """Boost param overrides route through backtester without error."""
+        candles = _make_candles(120, "up").to_dict("records")
+        r = run_backtest(candles, "BTC-USDT-SWAP", BacktestConfig(
+            signal_threshold=15,
+            param_overrides={"vol_center": 1.0, "vol_steepness": 12.0},
+        ))
+        assert "profit_factor" in r["stats"]
+
+
+class TestPatternBoostsParamGroup:
+    def test_group_exists(self):
+        """pattern_boosts group is defined in PARAM_GROUPS."""
+        from app.engine.param_groups import PARAM_GROUPS
+        assert "pattern_boosts" in PARAM_GROUPS
+
+    def test_group_uses_de_sweep(self):
+        from app.engine.param_groups import PARAM_GROUPS
+        assert PARAM_GROUPS["pattern_boosts"]["sweep_method"] == "de"
+
+    def test_group_constraint_rejects_negative(self):
+        from app.engine.param_groups import validate_candidate
+        assert not validate_candidate("pattern_boosts", {"vol_center": -1, "vol_steepness": 8, "reversal_boost": 0.3, "continuation_boost": 0.2})
+
+    def test_group_constraint_accepts_valid(self):
+        from app.engine.param_groups import validate_candidate
+        assert validate_candidate("pattern_boosts", {"vol_center": 1.5, "vol_steepness": 8, "reversal_boost": 0.3, "continuation_boost": 0.2})
+
+
 from types import SimpleNamespace
 
 

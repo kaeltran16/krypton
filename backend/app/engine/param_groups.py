@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
-from app.engine.constants import PATTERN_STRENGTHS
+from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS
 from app.engine.regime import REGIMES, OUTER_KEYS
 
 # ── Priority layers (lower number = optimize first) ──
@@ -21,7 +21,7 @@ from app.engine.regime import REGIMES, OUTER_KEYS
 PRIORITY_LAYERS: list[set[str]] = [
     {"source_weights", "thresholds"},           # layer 0: biggest impact, fewest params
     {"regime_caps", "regime_outer", "atr_levels"},  # layer 1
-    {"sigmoid_curves", "order_flow", "pattern_strengths",
+    {"sigmoid_curves", "order_flow", "pattern_strengths", "pattern_boosts",
      "indicator_periods", "mean_reversion", "llm_factors", "onchain",
      "mr_pressure"},  # layer 2
 ]
@@ -359,6 +359,21 @@ PARAM_GROUPS: dict[str, dict] = {
         },
         "constraints": _onchain_ok,
         "priority": _priority_for("onchain"),
+    },
+    "pattern_boosts": {
+        "params": {
+            name: f"patterns.boosts.{name}"
+            for name in PATTERN_BOOST_DEFAULTS
+        },
+        "sweep_method": "de",
+        "sweep_ranges": {
+            "vol_center": (1.1, 2.0, None),
+            "vol_steepness": (3.0, 15.0, None),
+            "reversal_boost": (0.1, 0.5, None),
+            "continuation_boost": (0.1, 0.4, None),
+        },
+        "constraints": _positive_values,
+        "priority": _priority_for("pattern_boosts"),
     },
 }
 

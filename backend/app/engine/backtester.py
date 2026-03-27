@@ -14,7 +14,7 @@ from app.engine.traditional import compute_technical_score
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
 from app.engine.confluence import compute_confluence_score, di_direction
-from app.engine.constants import PATTERN_STRENGTHS
+from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS
 from app.engine.regime import blend_outer_weights
 
 logger = logging.getLogger(__name__)
@@ -149,18 +149,22 @@ def run_backtest(
 
     scoring_params: dict | None = None
     strength_overrides: dict | None = None
+    boost_overrides: dict | None = None
     remaining_overrides: dict | None = None
     if config.param_overrides:
-        _sp, _so, _ro = {}, {}, {}
+        _sp, _so, _bo, _ro = {}, {}, {}, {}
         for k, v in config.param_overrides.items():
             if k in _SIGMOID_KEYS:
                 _sp[k] = v
             elif k in PATTERN_STRENGTHS:
                 _so[k] = v
+            elif k in PATTERN_BOOST_DEFAULTS:
+                _bo[k] = v
             else:
                 _ro[k] = v
         scoring_params = _sp or None
         strength_overrides = _so or None
+        boost_overrides = _bo or None
         remaining_overrides = _ro or None
 
     for i in range(MIN_CANDLES, len(candles)):
@@ -206,7 +210,11 @@ def run_backtest(
             try:
                 detected = detect_candlestick_patterns(df)
                 indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-                pat_score = compute_pattern_score(detected, indicator_ctx, strength_overrides=strength_overrides)["score"]
+                pat_score = compute_pattern_score(
+                    detected, indicator_ctx,
+                    strength_overrides=strength_overrides,
+                    boost_overrides=boost_overrides,
+                )["score"]
             except Exception:
                 pass
 

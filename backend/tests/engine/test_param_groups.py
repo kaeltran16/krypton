@@ -12,8 +12,8 @@ def test_all_groups_defined():
     expected = {
         "source_weights", "thresholds", "regime_caps", "regime_outer",
         "atr_levels", "sigmoid_curves", "order_flow", "pattern_strengths",
-        "indicator_periods", "mean_reversion", "llm_factors", "onchain",
-        "mr_pressure",
+        "pattern_boosts", "indicator_periods", "mean_reversion", "llm_factors",
+        "onchain", "mr_pressure",
     }
     assert set(PARAM_GROUPS.keys()) == expected
 

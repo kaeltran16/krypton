@@ -59,6 +59,8 @@ async def _test_lifespan(app: FastAPI):
         "squeeze_steepness": 0.10,
         "mean_rev_blend_ratio": 0.6,
     }
+    app.state.pattern_strength_overrides = None
+    app.state.pattern_boost_overrides = None
     app.state.pipeline_settings_lock = asyncio.Lock()
     from app.engine.optimizer import OptimizerState
     app.state.optimizer = OptimizerState()

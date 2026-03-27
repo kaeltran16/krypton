@@ -210,6 +210,8 @@ class PipelineSettings(Base):
     llm_factor_weights: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     llm_factor_total_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
     confluence_max_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pattern_strength_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    pattern_boost_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
