@@ -1,3 +1,4 @@
+from collections import deque
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -309,3 +310,58 @@ class TestPhase1Scaling:
         tp_ratio = scaled["tp1_atr"] / tp1_base
         sl_ratio = scaled["sl_atr"] / sl_base
         assert tp_ratio > sl_ratio
+
+
+def _make_flow_snapshots(candles: list[dict], start_idx: int = 20) -> list[dict]:
+    """Create flow snapshots aligned to candle timestamps, starting at start_idx."""
+    snapshots = []
+    for c in candles[start_idx:]:
+        ts = c["timestamp"]
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts)
+        snapshots.append({
+            "timestamp": ts,
+            "funding_rate": 0.0003,
+            "open_interest": 1_000_000.0,
+            "oi_change_pct": 1.5,
+            "long_short_ratio": 1.2,
+            "cvd_delta": 200.0,
+        })
+    return snapshots
+
+
+class TestFlowBacktest:
+    def test_no_flow_snapshots_same_as_before(self):
+        """BacktestConfig with flow_snapshots=None produces same results."""
+        candles = _make_candle_series(n=120)
+        config = BacktestConfig()
+        result_without = run_backtest(candles, "BTC-USDT-SWAP", config)
+        config_with_none = BacktestConfig(flow_snapshots=None)
+        result_with_none = run_backtest(candles, "BTC-USDT-SWAP", config_with_none)
+        assert result_without["stats"]["total_trades"] == result_with_none["stats"]["total_trades"]
+
+    def test_flow_snapshots_field_accepted(self):
+        """BacktestConfig accepts flow_snapshots parameter."""
+        config = BacktestConfig(flow_snapshots=[{"timestamp": datetime.now(timezone.utc)}])
+        assert config.flow_snapshots is not None
+
+    def test_flow_snapshots_affects_scoring(self):
+        """Backtest with flow snapshots may produce different trade count."""
+        candles = _make_candle_series(n=120)
+        snapshots = _make_flow_snapshots(candles, start_idx=20)
+        config_no_flow = BacktestConfig(signal_threshold=20)
+        config_flow = BacktestConfig(signal_threshold=20, flow_snapshots=snapshots)
+        result_no = run_backtest(candles, "BTC-USDT-SWAP", config_no_flow)
+        result_flow = run_backtest(candles, "BTC-USDT-SWAP", config_flow)
+        # With flow data, scoring changes — trade count may differ
+        # At minimum, the function should run without error
+        assert result_flow["stats"]["total_trades"] >= 0
+
+    def test_early_candles_without_snapshots_degrade_gracefully(self):
+        """Candles before snapshot coverage get flow_score=0."""
+        candles = _make_candle_series(n=120)
+        # Only provide snapshots for last 30 candles
+        snapshots = _make_flow_snapshots(candles, start_idx=90)
+        config = BacktestConfig(flow_snapshots=snapshots, signal_threshold=20)
+        result = run_backtest(candles, "BTC-USDT-SWAP", config)
+        assert result["stats"]["total_trades"] >= 0

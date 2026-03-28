@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from app.engine.scoring import sigmoid_score
-from app.engine.traditional import compute_technical_score
+from app.engine.traditional import compute_technical_score, score_order_flow, compute_order_flow_score
 
 
 def _make_candles(n=80, trend="up", seed=42):
@@ -1259,3 +1259,40 @@ class TestContinuousDIDirection:
         result = compute_technical_score(df)
         assert "di_direction" in result["indicators"]
         assert -1.0 <= result["indicators"]["di_direction"] <= 1.0
+
+
+class TestScoreOrderFlow:
+    def test_alias_returns_same_result(self):
+        """score_order_flow and compute_order_flow_score are the same function."""
+        metrics = {
+            "funding_rate": 0.0005,
+            "open_interest": 1_000_000,
+            "oi_change_pct": 2.5,
+            "long_short_ratio": 1.3,
+            "cvd_delta": 500,
+        }
+        regime = {"trending": 0.6, "ranging": 0.2, "volatile": 0.1, "steady": 0.1}
+        kwargs = dict(
+            metrics=metrics,
+            regime=regime,
+            flow_history=None,
+            trend_conviction=0.5,
+            mr_pressure=0.3,
+            flow_age_seconds=120.0,
+            asset_scale=1.0,
+        )
+        result_new = score_order_flow(**kwargs)
+        result_old = compute_order_flow_score(**kwargs)
+        assert result_new == result_old
+
+    def test_returns_score_details_confidence(self):
+        metrics = {"funding_rate": 0.001, "long_short_ratio": 1.5}
+        result = score_order_flow(metrics=metrics)
+        assert "score" in result
+        assert "details" in result
+        assert "confidence" in result
+        assert isinstance(result["score"], (int, float))
+
+    def test_empty_metrics_returns_zero(self):
+        result = score_order_flow(metrics={})
+        assert result["score"] == 0

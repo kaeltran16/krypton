@@ -93,8 +93,7 @@ def compute_per_candle_regime(candles_df) -> tuple[list[dict], list[float]]:
             ema_21=float(ema21.iloc[i]),
             ema_50=float(ema50.iloc[i]),
             adx=adx_val,
-            di_plus=di_p,
-            di_minus=di_m,
+            di_direction=di_p - di_m,
         )
         conviction_list.append(tc["conviction"])
 

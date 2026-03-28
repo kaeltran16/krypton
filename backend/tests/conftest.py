@@ -69,6 +69,7 @@ async def _test_lifespan(app: FastAPI):
     app.state.pipeline_settings_lock = asyncio.Lock()
     from app.engine.optimizer import OptimizerState
     app.state.optimizer = OptimizerState()
+    app.state.active_signal_optimization = None
     app.state.manager = MagicMock()
     app.state.manager.broadcast = AsyncMock()
     app.state.start_time = 1000000.0

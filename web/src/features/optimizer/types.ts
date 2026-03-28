@@ -18,6 +18,7 @@ export interface BacktestMetrics {
   avg_rr: number;
   drawdown: number;
   signals_tested: number;
+  optimization_mode?: "backtest" | "live_signals";
 }
 
 export interface ShadowProgress {

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { RefreshCw, Info } from "lucide-react";
 import { useOptimizerStore } from "../store";
 import { useEngineStore } from "../../engine/store";
+import { api } from "../../../shared/lib/api";
+import { AVAILABLE_PAIRS } from "../../../shared/lib/constants";
 import { Button } from "../../../shared/components/Button";
 import GroupHealthTable from "./GroupHealthTable";
 import ProposalCard from "./ProposalCard";
@@ -31,19 +33,25 @@ function OptimizerSkeleton() {
 
 export default function OptimizerPage() {
   const {
-    status, proposals, loading, actionLoading, error,
+    status, proposals, loading, actionLoading, signalOptLoading, error,
     fetchStatus, fetchProposals,
-    approve, reject, promote, rollback,
+    approve, reject, promote, rollback, optimizeFromSignals,
   } = useOptimizerStore();
   const { params, fetch: fetchEngine } = useEngineStore();
   const [actionError, setActionError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [selectedPair, setSelectedPair] = useState("BTC-USDT-SWAP");
+  const [signalCount, setSignalCount] = useState<number | null>(null);
 
   useEffect(() => {
     fetchStatus();
     fetchProposals();
     fetchEngine();
   }, [fetchStatus, fetchProposals, fetchEngine]);
+
+  useEffect(() => {
+    api.getResolvedSignalCount(selectedPair).then(setSignalCount).catch(() => setSignalCount(null));
+  }, [selectedPair]);
 
   const descriptions = params?.descriptions;
   const pendingProposals = proposals.filter((p) => p.status === "pending");
@@ -141,6 +149,44 @@ export default function OptimizerPage() {
           changes={status.active_shadow.changes}
         />
       )}
+
+      {/* Live Signal Optimization */}
+      <div className="border border-primary/20 rounded-xl bg-surface-container-low p-3 space-y-2">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-primary">
+          Optimize from Live Signals
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedPair}
+            onChange={(e) => setSelectedPair(e.target.value)}
+            className="bg-surface-container text-on-surface text-xs rounded px-2 py-1.5 border border-primary/20"
+          >
+            {AVAILABLE_PAIRS.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          {signalCount !== null && (
+            <span className="text-[10px] text-muted">
+              {signalCount} resolved signals
+            </span>
+          )}
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          loading={signalOptLoading}
+          disabled={actionLoading || signalOptLoading || (signalCount !== null && signalCount < 20)}
+          onClick={() => optimizeFromSignals(selectedPair)}
+          className="w-full"
+        >
+          Optimize from Live Signals
+        </Button>
+        {signalCount !== null && signalCount < 20 && (
+          <p className="text-[10px] text-muted text-center">
+            Need at least 20 resolved signals ({signalCount} available)
+          </p>
+        )}
+      </div>
 
       {/* Pending proposals */}
       {pendingProposals.length > 0 && (

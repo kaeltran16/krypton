@@ -437,7 +437,7 @@ def _field_roc(baseline, recent, accessor):
     return 0.0, False
 
 
-def compute_order_flow_score(
+def score_order_flow(
     metrics: dict,
     regime: dict | None = None,
     flow_history: list | None = None,
@@ -590,3 +590,7 @@ def compute_order_flow_score(
     details["freshness_decay"] = round(freshness_decay, 4)
 
     return {"score": score, "details": details, "confidence": flow_confidence}
+
+
+# Backward-compat alias — existing callers import this name
+compute_order_flow_score = score_order_flow

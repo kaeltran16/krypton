@@ -1412,6 +1412,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Order flow preload failed: %s", e)
     app.state.pipeline_tasks = set()
+    app.state.active_signal_optimization = None
     app.state.start_time = time.time()
     app.state.last_pipeline_cycle = 0.0
     app.state.pattern_strength_overrides = None

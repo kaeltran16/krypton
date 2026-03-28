@@ -110,6 +110,16 @@ export default function ProposalCard({
           <span className="text-sm font-medium text-on-surface">
             {humanizeKey(p.parameter_group)}
           </span>
+          {bm.optimization_mode === "live_signals" && (
+            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400">
+              Live Signals
+            </span>
+          )}
+          {(!bm.optimization_mode || bm.optimization_mode === "backtest") && (
+            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent">
+              Backtest
+            </span>
+          )}
         </div>
         {p.created_at && (
           <span className="text-[10px] text-muted">

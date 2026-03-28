@@ -10,11 +10,14 @@ from typing import Any
 
 import pandas as pd
 
-from app.engine.traditional import compute_technical_score
+from collections import deque
+from types import SimpleNamespace
+
+from app.engine.traditional import compute_technical_score, score_order_flow
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
 from app.engine.confluence import compute_confluence_score, TIMEFRAME_ANCESTORS
-from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS
+from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS, ORDER_FLOW, ORDER_FLOW_ASSET_SCALES
 from app.engine.regime import blend_outer_weights
 
 logger = logging.getLogger(__name__)
@@ -95,6 +98,7 @@ class BacktestConfig:
     max_concurrent_positions: int = 3
     ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
     param_overrides: dict = field(default_factory=dict)
+    flow_snapshots: list[dict] | None = None
 
 
 @dataclass
@@ -155,6 +159,29 @@ def run_backtest(
         immediate_parent = ancestors[0] if ancestors else None
         if immediate_parent:
             precomputed[immediate_parent] = precompute_parent_indicators(parent_candles)
+
+    # ── Flow snapshot lookup ──
+    _flow_ts: list[datetime] | None = None
+    _flow_snaps: list[dict] | None = None
+    _flow_maxlen = ORDER_FLOW["recent_window"] + ORDER_FLOW["baseline_window"]
+    _flow_deque: deque = deque(maxlen=_flow_maxlen)
+    _flow_ns_deque: deque = deque(maxlen=_flow_maxlen)
+    _flow_asset_scale = ORDER_FLOW_ASSET_SCALES.get(pair, 1.0)
+
+    if config.flow_snapshots:
+        sorted_snaps = sorted(config.flow_snapshots, key=lambda s: s["timestamp"])
+        _flow_ts = [s["timestamp"] for s in sorted_snaps]
+        _flow_snaps = sorted_snaps
+
+    # Estimate candle interval for drift tolerance
+    _candle_interval_s = 900.0  # default 15m
+    if len(candles) >= 2 and "timestamp" in candles[0] and "timestamp" in candles[1]:
+        t0, t1 = candles[0]["timestamp"], candles[1]["timestamp"]
+        if isinstance(t0, str):
+            t0 = datetime.fromisoformat(t0)
+        if isinstance(t1, str):
+            t1 = datetime.fromisoformat(t1)
+        _candle_interval_s = max((t1 - t0).total_seconds(), 60.0)
 
     trades: list[SimulatedTrade] = []
     open_positions: list[SimulatedTrade] = []
@@ -244,31 +271,61 @@ def run_backtest(
             except Exception:
                 pass
 
+        # ── Flow scoring (when snapshots provided) ──
+        flow_score = 0
+        flow_confidence = 0.0
+        if _flow_ts is not None:
+            candle_ts = current["timestamp"]
+            if isinstance(candle_ts, str):
+                candle_ts = datetime.fromisoformat(candle_ts)
+            idx = bisect.bisect_right(_flow_ts, candle_ts) - 1
+            if idx >= 0:
+                snap = _flow_snaps[idx]
+                drift = (candle_ts - snap["timestamp"]).total_seconds()
+                if drift <= 2 * _candle_interval_s:
+                    _flow_deque.append(snap)
+                    _flow_ns_deque.append(SimpleNamespace(**snap))
+                    flow_result = score_order_flow(
+                        metrics=snap,
+                        regime=tech_result.get("regime"),
+                        flow_history=list(_flow_ns_deque),
+                        trend_conviction=tech_result["indicators"].get("trend_conviction", 0),
+                        mr_pressure=tech_result["indicators"].get("mean_rev_score", 0),
+                        flow_age_seconds=drift,
+                        asset_scale=_flow_asset_scale,
+                    )
+                    flow_score = flow_result["score"]
+                    flow_confidence = flow_result["confidence"]
+
         # Outer weights: use regime-blended when regime_weights provided,
         # otherwise preserve config defaults for backward compatibility
         conf_available = conf_confidence > 0
+        flow_available = flow_score != 0 or flow_confidence > 0
         if regime_weights is not None:
             regime = tech_result.get("regime")
             outer = blend_outer_weights(regime, regime_weights)
             bt_tech_w = outer["tech"]
             bt_pattern_w = outer["pattern"]
             bt_conf_w = outer.get("confluence", 0.0) if conf_available else 0.0
-            # flow and onchain are 0 in backtester, renormalize available sources
-            bt_total = bt_tech_w + bt_pattern_w + bt_conf_w
+            bt_flow_w = outer.get("flow", 0.0) if flow_available else 0.0
+            bt_total = bt_tech_w + bt_pattern_w + bt_conf_w + bt_flow_w
             if bt_total > 0:
                 bt_tech_w /= bt_total
                 bt_pattern_w /= bt_total
                 bt_conf_w /= bt_total
+                bt_flow_w /= bt_total
         else:
             bt_tech_w = config.tech_weight
             bt_pattern_w = config.pattern_weight
             bt_conf_w = 0.0
+            bt_flow_w = 0.0
 
         indicator_preliminary = compute_preliminary_score(
             technical_score=tech_result["score"],
-            order_flow_score=0,
+            order_flow_score=flow_score,
             tech_weight=bt_tech_w,
-            flow_weight=0.0,
+            flow_weight=bt_flow_w,
+            flow_confidence=flow_confidence,
             onchain_score=0,
             onchain_weight=0.0,
             pattern_score=pat_score,

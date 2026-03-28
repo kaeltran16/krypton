@@ -282,6 +282,7 @@ def create_router() -> APIRouter:
         _key: str = auth,
         pair: str | None = Query(None),
         timeframe: str | None = Query(None),
+        outcome: str | None = Query(None),
         limit: int = Query(50, ge=1, le=200),
         since: datetime | None = Query(None),
     ):
@@ -295,9 +296,38 @@ def create_router() -> APIRouter:
                 query = query.where(Signal.pair == pair)
             if timeframe:
                 query = query.where(Signal.timeframe == timeframe)
+            query = _apply_outcome_filter(query, outcome)
             query = query.limit(limit)
             result = await session.execute(query)
             return [_signal_to_dict(s) for s in result.scalars().all()]
+
+    def _apply_outcome_filter(query, outcome: str | None):
+        if outcome == "resolved":
+            return query.where(Signal.outcome != "PENDING")
+        elif outcome:
+            return query.where(Signal.outcome == outcome)
+        return query
+
+    @router.get("/signals/count")
+    async def get_signal_count(
+        request: Request,
+        _key: str = auth,
+        pair: str | None = Query(None),
+        outcome: str | None = Query(None),
+        since: datetime | None = Query(None),
+    ):
+        from sqlalchemy import func as sa_func
+
+        db = request.app.state.db
+        if since is None:
+            since = datetime.now(timezone.utc) - timedelta(days=90)
+        async with db.session_factory() as session:
+            query = select(sa_func.count(Signal.id)).where(Signal.created_at >= since)
+            if pair:
+                query = query.where(Signal.pair == pair)
+            query = _apply_outcome_filter(query, outcome)
+            result = await session.execute(query)
+            return {"count": result.scalar()}
 
     @router.get("/signals/stats")
     async def get_signal_stats(

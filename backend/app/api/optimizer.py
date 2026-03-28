@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select, desc
 
 from app.api.auth import require_auth
-from app.db.models import ParameterProposal, ShadowResult
+from app.db.models import ParameterProposal, Signal, ShadowResult
 from app.engine.optimizer import (
     OptimizerState,
     start_shadow,
@@ -237,3 +238,148 @@ async def rollback_proposal_endpoint(
     })
 
     return {"status": "rolled_back", "proposal_id": proposal_id}
+
+
+class OptimizeFromSignalsRequest(BaseModel):
+    pair: str
+    timeframe: str | None = None
+    lookback_days: int = 90
+    max_signals: int = 500
+    min_signals: int = 20
+    max_iterations: int = 300
+
+
+@router.post("/optimize-from-signals")
+async def optimize_from_signals_endpoint(
+    request: Request,
+    body: OptimizeFromSignalsRequest,
+    _key: str = require_auth(),
+):
+    app = request.app
+
+    if app.state.active_signal_optimization is not None:
+        raise HTTPException(409, detail={
+            "error": "optimization_running",
+            "pair": app.state.active_signal_optimization["pair"],
+        })
+
+    since = datetime.now(timezone.utc) - timedelta(days=body.lookback_days)
+    async with app.state.db.session_factory() as session:
+        query = (
+            select(Signal)
+            .where(Signal.pair == body.pair)
+            .where(Signal.outcome != "PENDING")
+            .where(Signal.created_at >= since)
+        )
+        if body.timeframe:
+            query = query.where(Signal.timeframe == body.timeframe)
+        query = query.order_by(Signal.created_at.desc()).limit(body.max_signals)
+        result = await session.execute(query)
+        rows = result.scalars().all()
+
+    signals = []
+    for s in rows:
+        ri = s.raw_indicators or {}
+        if not ri.get("regime_trending"):
+            continue  # need at least regime data
+        if "tech_score" not in ri:
+            ri = {
+                **ri,
+                "tech_score": s.traditional_score,
+                "tech_confidence": ri.get("tech_confidence", 0.5),
+                "flow_score": ri.get("flow_score", 0),
+                "flow_confidence": ri.get("flow_confidence", 0.0),
+                "onchain_score": ri.get("onchain_score", 0),
+                "onchain_confidence": ri.get("onchain_confidence", 0.0),
+                "pattern_score": ri.get("pattern_score", 0),
+                "pattern_confidence": ri.get("pattern_confidence", 0.0),
+                "liquidation_score": ri.get("liquidation_score", 0),
+                "liquidation_confidence": ri.get("liquidation_confidence", 0.0),
+                "confluence_score": ri.get("confluence_score", 0),
+                "confluence_confidence": ri.get("confluence_confidence", 0.0),
+                "regime_steady": ri.get("regime_steady", 0),
+            }
+        signals.append({
+            "outcome": s.outcome,
+            "outcome_pnl_pct": float(s.outcome_pnl_pct) if s.outcome_pnl_pct else 0.0,
+            "entry": float(s.entry),
+            "stop_loss": float(s.stop_loss),
+            "take_profit_1": float(s.take_profit_1),
+            "raw_indicators": ri,
+        })
+
+    if len(signals) < body.min_signals:
+        raise HTTPException(400, detail={
+            "error": "insufficient_signals",
+            "available": len(signals),
+            "required": body.min_signals,
+        })
+
+    cancel_flag = {"cancelled": False}
+    app.state.active_signal_optimization = {"pair": body.pair, "cancel_flag": cancel_flag}
+
+    manager = app.state.manager
+    await manager.broadcast({
+        "type": "optimizer_update",
+        "event": "optimization_started",
+        "pair": body.pair,
+        "mode": "live_signals",
+    })
+
+    async def _run():
+        from app.engine.regime_optimizer import optimize_from_signals
+
+        try:
+            opt_result = await asyncio.to_thread(
+                optimize_from_signals,
+                signals, body.pair,
+                signal_threshold=app.state.settings.engine_signal_threshold,
+                max_iterations=body.max_iterations,
+                cancel_flag=cancel_flag,
+            )
+
+            # Create proposal
+            async with app.state.db.session_factory() as session:
+                proposal = ParameterProposal(
+                    status="pending",
+                    parameter_group="regime_outer_weights",
+                    changes=opt_result["weights"],
+                    backtest_metrics={
+                        "optimization_mode": "live_signals",
+                        "fitness": opt_result["fitness"],
+                        "evaluations": opt_result["evaluations"],
+                        "signals_used": len(signals),
+                        "pair": body.pair,
+                        "profit_factor": 0,
+                        "win_rate": 0,
+                        "avg_rr": 0,
+                        "drawdown": 0,
+                        "signals_tested": len(signals),
+                    },
+                )
+                session.add(proposal)
+                await session.commit()
+                await session.refresh(proposal)
+                proposal_id = proposal.id
+
+            await manager.broadcast({
+                "type": "optimizer_update",
+                "event": "optimization_completed",
+                "proposal_id": proposal_id,
+                "mode": "live_signals",
+            })
+        except Exception as e:
+            logger.exception("Signal optimization failed: %s", e)
+            await manager.broadcast({
+                "type": "optimizer_update",
+                "event": "optimization_failed",
+                "pair": body.pair,
+                "mode": "live_signals",
+                "error": str(e),
+            })
+        finally:
+            app.state.active_signal_optimization = None
+
+    asyncio.create_task(_run())
+
+    return {"status": "started", "pair": body.pair, "signals_queued": len(signals)}

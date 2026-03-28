@@ -7,6 +7,7 @@ interface OptimizerStore {
   proposals: Proposal[];
   loading: boolean;
   actionLoading: boolean;
+  signalOptLoading: boolean;
   error: string | null;
 
   fetchStatus: () => Promise<void>;
@@ -15,6 +16,7 @@ interface OptimizerStore {
   reject: (id: number, reason?: string) => Promise<void>;
   promote: (id: number) => Promise<void>;
   rollback: (id: number) => Promise<void>;
+  optimizeFromSignals: (pair: string) => Promise<void>;
 }
 
 export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
@@ -22,6 +24,7 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
   proposals: [],
   loading: false,
   actionLoading: false,
+  signalOptLoading: false,
   error: null,
 
   fetchStatus: async () => {
@@ -80,6 +83,18 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
       await Promise.all([get().fetchStatus(), get().fetchProposals()]);
     } finally {
       set({ actionLoading: false });
+    }
+  },
+
+  optimizeFromSignals: async (pair) => {
+    set({ signalOptLoading: true, error: null });
+    try {
+      await api.optimizeFromSignals({ pair });
+      await Promise.all([get().fetchStatus(), get().fetchProposals()]);
+    } catch (e) {
+      set({ error: (e as Error).message });
+    } finally {
+      set({ signalOptLoading: false });
     }
   },
 }));

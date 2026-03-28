@@ -559,6 +559,28 @@ export const api = {
       method: "POST",
     }),
 
+  optimizeFromSignals: (params: {
+    pair: string;
+    timeframe?: string;
+    lookback_days?: number;
+    max_signals?: number;
+    min_signals?: number;
+    max_iterations?: number;
+  }) =>
+    request<{ status: string; pair: string; signals_queued: number }>(
+      "/api/optimizer/optimize-from-signals",
+      {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify(params),
+      }
+    ),
+
+  getResolvedSignalCount: (pair: string) =>
+    request<{ count: number }>(
+      `/api/signals/count?pair=${encodeURIComponent(pair)}&outcome=resolved`
+    ).then((r) => r.count),
+
   // Positions / Algo orders
   getAlgoOrders: (pair: string) =>
     request<AlgoOrder[]>(`/api/account/algo-orders?pair=${encodeURIComponent(pair)}`),
