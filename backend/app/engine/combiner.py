@@ -1,4 +1,8 @@
 from app.engine.models import LLMFactor, DEFAULT_FACTOR_WEIGHTS
+from app.engine.constants import (
+    CONVICTION_FLOOR, ML_WEIGHT_MIN, ML_WEIGHT_MAX,
+    AGREEMENT_FLOOR, AGREEMENT_CEILING, LEVEL_DEFAULTS,
+)
 
 
 def compute_preliminary_score(
@@ -10,52 +14,64 @@ def compute_preliminary_score(
     onchain_weight: float = 0.23,
     pattern_score: int = 0,
     pattern_weight: float = 0.15,
-    tech_confidence: float = 0.5,
-    flow_confidence: float = 0.5,
-    onchain_confidence: float = 0.5,
-    pattern_confidence: float = 0.5,
+    tech_availability: float | None = None,
+    tech_conviction: float | None = None,
+    flow_availability: float | None = None,
+    flow_conviction: float | None = None,
+    onchain_availability: float | None = None,
+    onchain_conviction: float | None = None,
+    pattern_availability: float | None = None,
+    pattern_conviction: float | None = None,
     liquidation_score: int = 0,
     liquidation_weight: float = 0.0,
-    liquidation_confidence: float = 0.0,
+    liquidation_availability: float | None = None,
+    liquidation_conviction: float | None = None,
     confluence_score: int = 0,
     confluence_weight: float = 0.0,
+    confluence_availability: float | None = None,
+    confluence_conviction: float | None = None,
+    tech_confidence: float = 0.0,
+    flow_confidence: float = 0.0,
+    onchain_confidence: float = 0.0,
+    pattern_confidence: float = 0.0,
+    liquidation_confidence: float = 0.0,
     confluence_confidence: float = 0.0,
+    conviction_floor: float = CONVICTION_FLOOR,
 ) -> dict:
-    # confidence-weight each source: effective_weight = base_weight * confidence
-    ew_tech = tech_weight * tech_confidence
-    ew_flow = flow_weight * flow_confidence
-    ew_onchain = onchain_weight * onchain_confidence
-    ew_pattern = pattern_weight * pattern_confidence
-    ew_liq = liquidation_weight * liquidation_confidence
-    ew_conf = confluence_weight * confluence_confidence
-    total = ew_tech + ew_flow + ew_onchain + ew_pattern + ew_liq + ew_conf
-    if total > 0:
-        ew_tech /= total
-        ew_flow /= total
-        ew_onchain /= total
-        ew_pattern /= total
-        ew_liq /= total
-        ew_conf /= total
-    else:
-        ew_tech = ew_flow = ew_onchain = ew_pattern = ew_liq = ew_conf = 1 / 6
-    score = round(
-        technical_score * ew_tech
-        + order_flow_score * ew_flow
-        + onchain_score * ew_onchain
-        + pattern_score * ew_pattern
-        + liquidation_score * ew_liq
-        + confluence_score * ew_conf
-    )
-    # weighted-average confidence (using base weights, not effective weights)
-    total_w = tech_weight + flow_weight + onchain_weight + pattern_weight + liquidation_weight + confluence_weight
-    avg_confidence = (
-        tech_confidence * tech_weight
-        + flow_confidence * flow_weight
-        + onchain_confidence * onchain_weight
-        + pattern_confidence * pattern_weight
-        + liquidation_confidence * liquidation_weight
-        + confluence_confidence * confluence_weight
-    ) / total_w if total_w > 0 else 0.0
+    avails = [
+        tech_availability if tech_availability is not None else tech_confidence,
+        flow_availability if flow_availability is not None else flow_confidence,
+        onchain_availability if onchain_availability is not None else onchain_confidence,
+        pattern_availability if pattern_availability is not None else pattern_confidence,
+        liquidation_availability if liquidation_availability is not None else liquidation_confidence,
+        confluence_availability if confluence_availability is not None else confluence_confidence,
+    ]
+    convictions = [
+        tech_conviction if tech_conviction is not None else 1.0,
+        flow_conviction if flow_conviction is not None else 1.0,
+        onchain_conviction if onchain_conviction is not None else 1.0,
+        pattern_conviction if pattern_conviction is not None else 1.0,
+        liquidation_conviction if liquidation_conviction is not None else 1.0,
+        confluence_conviction if confluence_conviction is not None else 1.0,
+    ]
+    base_weights = [tech_weight, flow_weight, onchain_weight, pattern_weight,
+                    liquidation_weight, confluence_weight]
+    scores = [technical_score, order_flow_score, onchain_score, pattern_score,
+              liquidation_score, confluence_score]
+
+    ew = [w * a for w, a in zip(base_weights, avails)]
+    total = sum(ew)
+    if total <= 0:
+        return {"score": 0, "avg_confidence": 0.0}
+    ew = [e / total for e in ew]
+
+    scaled = [s * (conviction_floor + (1 - conviction_floor) * c)
+              for s, c in zip(scores, convictions)]
+
+    score = round(sum(sc * w for sc, w in zip(scaled, ew)))
+
+    avg_confidence = sum(a * w for a, w in zip(avails, ew))
+
     return {"score": score, "avg_confidence": avg_confidence}
 
 
@@ -72,20 +88,25 @@ def blend_with_ml(
     indicator_preliminary: int,
     ml_score: float | None,
     ml_confidence: float | None,
-    ml_weight: float = 0.25,
+    ml_weight_min: float = ML_WEIGHT_MIN,
+    ml_weight_max: float = ML_WEIGHT_MAX,
     ml_confidence_threshold: float = 0.65,
 ) -> int:
-    """Blend indicator preliminary score with ML score.
+    """Blend indicator preliminary score with ML score using adaptive weight ramp.
 
-    ML score only contributes when confidence >= threshold.
+    ML weight ramps linearly from ml_weight_min at threshold to ml_weight_max at 1.0.
     Returns integer -100 to +100.
     """
+    if ml_confidence_threshold >= 1.0:
+        return indicator_preliminary
     if (
         ml_score is not None
         and ml_confidence is not None
         and ml_confidence >= ml_confidence_threshold
     ):
-        blended = indicator_preliminary * (1 - ml_weight) + ml_score * ml_weight
+        t = (ml_confidence - ml_confidence_threshold) / (1.0 - ml_confidence_threshold)
+        effective_weight = ml_weight_min + (ml_weight_max - ml_weight_min) * t
+        blended = indicator_preliminary * (1 - effective_weight) + ml_score * effective_weight
         return max(min(round(blended), 100), -100)
     return indicator_preliminary
 
@@ -97,6 +118,27 @@ def compute_agreement(indicator_preliminary: int, ml_score: float | None) -> str
     if (indicator_preliminary > 0 and ml_score > 0) or (indicator_preliminary < 0 and ml_score < 0):
         return "agree"
     return "disagree"
+
+
+def apply_agreement_factor(
+    preliminary: int,
+    source_scores: list[int],
+    source_availabilities: list[float],
+    floor: float = AGREEMENT_FLOOR,
+    ceiling: float = AGREEMENT_CEILING,
+) -> int:
+    """Apply directional agreement bonus/penalty to preliminary score."""
+    contributing = [(s, a) for s, a in zip(source_scores, source_availabilities)
+                    if a > 0 and s != 0]
+    if len(contributing) < 3:
+        return preliminary
+    positive = sum(1 for s, _ in contributing if s > 0)
+    negative = sum(1 for s, _ in contributing if s < 0)
+    agreement_ratio = max(positive, negative) / len(contributing)
+    # Linear interpolation: floor at 50% agreement, ceiling at 100%
+    multiplier = floor + (ceiling - floor) * (agreement_ratio - 0.5) / 0.5
+    multiplier = max(floor, min(ceiling, multiplier))
+    return max(-100, min(100, round(preliminary * multiplier)))
 
 
 def compute_llm_contribution(
@@ -122,8 +164,6 @@ def _validate_llm_levels(direction: str, levels: dict) -> bool:
         return levels["stop_loss"] < levels["entry"] < levels["take_profit_1"] < levels["take_profit_2"]
     return levels["stop_loss"] > levels["entry"] > levels["take_profit_1"] > levels["take_profit_2"]
 
-
-from app.engine.constants import LEVEL_DEFAULTS
 
 _p1 = LEVEL_DEFAULTS["phase1_scaling"]
 STRENGTH_MIN = _p1["strength_min"]

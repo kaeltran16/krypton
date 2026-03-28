@@ -27,7 +27,7 @@ async def test_get_optimizer_status(client, app, optimizer_state):
     assert "groups" in data
     assert "global_profit_factor" in data
     assert "active_shadow" in data
-    assert len(data["groups"]) == 16
+    assert len(data["groups"]) == 19
 
 
 @pytest.mark.asyncio

@@ -34,7 +34,7 @@ from app.api.connections import ConnectionManager
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.constants import ORDER_FLOW_ASSET_SCALES
-from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, scale_atr_multipliers
+from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, apply_agreement_factor, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
 from app.engine.risk import PositionSizer
@@ -154,7 +154,7 @@ def _build_raw_indicators(
         "tech_score": tech_result["score"],
         "tech_confidence": tech_conf,
         "flow_score": flow_result["score"],
-        "flow_confidence": flow_result.get("confidence", 0.5),
+        "flow_confidence": flow_result.get("confidence", 0.0),
         "onchain_score": onchain_score,
         "onchain_confidence": onchain_conf,
         "pattern_score": pat_score,
@@ -673,6 +673,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     liq_conf = 0.0
     liq_clusters = []
     liq_details = {}
+    liq_result = {}
     liq_collector = getattr(app.state, "liquidation_collector", None)
     if liq_collector:
         try:
@@ -706,41 +707,43 @@ async def run_pipeline(app: FastAPI, candle: dict):
         regime = smooth_regime_mix(regime, app.state.smoothed_regime, pair, timeframe)
     outer = blend_outer_weights(regime, regime_weights)
 
-    # Zero unavailable sources, then renormalize
-    flow_available = bool(flow_metrics)
-    liq_available = liq_score != 0 or liq_conf > 0
-    conf_available = confluence_conf > 0
     tech_w = outer["tech"]
-    flow_w = outer["flow"] if flow_available else 0.0
-    onchain_w = outer["onchain"] if onchain_available else 0.0
+    flow_w = outer["flow"]
+    onchain_w = outer["onchain"]
     pattern_w = outer["pattern"]
-    liq_w = outer.get("liquidation", 0.0) if liq_available else 0.0
-    conf_w = outer.get("confluence", 0.0) if conf_available else 0.0
-    total_w = tech_w + flow_w + onchain_w + pattern_w + liq_w + conf_w
-    if total_w > 0:
-        tech_w /= total_w
-        flow_w /= total_w
-        onchain_w /= total_w
-        pattern_w /= total_w
-        liq_w /= total_w
-        conf_w /= total_w
+    liq_w = outer.get("liquidation", 0.0)
+    conf_w = outer.get("confluence", 0.0)
 
-    tech_conf = tech_result.get("confidence", 0.5)
-    flow_conf = flow_result.get("confidence", 0.5)
+    tech_avail = tech_result.get("availability", tech_result.get("confidence", 0.0))
+    tech_conv = tech_result.get("conviction", 1.0)
+    flow_avail = flow_result.get("availability", flow_result.get("confidence", 0.0))
+    flow_conv = flow_result.get("conviction", 1.0)
+    onchain_avail = onchain_result.get("availability", onchain_result.get("confidence", 0.0))
+    onchain_conv = onchain_result.get("conviction", 1.0)
+    pattern_avail = pat_result.get("availability", pat_result.get("confidence", 0.0))
+    pattern_conv = pat_result.get("conviction", 1.0)
+    liq_avail = liq_result.get("availability", liq_conf)
+    liq_conv = liq_result.get("conviction", 1.0)
+    confluence_avail = confluence_result.get("availability", confluence_conf)
+    confluence_conv = confluence_result.get("conviction", 1.0)
+
+    pruned = getattr(app.state, "pruned_sources", set())
+    avail_vars = {"tech": tech_avail, "flow": flow_avail, "onchain": onchain_avail,
+                  "pattern": pattern_avail, "liquidation": liq_avail, "confluence": confluence_avail}
+    for src in pruned:
+        if src in avail_vars:
+            avail_vars[src] = 0.0
+    tech_avail = avail_vars["tech"]
+    flow_avail = avail_vars["flow"]
+    onchain_avail = avail_vars["onchain"]
+    pattern_avail = avail_vars["pattern"]
+    liq_avail = avail_vars["liquidation"]
+    confluence_avail = avail_vars["confluence"]
+
+    tech_conf = tech_result.get("confidence", 0.0)
+    flow_conf = flow_result.get("confidence", 0.0)
     onchain_conf = onchain_result.get("confidence", 0.0)
     pattern_conf = pat_result.get("confidence", 0.0)
-
-    # Apply IC-based source pruning: zero confidence for pruned sources
-    pruned = getattr(app.state, "pruned_sources", set())
-    conf_vars = {"tech": tech_conf, "flow": flow_conf, "onchain": onchain_conf,
-                 "pattern": pattern_conf, "liquidation": liq_conf, "confluence": confluence_conf}
-    for src in pruned:
-        if src in conf_vars:
-            conf_vars[src] = 0.0
-    tech_conf, flow_conf, onchain_conf, pattern_conf, liq_conf, confluence_conf = (
-        conf_vars["tech"], conf_vars["flow"], conf_vars["onchain"],
-        conf_vars["pattern"], conf_vars["liquidation"], conf_vars["confluence"],
-    )
 
     prelim_result = compute_preliminary_score(
         tech_result["score"],
@@ -751,19 +754,35 @@ async def run_pipeline(app: FastAPI, candle: dict):
         onchain_w,
         pat_score,
         pattern_w,
-        tech_confidence=tech_conf,
-        flow_confidence=flow_conf,
-        onchain_confidence=onchain_conf,
-        pattern_confidence=pattern_conf,
+        tech_availability=tech_avail,
+        tech_conviction=tech_conv,
+        flow_availability=flow_avail,
+        flow_conviction=flow_conv,
+        onchain_availability=onchain_avail,
+        onchain_conviction=onchain_conv,
+        pattern_availability=pattern_avail,
+        pattern_conviction=pattern_conv,
         liquidation_score=liq_score,
         liquidation_weight=liq_w,
-        liquidation_confidence=liq_conf,
+        liquidation_availability=liq_avail,
+        liquidation_conviction=liq_conv,
         confluence_score=confluence_score,
         confluence_weight=conf_w,
-        confluence_confidence=confluence_conf,
+        confluence_availability=confluence_avail,
+        confluence_conviction=confluence_conv,
     )
     indicator_preliminary = prelim_result["score"]
     confidence_tier = compute_confidence_tier(prelim_result["avg_confidence"])
+
+    source_scores = [
+        tech_result["score"], flow_result["score"], onchain_score,
+        pat_score, liq_score, confluence_score,
+    ]
+    source_avails = [tech_avail, flow_avail, onchain_avail,
+                     pattern_avail, liq_avail, confluence_avail]
+    indicator_preliminary = apply_agreement_factor(
+        indicator_preliminary, source_scores, source_avails,
+    )
 
     # ── Step 2: ML scoring (when available) ──
     ml_score = None
@@ -905,7 +924,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
         indicator_preliminary,
         ml_score,
         ml_confidence,
-        ml_weight=settings.engine_ml_weight,
+        ml_weight_min=settings.engine_ml_weight_min,
+        ml_weight_max=settings.engine_ml_weight_max,
         ml_confidence_threshold=settings.ml_confidence_threshold,
     )
     agreement = compute_agreement(indicator_preliminary, ml_score)
@@ -1324,6 +1344,21 @@ async def check_pending_signals(app: FastAPI):
                     trigger_session, resolved_pairs_timeframes
                 )
 
+        # ── IC pruning: daily computation ──
+        last_ic = getattr(app.state, "last_ic_computed_at", None)
+        now = datetime.now(timezone.utc)
+        if last_ic is None or (now - last_ic).total_seconds() > 86400:
+            try:
+                from app.engine.optimizer import run_ic_pruning_cycle
+
+                current_pruned = getattr(app.state, "pruned_sources", set())
+                updated = await run_ic_pruning_cycle(db, current_pruned, logger)
+                if updated is not None:
+                    app.state.pruned_sources = updated
+                app.state.last_ic_computed_at = now
+            except Exception as e:
+                logger.warning(f"IC pruning computation failed: {e}")
+
 
 OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H", "1D": "1Dutc"}
 
@@ -1583,6 +1618,7 @@ async def lifespan(app: FastAPI):
     app.state.liquidation_collector = liq_collector
     app.state.learned_thresholds = {}  # populated by optimizer
     app.state.pruned_sources = set()   # populated by IC tracking
+    app.state.last_ic_computed_at = None  # populated by IC tracking
 
     # News collector
     from app.collector.news import NewsCollector

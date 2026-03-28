@@ -40,7 +40,7 @@ def _child(trend_score=0, mean_rev_score=0, trend_conviction=0.5):
 
 def test_empty_parent_list_returns_zero():
     result = compute_confluence_score(_child(trend_score=50), [], "15m")
-    assert result == {"score": 0, "confidence": 0.0}
+    assert result["score"] == 0 and result["confidence"] == 0.0
 
 
 # ── 2. all None parents ──
@@ -49,7 +49,7 @@ def test_all_none_parents_returns_zero():
     result = compute_confluence_score(
         _child(trend_score=50), [None, None, None], "15m"
     )
-    assert result == {"score": 0, "confidence": 0.0}
+    assert result["score"] == 0 and result["confidence"] == 0.0
 
 
 # ── 3. no thesis (both sub-scores 0) ──
@@ -59,7 +59,7 @@ def test_no_thesis_returns_zero():
     result = compute_confluence_score(
         _child(trend_score=0, mean_rev_score=0), [parent], "15m"
     )
-    assert result == {"score": 0, "confidence": 0.0}
+    assert result["score"] == 0 and result["confidence"] == 0.0
 
 
 # ── 4. trend thesis with aligned parent ──
@@ -270,7 +270,7 @@ def test_unknown_timeframe_returns_zero():
     child = _child(trend_score=50)
     parent = _make_parent(trend_score=40, adx=30)
     result = compute_confluence_score(child, [parent], "5m")
-    assert result == {"score": 0, "confidence": 0.0}
+    assert result["score"] == 0 and result["confidence"] == 0.0
 
 
 def test_1d_timeframe_returns_zero():
@@ -278,7 +278,7 @@ def test_1d_timeframe_returns_zero():
     child = _child(trend_score=50)
     parent = _make_parent(trend_score=40, adx=30)
     result = compute_confluence_score(child, [parent], "1D")
-    assert result == {"score": 0, "confidence": 0.0}
+    assert result["score"] == 0 and result["confidence"] == 0.0
 
 
 def test_score_clamped_to_100():

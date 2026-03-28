@@ -75,7 +75,11 @@ def test_pipeline_with_empty_order_flow():
     flow_result = compute_order_flow_score({})
     assert flow_result["score"] == 0
 
-    preliminary = compute_preliminary_score(tech_result["score"], flow_result["score"])["score"]
+    preliminary = compute_preliminary_score(
+        tech_result["score"], flow_result["score"],
+        tech_confidence=tech_result.get("confidence", 1.0),
+        flow_confidence=flow_result.get("confidence", 0.0),
+    )["score"]
     assert preliminary != 0
 
 

@@ -7,6 +7,7 @@ from app.engine.combiner import (
     calculate_levels,
     blend_with_ml,
     compute_agreement,
+    apply_agreement_factor,
     scale_atr_multipliers,
 )
 
@@ -18,6 +19,7 @@ def test_preliminary_score_weighted():
     """Preliminary score with default 4-way weights (40/22/23/15)."""
     result = compute_preliminary_score(
         technical_score=80, order_flow_score=60, onchain_score=40, pattern_score=50,
+        tech_confidence=1.0, flow_confidence=1.0, onchain_confidence=1.0, pattern_confidence=1.0,
     )
     expected = round(80 * 0.40 + 60 * 0.22 + 40 * 0.23 + 50 * 0.15)
     assert result["score"] == expected
@@ -30,6 +32,7 @@ def test_preliminary_score_two_way_backward_compat():
         tech_weight=0.60, flow_weight=0.40,
         onchain_score=0, onchain_weight=0.0,
         pattern_weight=0.0,
+        tech_confidence=1.0, flow_confidence=1.0,
     )
     expected = round(80 * 0.60 + 50 * 0.40)
     assert result["score"] == expected
@@ -40,6 +43,7 @@ def test_preliminary_score_auto_normalization():
     result = compute_preliminary_score(
         technical_score=100, order_flow_score=100, onchain_score=100, pattern_score=100,
         tech_weight=0.50, flow_weight=0.50, onchain_weight=0.50, pattern_weight=0.50,
+        tech_confidence=1.0, flow_confidence=1.0, onchain_confidence=1.0, pattern_confidence=1.0,
     )
     assert result["score"] == 100
 
@@ -49,6 +53,7 @@ def test_preliminary_score_custom_weights():
     result = compute_preliminary_score(
         technical_score=70, order_flow_score=50, onchain_score=30, pattern_score=60,
         tech_weight=0.50, flow_weight=0.20, onchain_weight=0.15, pattern_weight=0.15,
+        tech_confidence=1.0, flow_confidence=1.0, onchain_confidence=1.0, pattern_confidence=1.0,
     )
     expected = round(70 * 0.50 + 50 * 0.20 + 30 * 0.15 + 60 * 0.15)
     assert result["score"] == expected
@@ -61,7 +66,8 @@ def test_blend_with_ml_score_contributes():
     """ML score blends with indicator preliminary when confidence is above threshold."""
     result = blend_with_ml(
         indicator_preliminary=60, ml_score=80.0, ml_confidence=0.80,
-        ml_weight=0.25, ml_confidence_threshold=0.65,
+        ml_weight_min=0.25, ml_weight_max=0.25,  # fixed weight for backward compat test
+        ml_confidence_threshold=0.65,
     )
     expected = round(60 * 0.75 + 80.0 * 0.25)
     assert result == expected
@@ -71,7 +77,7 @@ def test_blend_with_ml_below_threshold():
     """ML score ignored when confidence below threshold."""
     result = blend_with_ml(
         indicator_preliminary=60, ml_score=80.0, ml_confidence=0.50,
-        ml_weight=0.25, ml_confidence_threshold=0.65,
+        ml_weight_min=0.25, ml_weight_max=0.25, ml_confidence_threshold=0.65,
     )
     assert result == 60
 
@@ -85,10 +91,10 @@ def test_blend_with_ml_none_score():
 
 
 def test_blend_with_ml_zero_weight():
-    """ML weight 0 means no ML contribution."""
+    """Zero ML weight means no contribution."""
     result = blend_with_ml(
         indicator_preliminary=60, ml_score=80.0, ml_confidence=0.90,
-        ml_weight=0.0, ml_confidence_threshold=0.65,
+        ml_weight_min=0.0, ml_weight_max=0.0, ml_confidence_threshold=0.65,
     )
     assert result == 60
 
@@ -97,7 +103,7 @@ def test_blend_with_ml_bounded():
     """Blended score is clamped to -100..+100."""
     result = blend_with_ml(
         indicator_preliminary=95, ml_score=100.0, ml_confidence=0.99,
-        ml_weight=0.5, ml_confidence_threshold=0.65,
+        ml_weight_min=0.5, ml_weight_max=0.5, ml_confidence_threshold=0.65,
     )
     assert -100 <= result <= 100
 
@@ -106,7 +112,7 @@ def test_blend_with_ml_negative_scores():
     """Blending works for SHORT (negative) scores."""
     result = blend_with_ml(
         indicator_preliminary=-50, ml_score=-75.0, ml_confidence=0.75,
-        ml_weight=0.25, ml_confidence_threshold=0.65,
+        ml_weight_min=0.25, ml_weight_max=0.25, ml_confidence_threshold=0.65,
     )
     expected = round(-50 * 0.75 + -75.0 * 0.25)
     assert result == expected
@@ -116,11 +122,60 @@ def test_blend_with_ml_disagreement():
     """Indicators positive, ML negative — blend dampens."""
     result = blend_with_ml(
         indicator_preliminary=60, ml_score=-80.0, ml_confidence=0.80,
-        ml_weight=0.25, ml_confidence_threshold=0.65,
+        ml_weight_min=0.25, ml_weight_max=0.25, ml_confidence_threshold=0.65,
     )
     expected = round(60 * 0.75 + (-80.0) * 0.25)
     assert result == expected
     assert result < 60  # dampened by disagreement
+
+
+class TestAdaptiveMLRamp:
+    def test_at_threshold_gets_min_weight(self):
+        """At exactly the threshold, ML gets minimum weight."""
+        result = blend_with_ml(
+            indicator_preliminary=60, ml_score=80.0, ml_confidence=0.65,
+            ml_weight_min=0.05, ml_weight_max=0.30,
+            ml_confidence_threshold=0.65,
+        )
+        assert result == round(60 * 0.95 + 80 * 0.05)
+
+    def test_at_max_confidence_gets_max_weight(self):
+        """At confidence=1.0, ML gets maximum weight."""
+        result = blend_with_ml(
+            indicator_preliminary=60, ml_score=80.0, ml_confidence=1.0,
+            ml_weight_min=0.05, ml_weight_max=0.30,
+            ml_confidence_threshold=0.65,
+        )
+        assert result == round(60 * 0.70 + 80 * 0.30)
+
+    def test_mid_confidence_gets_interpolated_weight(self):
+        """Midpoint confidence gets interpolated weight."""
+        # ml_confidence=0.825, t=(0.825-0.65)/(1.0-0.65)=0.5
+        # weight = 0.05 + 0.25*0.5 = 0.175
+        result = blend_with_ml(
+            indicator_preliminary=60, ml_score=80.0, ml_confidence=0.825,
+            ml_weight_min=0.05, ml_weight_max=0.30,
+            ml_confidence_threshold=0.65,
+        )
+        assert result == round(60 * 0.825 + 80 * 0.175)
+
+    def test_below_threshold_excluded(self):
+        """Below threshold, ML doesn't participate."""
+        result = blend_with_ml(
+            indicator_preliminary=60, ml_score=80.0, ml_confidence=0.50,
+            ml_weight_min=0.05, ml_weight_max=0.30,
+            ml_confidence_threshold=0.65,
+        )
+        assert result == 60
+
+    def test_threshold_1_0_returns_preliminary(self):
+        """Threshold of 1.0 means ML never participates (division by zero guard)."""
+        result = blend_with_ml(
+            indicator_preliminary=60, ml_score=80.0, ml_confidence=1.0,
+            ml_weight_min=0.05, ml_weight_max=0.30,
+            ml_confidence_threshold=1.0,
+        )
+        assert result == 60
 
 
 # ── compute_agreement ──
@@ -614,3 +669,75 @@ def test_atr_defaults_rr_floor_enforced():
     )
     # TP1 should be bumped to sl * rr_floor = 2.5
     assert result["take_profit_1"] == 50000.0 + 2.5 * 500.0
+
+
+# ── apply_agreement_factor ──
+
+
+class TestAgreementFactor:
+    def test_full_agreement_boosts(self):
+        """5/5 same direction gets ceiling multiplier."""
+        result = apply_agreement_factor(
+            preliminary=50,
+            source_scores=[40, 30, 20, 10, 5],
+            source_availabilities=[1.0, 1.0, 1.0, 1.0, 1.0],
+        )
+        assert result > 50
+
+    def test_full_disagreement_penalizes(self):
+        """3 vs 2 split gets penalty."""
+        result = apply_agreement_factor(
+            preliminary=50,
+            source_scores=[40, 30, 20, -10, -5],
+            source_availabilities=[1.0, 1.0, 1.0, 1.0, 1.0],
+        )
+        assert result < 50
+
+    def test_fewer_than_3_sources_no_change(self):
+        """<3 contributing sources means no bonus/penalty."""
+        result = apply_agreement_factor(
+            preliminary=50,
+            source_scores=[40, 30],
+            source_availabilities=[1.0, 1.0],
+        )
+        assert result == 50
+
+    def test_zero_score_excluded(self):
+        """Sources with score=0 don't count."""
+        result = apply_agreement_factor(
+            preliminary=50,
+            source_scores=[40, 0, 0, 0, 30],
+            source_availabilities=[1.0, 1.0, 1.0, 1.0, 1.0],
+        )
+        assert result == 50
+
+    def test_unavailable_excluded(self):
+        """Sources with availability=0 don't count."""
+        result = apply_agreement_factor(
+            preliminary=50,
+            source_scores=[40, 30, 20, 10, 5],
+            source_availabilities=[1.0, 1.0, 1.0, 0.0, 0.0],
+        )
+        assert result == apply_agreement_factor(
+            preliminary=50,
+            source_scores=[40, 30, 20],
+            source_availabilities=[1.0, 1.0, 1.0],
+        )
+
+    def test_bounded_to_100(self):
+        """Result clamped to [-100, 100]."""
+        result = apply_agreement_factor(
+            preliminary=95,
+            source_scores=[90, 80, 70, 60, 50],
+            source_availabilities=[1.0, 1.0, 1.0, 1.0, 1.0],
+        )
+        assert result <= 100
+
+    def test_zero_preliminary_stays_zero(self):
+        """Can't create signal from nothing."""
+        result = apply_agreement_factor(
+            preliminary=0,
+            source_scores=[40, 30, 20],
+            source_availabilities=[1.0, 1.0, 1.0],
+        )
+        assert result == 0

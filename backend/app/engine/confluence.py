@@ -164,7 +164,7 @@ def compute_confluence_score(
         weights.append(level_weights[i])
 
     if not alignments:
-        return {"score": 0, "confidence": 0.0}
+        return {"score": 0, "availability": 0.0, "conviction": 0.0, "confidence": 0.0}
 
     # normalize weights over available levels
     total_weight = sum(weights)
@@ -175,7 +175,14 @@ def compute_confluence_score(
     score = max(-100, min(100, score))
 
     available_levels = len(alignments)
-    avg_conviction = sum(convictions) / len(convictions) if convictions else 0
-    confidence = (available_levels / max_levels) * avg_conviction
+    avg_conviction_val = sum(convictions) / len(convictions) if convictions else 0
+    conf_availability = round(available_levels / max_levels, 4) if max_levels > 0 else 0.0
+    conf_conviction_val = round(avg_conviction_val, 4)
+    confidence = round(conf_availability * conf_conviction_val, 4)
 
-    return {"score": score, "confidence": round(confidence, 4)}
+    return {
+        "score": score,
+        "availability": conf_availability,
+        "conviction": conf_conviction_val,
+        "confidence": confidence,  # backward compat
+    }

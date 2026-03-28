@@ -127,3 +127,4 @@ The core data flow on each confirmed candle (orchestrated in `main.py:run_pipeli
 - Never add Co-Authored-By or any author attribution lines to commit messages
 - Do not make small incremental commits per task — commit once at the end of a feature/batch
 - Do not commit immediately after creating spec/plan markdown files — wait until there is accompanying implementation work
+- Do not use git worktrees — work directly on the current branch

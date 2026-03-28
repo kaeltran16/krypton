@@ -68,11 +68,13 @@ def test_compute_daily_ic_for_sources():
 def test_get_pruned_sources_returns_set():
     """Should return set of source names that should be pruned."""
     ic_histories = {
-        "tech": [-0.06, -0.07, -0.08],  # below threshold for 3 days
+        "tech": [-0.06, -0.07, -0.08],  # below threshold but excluded from pruning
         "flow": [0.1, 0.2, 0.15],       # healthy
+        "onchain": [-0.06, -0.07, -0.08],  # below threshold for 3 days — prunable
         "liquidation": [-0.10, -0.10, -0.10],  # excluded from pruning
     }
     pruned = get_pruned_sources(ic_histories, threshold=-0.05, min_days=3)
-    assert "tech" in pruned
+    assert "tech" not in pruned  # tech is excluded from pruning
+    assert "onchain" in pruned
     assert "flow" not in pruned
     assert "liquidation" not in pruned  # excluded per spec

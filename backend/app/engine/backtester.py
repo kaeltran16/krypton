@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 from app.engine.traditional import compute_technical_score, score_order_flow
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
-from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers
+from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers, apply_agreement_factor
 from app.engine.confluence import compute_confluence_score, TIMEFRAME_ANCESTORS
 from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS, ORDER_FLOW, ORDER_FLOW_ASSET_SCALES
 from app.engine.regime import blend_outer_weights
@@ -257,19 +257,20 @@ def run_backtest(
         conf_score = confluence_result["score"]
         conf_confidence = confluence_result["confidence"]
 
-        pat_score = 0
+        pat_result = {"score": 0, "availability": 0.0, "conviction": 0.0}
         detected = []
         if config.enable_patterns:
             try:
                 detected = detect_candlestick_patterns(df)
                 indicator_ctx = {**tech_result["indicators"], "close": float(df.iloc[-1]["close"])}
-                pat_score = compute_pattern_score(
+                pat_result = compute_pattern_score(
                     detected, indicator_ctx,
                     strength_overrides=strength_overrides,
                     boost_overrides=boost_overrides,
-                )["score"]
+                )
             except Exception:
                 pass
+        pat_score = pat_result["score"]
 
         # ── Flow scoring (when snapshots provided) ──
         flow_score = 0
@@ -297,43 +298,49 @@ def run_backtest(
                     flow_score = flow_result["score"]
                     flow_confidence = flow_result["confidence"]
 
-        # Outer weights: use regime-blended when regime_weights provided,
-        # otherwise preserve config defaults for backward compatibility
-        conf_available = conf_confidence > 0
-        flow_available = flow_score != 0 or flow_confidence > 0
         if regime_weights is not None:
             regime = tech_result.get("regime")
             outer = blend_outer_weights(regime, regime_weights)
             bt_tech_w = outer["tech"]
             bt_pattern_w = outer["pattern"]
-            bt_conf_w = outer.get("confluence", 0.0) if conf_available else 0.0
-            bt_flow_w = outer.get("flow", 0.0) if flow_available else 0.0
-            bt_total = bt_tech_w + bt_pattern_w + bt_conf_w + bt_flow_w
-            if bt_total > 0:
-                bt_tech_w /= bt_total
-                bt_pattern_w /= bt_total
-                bt_conf_w /= bt_total
-                bt_flow_w /= bt_total
+            bt_conf_w = outer.get("confluence", 0.0)
+            # flow and onchain are 0 in backtester — combiner handles via confidence=0
         else:
             bt_tech_w = config.tech_weight
             bt_pattern_w = config.pattern_weight
             bt_conf_w = 0.0
-            bt_flow_w = 0.0
 
         indicator_preliminary = compute_preliminary_score(
             technical_score=tech_result["score"],
             order_flow_score=flow_score,
             tech_weight=bt_tech_w,
-            flow_weight=bt_flow_w,
-            flow_confidence=flow_confidence,
+            flow_weight=0.0,
             onchain_score=0,
             onchain_weight=0.0,
             pattern_score=pat_score,
             pattern_weight=bt_pattern_w,
+            tech_availability=tech_result.get("availability", 1.0),
+            tech_conviction=tech_result.get("conviction", 1.0),
+            flow_availability=0.0,
+            onchain_availability=0.0,
+            pattern_availability=pat_result.get("availability", 0.0),
+            pattern_conviction=pat_result.get("conviction", 1.0),
             confluence_score=conf_score,
             confluence_weight=bt_conf_w,
-            confluence_confidence=conf_confidence,
+            confluence_availability=confluence_result.get("availability", conf_confidence),
+            confluence_conviction=confluence_result.get("conviction", 1.0),
         )["score"]
+
+        bt_scores = [tech_result["score"], 0, 0, pat_score, 0, conf_score]
+        bt_avails = [
+            tech_result.get("availability", 1.0), 0.0, 0.0,
+            pat_result.get("availability", 0.0),
+            0.0,
+            confluence_result.get("availability", conf_confidence),
+        ]
+        indicator_preliminary = apply_agreement_factor(
+            indicator_preliminary, bt_scores, bt_avails,
+        )
 
         # ── Optional ML blending ──
         ml_score = None

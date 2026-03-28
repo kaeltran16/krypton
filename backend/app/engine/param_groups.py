@@ -466,6 +466,61 @@ PARAM_GROUPS["confluence"] = {
 }
 
 
+def _agreement_ok(c: dict) -> bool:
+    return c["floor"] < 1.0 < c["ceiling"]
+
+
+PARAM_GROUPS["agreement"] = {
+    "params": {
+        "floor": "blending.agreement.floor",
+        "ceiling": "blending.agreement.ceiling",
+    },
+    "sweep_method": "grid",
+    "sweep_ranges": {
+        "floor": (0.70, 0.95, 0.05),
+        "ceiling": (1.05, 1.25, 0.05),
+    },
+    "constraints": _agreement_ok,
+    "priority": _priority_for("agreement"),
+}
+
+
+def _conviction_ok(c: dict) -> bool:
+    return 0 <= c["floor"] < 1.0
+
+
+PARAM_GROUPS["conviction"] = {
+    "params": {
+        "floor": "blending.conviction.floor",
+    },
+    "sweep_method": "grid",
+    "sweep_ranges": {
+        "floor": (0.0, 0.5, 0.1),
+    },
+    "constraints": _conviction_ok,
+    "priority": _priority_for("conviction"),
+}
+
+
+def _ml_blending_ok(c: dict) -> bool:
+    return c["weight_max"] > c["weight_min"] >= 0
+
+
+PARAM_GROUPS["ml_blending"] = {
+    "params": {
+        "weight_min": "blending.ml.weight_min",
+        "weight_max": "blending.ml.weight_max",
+    },
+    "sweep_method": "grid",
+    "sweep_ranges": {
+        "weight_min": (0.0, 0.15, 0.05),
+        "weight_max": (0.15, 0.40, 0.05),
+    },
+    "constraints": _ml_blending_ok,
+    "priority": _priority_for("ml_blending"),
+}
+
+
 def get_group(name: str) -> dict | None:
     """Return a parameter group definition by name."""
     return PARAM_GROUPS.get(name)

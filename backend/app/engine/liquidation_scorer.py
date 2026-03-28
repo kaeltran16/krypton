@@ -299,9 +299,18 @@ def compute_liquidation_score(
         + asymmetry_result["confidence"] * asym_weight
     )
 
+    # Availability: existing combined confidence (cluster/volume adequacy)
+    liq_availability = min(1.0, combined_confidence)
+
+    # Conviction: score magnitude relative to max possible
+    max_possible = max(cluster_max_score * cluster_weight + asymmetry_max_score * asym_weight, 1)
+    liq_conviction = min(1.0, abs(combined_score) / max_possible)
+
     return {
         "score": combined_score,
-        "confidence": min(1.0, combined_confidence),
+        "availability": liq_availability,
+        "conviction": round(liq_conviction, 4),
+        "confidence": min(1.0, combined_confidence),  # backward compat
         "clusters": cluster_result["clusters"],
         "details": {
             "cluster_score": cluster_result["score"],

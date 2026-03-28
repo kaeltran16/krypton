@@ -161,6 +161,21 @@ CONFLUENCE = {
     "mr_penalty_factor": 0.50,
 }
 
+# -- Blending: conviction floor --
+CONVICTION_FLOOR = 0.3
+
+# -- Blending: directional agreement bonus --
+AGREEMENT_FLOOR = 0.85
+AGREEMENT_CEILING = 1.15
+
+# -- Blending: adaptive ML weight ramp --
+ML_WEIGHT_MIN = 0.05
+ML_WEIGHT_MAX = 0.30
+
+# -- IC pruning --
+IC_WINDOW_DAYS = 7
+IC_MIN_DAYS = 30
+
 
 PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     # ── Blending / Source Weights ──

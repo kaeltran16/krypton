@@ -399,7 +399,16 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     confidence = thesis_conf * 0.8 + (1.0 - indicator_conflict) * 0.2
     confidence = max(0.0, min(1.0, confidence))
 
-    return {"score": score, "indicators": indicators, "regime": regime, "caps": caps, "confidence": round(confidence, 4), "mr_pressure": round(mr_pressure_val, 4)}
+    return {
+        "score": score,
+        "indicators": indicators,
+        "regime": regime,
+        "caps": caps,
+        "availability": 1.0,  # candle data always present when pipeline runs
+        "conviction": round(confidence, 4),  # thesis_conf-based conviction
+        "confidence": round(confidence, 4),  # backward compat
+        "mr_pressure": round(mr_pressure_val, 4),
+    }
 
 
 # --- Order flow contrarian bias constants ---
@@ -589,7 +598,40 @@ def score_order_flow(
     details["flow_age_seconds"] = round(flow_age_seconds, 1) if flow_age_seconds is not None else None
     details["freshness_decay"] = round(freshness_decay, 4)
 
-    return {"score": score, "details": details, "confidence": flow_confidence}
+    sub_scores = [
+        details.get("funding_score", 0),
+        details.get("oi_score", 0),
+        details.get("ls_score", 0),
+        details.get("cvd_score", 0),
+        details.get("book_score", 0),
+    ]
+    sub_present = [
+        metrics.get("funding_rate") is not None,
+        metrics.get("open_interest_change_pct") is not None,
+        metrics.get("long_short_ratio") is not None,
+        cvd_delta is not None,
+        book_imbalance is not None,
+    ]
+    available_subs = [s for s, present in zip(sub_scores, sub_present) if present]
+    if available_subs:
+        positive = sum(1 for s in available_subs if s > 0)
+        negative = sum(1 for s in available_subs if s < 0)
+        neutral = sum(1 for s in available_subs if s == 0)
+        flow_conviction = round(
+            (max(positive, negative) + 0.5 * neutral) / len(available_subs), 4
+        )
+    else:
+        flow_conviction = 0.0
+
+    flow_availability = flow_confidence  # already includes freshness decay
+
+    return {
+        "score": score,
+        "details": details,
+        "availability": flow_availability,
+        "conviction": flow_conviction,
+        "confidence": flow_confidence,  # backward compat
+    }
 
 
 # Backward-compat alias — existing callers import this name

@@ -293,7 +293,7 @@ def compute_pattern_score(
         Dict with 'score' in [-100, +100] and 'confidence' in [0, 1].
     """
     if not patterns:
-        return {"score": 0, "confidence": 0.0}
+        return {"score": 0, "availability": 0.0, "conviction": 0.0, "confidence": 0.0}
 
     if indicator_ctx is None:
         indicator_ctx = {"adx": 0, "di_plus": 0, "di_minus": 0, "vol_ratio": 1.0, "bb_pos": 0.5, "close": 0}
@@ -361,9 +361,16 @@ def compute_pattern_score(
 
     non_neutral = bull_count + bear_count
     if non_neutral == 0:
-        confidence = 0.0
+        pattern_availability = 0.0
+        pattern_conviction = 0.0
     else:
-        agreement = max(bull_count, bear_count) / non_neutral
-        confidence = round(min(non_neutral / 3.0, 1.0) * agreement, 4)
+        pattern_availability = round(min(non_neutral / 3.0, 1.0), 4)
+        pattern_conviction = round(max(bull_count, bear_count) / non_neutral, 4)
+    confidence = round(pattern_availability * pattern_conviction, 4)
 
-    return {"score": max(min(round(total), 100), -100), "confidence": confidence}
+    return {
+        "score": max(min(round(total), 100), -100),
+        "availability": pattern_availability,
+        "conviction": pattern_conviction,
+        "confidence": confidence,  # backward compat
+    }

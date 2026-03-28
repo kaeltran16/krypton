@@ -521,7 +521,7 @@ async def run_counterfactual_eval(
 
 IC_PRUNE_THRESHOLD = -0.05
 IC_REENABLE_THRESHOLD = 0.0
-IC_PRUNE_EXCLUDED_SOURCES = {"liquidation"}
+IC_PRUNE_EXCLUDED_SOURCES = {"tech", "liquidation"}
 
 _IC_SOURCE_KEYS = {key: f"{key}_score" for key in OUTER_KEYS}
 
@@ -580,6 +580,86 @@ def get_pruned_sources(
         if should_prune_source(source_name, history, threshold, min_days):
             pruned.add(source_name)
     return pruned
+
+
+async def run_ic_pruning_cycle(
+    db, current_pruned: set[str], logger,
+) -> set[str] | None:
+    """Run daily IC computation and return updated pruned_sources set, or None if skipped."""
+    from datetime import timedelta
+    from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from app.db.models import Signal, SourceICHistory
+    from app.engine.constants import IC_WINDOW_DAYS, IC_MIN_DAYS
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=IC_WINDOW_DAYS)
+    today = now.date()
+
+    async with db.session_factory() as session:
+        result = await session.execute(
+            select(Signal)
+            .where(Signal.outcome != "PENDING", Signal.outcome_at >= cutoff)
+            .order_by(Signal.created_at)
+        )
+        resolved = result.scalars().all()
+
+        if len(resolved) < 5:
+            return None
+
+        groups: dict[tuple[str, str], list] = {}
+        for sig in resolved:
+            key = (sig.pair, sig.timeframe)
+            raw = sig.raw_indicators or {}
+            groups.setdefault(key, []).append({
+                "raw_indicators": raw,
+                "outcome_pct": sig.outcome_pnl_pct or 0.0,
+            })
+
+        for (pair, tf), sigs in groups.items():
+            if len(sigs) < 5:
+                continue
+            ic_map = compute_daily_ic_for_sources(sigs)
+            for source_name, ic_val in ic_map.items():
+                stmt = pg_insert(SourceICHistory).values(
+                    source=source_name, pair=pair,
+                    timeframe=tf, date=today, ic_value=ic_val,
+                ).on_conflict_do_update(
+                    constraint="uq_source_ic_per_day",
+                    set_={"ic_value": ic_val},
+                )
+                await session.execute(stmt)
+        await session.flush()
+
+        result = await session.execute(
+            select(SourceICHistory)
+            .where(SourceICHistory.date >= today - timedelta(days=IC_MIN_DAYS))
+            .order_by(SourceICHistory.date)
+        )
+        all_ic = result.scalars().all()
+        await session.commit()
+
+    ic_histories: dict[str, list[float]] = {}
+    for row in all_ic:
+        ic_histories.setdefault(row.source, []).append(row.ic_value)
+
+    new_pruned = get_pruned_sources(ic_histories, min_days=IC_MIN_DAYS)
+
+    for src in list(current_pruned):
+        if src in ic_histories and should_reenable_source(ic_histories[src]):
+            new_pruned.discard(src)
+            logger.info(f"IC pruning: re-enabled source '{src}'")
+
+    if new_pruned != current_pruned:
+        added = new_pruned - current_pruned
+        removed = current_pruned - new_pruned
+        for src in added:
+            logger.info(f"IC pruning: pruned source '{src}'")
+        for src in removed:
+            logger.info(f"IC pruning: re-enabled source '{src}'")
+        return new_pruned
+
+    return None
 
 
 # ── Adaptive signal threshold ──

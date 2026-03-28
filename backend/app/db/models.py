@@ -205,6 +205,8 @@ class PipelineSettings(Base):
     onchain_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     pattern_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml_blend_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_weight_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_weight_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml_confidence_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     llm_threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)
     llm_factor_weights: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -514,6 +516,7 @@ class SourceICHistory(Base):
     ic_value: Mapped[float] = mapped_column(Float, nullable=False)
 
     __table_args__ = (
+        UniqueConstraint("source", "pair", "timeframe", "date", name="uq_source_ic_per_day"),
         Index("ix_source_ic_source_pair_date", "source", "pair", "date"),
     )
 
