@@ -609,4 +609,32 @@ export const api = {
 
   getFundingCosts: (pair: string) =>
     request<FundingCostsResponse>(`/api/account/funding-costs?pair=${encodeURIComponent(pair)}`),
+
+  getMonitorEvaluations: (params?: {
+    pair?: string;
+    emitted?: boolean;
+    after?: string;
+    before?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.pair) query.set("pair", params.pair);
+    if (params?.emitted !== undefined) query.set("emitted", String(params.emitted));
+    if (params?.after) query.set("after", params.after);
+    if (params?.before) query.set("before", params.before);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return request<{ items: import("../../features/monitor/types").PipelineEvaluation[]; total: number }>(
+      `/api/monitor/evaluations${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  getMonitorSummary: (period?: string) => {
+    const query = period ? `?period=${period}` : "";
+    return request<import("../../features/monitor/types").MonitorSummary>(
+      `/api/monitor/summary${query}`,
+    );
+  },
 };

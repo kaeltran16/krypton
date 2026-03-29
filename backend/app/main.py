@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.config import Settings
 from app.exchange.okx_client import OKXClient
 from app.db.database import Base, Database
-from app.db.models import Candle, MLTrainingRun, NewsEvent, OrderFlowSnapshot, PipelineSettings, Signal
+from app.db.models import Candle, MLTrainingRun, NewsEvent, OrderFlowSnapshot, PipelineEvaluation, PipelineSettings, Signal
 from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
@@ -334,6 +334,16 @@ async def persist_signal(db: Database, signal_data: dict):
             signal_data["id"] = row.id
     except Exception as e:
         logger.error(f"Failed to persist signal {signal_data['pair']}: {e}")
+
+
+async def persist_pipeline_evaluation(db: Database, eval_data: dict):
+    """Best-effort persistence of a pipeline evaluation row."""
+    try:
+        async with db.session_factory() as session:
+            session.add(PipelineEvaluation(**eval_data))
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to persist pipeline evaluation for {eval_data.get('pair')}:{eval_data.get('timeframe')}: {e}")
 
 
 async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids=None):
@@ -1028,7 +1038,60 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     app.state.last_pipeline_cycle = time.time()
 
+    # Build lightweight indicators dict for evaluation persistence
+    eval_indicators = dict(tech_result.get("indicators", {}))
+    pair_flow = order_flow.get(pair, {})
+    eval_indicators.update({
+        k: pair_flow[k] for k in ("funding_rate", "long_short_ratio", "open_interest_change_pct", "cvd_delta")
+        if k in pair_flow
+    })
+
+    eval_regime = {
+        "trending": regime.get("trending", 0) if regime else 0,
+        "ranging": regime.get("ranging", 0) if regime else 0,
+        "volatile": regime.get("volatile", 0) if regime else 0,
+    }
+
+    eval_availabilities = {
+        "tech": {"availability": tech_avail, "conviction": tech_conv},
+        "flow": {"availability": flow_avail, "conviction": flow_conv},
+        "onchain": {"availability": onchain_avail, "conviction": onchain_conv},
+        "pattern": {"availability": pattern_avail, "conviction": pattern_conv},
+        "liquidation": {"availability": liq_avail, "conviction": liq_conv},
+        "confluence": {"availability": confluence_avail, "conviction": confluence_conv},
+    }
+
+    eval_ts = candle.get("timestamp")
+    if isinstance(eval_ts, str):
+        eval_ts = datetime.fromisoformat(eval_ts)
+
+    eval_kwargs = dict(
+        pair=pair,
+        timeframe=timeframe,
+        evaluated_at=eval_ts,
+        emitted=emitted,
+        signal_id=None,
+        final_score=round(final),
+        effective_threshold=round(effective_threshold),
+        tech_score=round(tech_result["score"]),
+        flow_score=round(flow_result["score"]),
+        onchain_score=round(onchain_score) if onchain_available else None,
+        pattern_score=round(pat_score) if pat_score else None,
+        liquidation_score=round(liq_score) if liq_score else None,
+        confluence_score=round(confluence_score) if confluence_score else None,
+        indicator_preliminary=round(indicator_preliminary),
+        blended_score=round(blended),
+        ml_score=ml_score,
+        ml_confidence=ml_confidence,
+        llm_contribution=round(llm_contribution),
+        ml_agreement=agreement,
+        indicators=eval_indicators,
+        regime=eval_regime,
+        availabilities=eval_availabilities,
+    )
+
     if not emitted:
+        asyncio.create_task(persist_pipeline_evaluation(db, eval_kwargs))
         return
 
     # ── Step 8: Calculate levels ──
@@ -1134,6 +1197,9 @@ async def run_pipeline(app: FastAPI, candle: dict):
     }
 
     await _emit_signal(app, signal_data, levels, correlated_news_ids)
+
+    eval_kwargs["signal_id"] = signal_data.get("id")
+    asyncio.create_task(persist_pipeline_evaluation(db, eval_kwargs))
 
 
 def _log_pipeline_evaluation(
@@ -1713,6 +1779,24 @@ async def lifespan(app: FastAPI):
 
     error_log_cleanup_task = asyncio.create_task(error_log_cleanup_loop())
 
+    async def pipeline_eval_prune_loop():
+        while True:
+            try:
+                async with db.session_factory() as session:
+                    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+                    await session.execute(
+                        PipelineEvaluation.__table__.delete().where(
+                            PipelineEvaluation.evaluated_at < cutoff
+                        )
+                    )
+                    await session.commit()
+                logger.info("Pipeline evaluation pruning completed")
+            except Exception as e:
+                logger.error(f"Pipeline evaluation pruning failed: {e}")
+            await asyncio.sleep(86400)
+
+    pipeline_eval_prune_task = asyncio.create_task(pipeline_eval_prune_loop())
+
     # Start optimizer background loop
     from app.engine.optimizer import run_optimizer_loop
     optimizer_task = asyncio.create_task(run_optimizer_loop(app))
@@ -1744,6 +1828,7 @@ async def lifespan(app: FastAPI):
     alert_cleanup_task.cancel()
     db_log_flush_task.cancel()
     error_log_cleanup_task.cancel()
+    pipeline_eval_prune_task.cancel()
     logging.getLogger().removeHandler(db_log_handler)
     watchdog_task.cancel()
     if onchain_task:
@@ -1825,6 +1910,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.optimizer import router as optimizer_router
     app.include_router(optimizer_router)
+
+    from app.api.monitor import router as monitor_router
+    app.include_router(monitor_router)
 
     return app
 

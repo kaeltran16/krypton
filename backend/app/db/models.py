@@ -107,6 +107,41 @@ class Signal(Base):
     )
 
 
+class PipelineEvaluation(Base):
+    __tablename__ = "pipeline_evaluations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pair: Mapped[str] = mapped_column(String(32), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    emitted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    signal_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("signals.id", ondelete="SET NULL"), nullable=True
+    )
+    final_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+    tech_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    flow_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    onchain_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pattern_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    liquidation_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confluence_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    indicator_preliminary: Mapped[int] = mapped_column(Integer, nullable=False)
+    blended_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    llm_contribution: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ml_agreement: Mapped[str] = mapped_column(String(16), nullable=False)
+    indicators: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    regime: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    availabilities: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    __table_args__ = (
+        Index("ix_pipeline_eval_pair_time", "pair", "evaluated_at"),
+        Index("ix_pipeline_eval_time", "evaluated_at"),
+    )
+
+
 class RiskSettings(Base):
     __tablename__ = "risk_settings"
 

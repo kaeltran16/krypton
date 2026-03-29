@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity, Zap, Newspaper } from "lucide-react";
+import { Cpu, LineChart, Brain, BellRing, Shield, Settings, ChevronRight, Activity, Zap, Newspaper, BarChart3 } from "lucide-react";
 import { SubPageShell } from "../../../shared/components/SubPageShell";
 import SettingsPage from "../../settings/components/SettingsPage";
 import RiskPage from "../../settings/components/RiskPage";
@@ -11,9 +11,10 @@ import { JournalView } from "../../signals/components/JournalView";
 import { SystemDiagnostics } from "../../system/components/SystemDiagnostics";
 import OptimizerPage from "../../optimizer/components/OptimizerPage";
 import { NewsView } from "../../news/components/NewsView";
+import { MonitorPage } from "../../monitor/components/MonitorPage";
 import { hapticTap } from "../../../shared/lib/haptics";
 
-type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | "optimizer" | "news" | null;
+type SubPage = "engine" | "backtest" | "ml" | "alerts" | "risk" | "settings" | "journal" | "system" | "optimizer" | "news" | "monitor" | null;
 
 const CLUSTERS = [
   {
@@ -37,6 +38,7 @@ const CLUSTERS = [
     label: "Safety & Security",
     items: [
       { key: "risk" as SubPage, icon: Shield, label: "Risk", desc: "Exposure limits & controls", color: "text-primary" },
+      { key: "monitor" as SubPage, icon: BarChart3, label: "Pipeline Monitor", desc: "Evaluation history & stats", color: "text-primary" },
       { key: "system" as SubPage, icon: Activity, label: "System", desc: "Health & diagnostics", color: "text-primary" },
       { key: "settings" as SubPage, icon: Settings, label: "Settings", desc: "Global system preferences", color: "text-outline" },
     ],
@@ -54,6 +56,7 @@ const PAGE_TITLES: Record<string, string> = {
   journal: "Journal & Analytics",
   system: "System Diagnostics",
   optimizer: "Optimizer",
+  monitor: "Pipeline Monitor",
 };
 
 export function MorePage() {
@@ -72,6 +75,7 @@ export function MorePage() {
         {activePage === "journal" && <JournalView />}
         {activePage === "system" && <SystemDiagnostics />}
         {activePage === "optimizer" && <OptimizerPage />}
+        {activePage === "monitor" && <MonitorPage />}
       </SubPageShell>
     );
   }
