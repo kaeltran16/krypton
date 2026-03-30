@@ -15,9 +15,11 @@ jobs:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
           script: |
             cd /opt/krypton
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             cd backend
             docker compose -f docker-compose.prod.yml up -d --build
             docker image prune -f
