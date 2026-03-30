@@ -18,9 +18,9 @@ jobs:
           script_stop: true
           script: |
             cd /opt/krypton
-            sudo chown -R deploy:deploy .
             git fetch origin main
-            git reset --hard origin/main
+            sudo git reset --hard origin/main
+            sudo chown -R deploy:deploy .
             cd backend
             docker compose -f docker-compose.prod.yml up -d --build
             docker image prune -f
