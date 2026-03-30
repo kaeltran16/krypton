@@ -18,6 +18,7 @@ jobs:
           script_stop: true
           script: |
             cd /opt/krypton
+            sudo chown -R deploy:deploy .
             git fetch origin main
             git reset --hard origin/main
             cd backend
