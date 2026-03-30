@@ -89,10 +89,10 @@ The core data flow on each confirmed candle (orchestrated in `main.py:run_pipeli
 - **DB**: SQLAlchemy 2.0 async with asyncpg. Models in `db/models.py`: `User`, `Candle`, `Signal`, `RiskSettings`, `NewsEvent`, `PushSubscription`, `PipelineSettings`, `OrderFlowSnapshot`, `BacktestRun`, `Alert`/`AlertHistory`/`AlertSettings`, `PerformanceTrackerRow`, `RegimeWeights`, `ParameterProposal`/`ShadowResult`, `MLTrainingRun`. Singleton tables use `CheckConstraint("id = 1")`.
 - **JSONB columns**: `raw_indicators`, `risk_metrics`, `detected_patterns`, `correlated_news_ids` on Signal model — flexible schema without migrations.
 - **Order flow is ephemeral**: `app.state.order_flow` dict is updated in-place by collectors, not persisted in real-time (only `OrderFlowSnapshot` records per candle).
-- **Regime detection**: `engine/regime.py` computes continuous regime mix (trending/ranging/volatile) from ADX + BB width, blending sub-score caps and outer weights adaptively. `RegimeWeights` DB table stores learned per-pair regime weights.
+- **Regime detection**: `engine/regime.py` computes continuous regime mix (trending/ranging/volatile/steady). Heuristic uses ADX + BB width; optional LightGBM classifier (`engine/regime_classifier.py`) replaces heuristic when trained and not stale (>30 days). `regime_labels.py` generates retrospective training labels. `RegimeWeights` DB table stores learned per-pair regime weights.
 - **Parameter optimizer**: `engine/optimizer.py` monitors signal fitness, proposes parameter changes via counterfactual backtesting, validates in shadow mode before promotion. `ParameterProposal` + `ShadowResult` models track proposals. `engine/param_groups.py` defines tunable parameter groups with priority layers.
 - **ATR optimization**: `PerformanceTracker` loads learned ATR multipliers per (pair, timeframe) from DB at startup; updates when signals resolve.
-- **ML pipeline**: `ml/` module — `features.py` (feature matrix with momentum, regime, inter-pair features), `dataset.py`/`data_loader.py` (data prep), `model.py` (SignalLSTM), `trainer.py` (training loop), `predictor.py` (inference with stale-model detection), `labels.py` (label generation). Per-pair models stored as checkpoints with JSON sidecar configs. `MLTrainingRun` persists training history.
+- **ML pipeline**: `ml/` module — `features.py` (feature matrix with momentum, regime, inter-pair features), `dataset.py`/`data_loader.py` (data prep), `model.py` (SignalLSTM), `trainer.py` (training loop + 3-member ensemble training via temporal splits), `predictor.py` (single-model inference), `ensemble_predictor.py` (weighted multi-model inference with staleness decay + disagreement penalty), `labels.py` (label generation). Per-pair models stored as checkpoints with JSON sidecar configs. `MLTrainingRun` persists training history.
 - **Tests**: pytest with `asyncio_mode = "auto"`. Custom `_test_lifespan` in `conftest.py` stubs app.state without real DB/Redis/OKX. Uses `httpx.AsyncClient` with `ASGITransport`. Tests organized in subdirectories mirroring app structure (`tests/engine/`, `tests/ml/`, `tests/api/`, `tests/collector/`, `tests/exchange/`).
 
 ### Frontend Key Patterns
@@ -112,7 +112,7 @@ The core data flow on each confirmed candle (orchestrated in `main.py:run_pipeli
 
 | Layer | Stack |
 |-------|-------|
-| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0 (async), asyncpg, Redis, Alembic, PyTorch (CPU), Pandas |
+| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0 (async), asyncpg, Redis, Alembic, PyTorch (CPU), LightGBM, Pandas |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS v3, Zustand, lightweight-charts, vite-plugin-pwa |
 | Infra | Docker Compose (API + Postgres 16 + Redis 7), Cloudflare Workers (frontend) |
 | External | OKX API (market data + trading), OpenRouter (LLM analysis) |
