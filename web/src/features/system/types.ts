@@ -36,3 +36,19 @@ export interface SystemHealthResponse {
     ml_models_loaded: number;
   };
 }
+
+export interface MLHealthResponse {
+  ml_health: {
+    ensemble: {
+      pairs_loaded: number;
+      members_loaded: number;
+      members_stale: number;
+      oldest_member_days: number;
+    };
+    regime_classifier: {
+      active: boolean;
+      age_days: number | null;
+      fallback: boolean;
+    };
+  };
+}

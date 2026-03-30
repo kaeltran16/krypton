@@ -265,6 +265,11 @@ class PipelineSettings(Base):
     ic_prune_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     ic_reenable_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     ew_ic_lookback_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ensemble_disagreement_scale: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ensemble_stale_fresh_days: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ensemble_stale_decay_days: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ensemble_stale_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ensemble_confidence_cap_partial: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

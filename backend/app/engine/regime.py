@@ -20,16 +20,33 @@ DEFAULT_OUTER_WEIGHTS = {
 }
 
 
-def compute_regime_mix(trend_strength: float, vol_expansion: float) -> dict:
+def compute_regime_mix(
+    trend_strength: float,
+    vol_expansion: float,
+    classifier=None,
+    classifier_features=None,
+    classifier_feature_names=None,
+) -> dict:
     """Compute continuous regime mix from trend strength and volatility expansion.
+
+    If a trained regime classifier is provided and not stale, uses it instead
+    of the heuristic. Falls back to heuristic otherwise.
 
     Args:
         trend_strength: 0-1 from sigmoid_scale(adx, center=20, steepness=0.25)
         vol_expansion: 0-1 from sigmoid_scale(bb_width_pct, center=50, steepness=0.08)
+        classifier: Optional RegimeClassifier instance.
+        classifier_features: Optional feature array for the classifier.
+        classifier_feature_names: Optional feature names for alignment.
 
     Returns:
         Dict with trending/ranging/volatile/steady weights summing to 1.0.
     """
+    if classifier is not None and classifier_features is not None:
+        if not classifier.is_stale():
+            return classifier.predict_proba(classifier_features, classifier_feature_names)
+
+    # Heuristic fallback
     raw_trending = trend_strength * vol_expansion
     raw_ranging = (1 - trend_strength) * (1 - vol_expansion)
     raw_volatile = (1 - trend_strength) * vol_expansion

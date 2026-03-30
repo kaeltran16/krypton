@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     engine_ml_weight: float = 0.25
     engine_ml_weight_min: float = 0.05
     engine_ml_weight_max: float = 0.30
+    ensemble_disagreement_scale: float = 8.0
+    ensemble_stale_fresh_days: float = 7.0
+    ensemble_stale_decay_days: float = 21.0
+    ensemble_stale_floor: float = 0.3
+    ensemble_confidence_cap_partial: float = 0.5
     ml_sl_min_atr: float = 1.0
     ml_sl_max_atr: float = 3.5
     ml_tp1_min_atr: float = 1.0

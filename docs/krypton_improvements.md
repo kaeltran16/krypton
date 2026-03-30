@@ -6,7 +6,7 @@ Improvements are grouped by pipeline layer and rated by impact and implementatio
 
 ## 1. Signal Quality
 
-### 1.1 Joint Bayesian ATR Optimization
+### ~~1.1 Joint Bayesian ATR Optimization~~ DONE
 **Layer:** `engine/performance_tracker.py`
 **Impact:** High | **Effort:** High (~1 week)
 
@@ -39,7 +39,7 @@ result = gp_minimize(
 
 ---
 
-### 1.2 Tighten LLM Contribution Cap + Dual-Pass Consistency
+### ~~1.2 Tighten LLM Contribution Cap + Dual-Pass Consistency~~ DONE
 **Layer:** `engine/combiner.py`, `engine/llm.py`
 **Impact:** High | **Effort:** Low (~1 day)
 
@@ -66,7 +66,7 @@ def get_llm_contribution(context, desired_direction):
 
 ---
 
-### 1.3 Exponentially Weighted IC Pruning
+### ~~1.3 Exponentially Weighted IC Pruning~~ DONE
 **Layer:** `engine/optimizer.py`
 **Impact:** Medium | **Effort:** Low (~1 day)
 
@@ -412,11 +412,11 @@ def update_regime_weights_online(
 
 | # | Improvement | Layer | Impact | Effort | Priority |
 |---|---|---|---|---|---|
-| 1.3 | Exp-weighted IC pruning | optimizer | Medium | Low | Do first |
+| ~~1.3~~ | ~~Exp-weighted IC pruning~~ | optimizer | Medium | Low | **Done** |
 | 5 | Anti-whipsaw signal cooldown | main.py | Medium | Low | Do first |
 | 3.2 | Partial exit + trailing stop | outcome_resolver, risk | Medium | Medium | High |
-| 1.1 | Joint Bayesian ATR opt | performance_tracker | High | High | High |
-| 1.2 | LLM cap + dual-pass | combiner, llm | High | Low | Medium |
+| ~~1.1~~ | ~~Joint Bayesian ATR opt~~ | performance_tracker | High | High | **Done** |
+| ~~1.2~~ | ~~LLM cap + dual-pass~~ | combiner, llm | High | Low | **Done** |
 | 4.1 | News sentiment source | engine/ | Medium | High | Medium |
 | 4.2 | Cross-pair correlation dampener | risk | Medium | Medium | Medium |
 | 3.1 | Fractional Kelly sizing | risk | Medium | Medium | Medium |

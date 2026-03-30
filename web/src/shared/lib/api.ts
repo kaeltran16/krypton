@@ -403,6 +403,9 @@ export const api = {
   getMLStatus: () =>
     request<{ ml_enabled: boolean; loaded_pairs: string[] }>("/api/ml/status"),
 
+  getMLHealth: () =>
+    request<import("../../features/system/types").MLHealthResponse>("/api/ml/health"),
+
   getMLDataReadiness: (timeframe: string) =>
     request<Record<string, { count: number; oldest: string | null; sufficient: boolean }>>(
       `/api/ml/data-readiness?timeframe=${encodeURIComponent(timeframe)}`,

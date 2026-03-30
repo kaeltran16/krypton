@@ -7,6 +7,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useSystemHealth } from "../hooks/useSystemHealth";
+import { MLHealthStatus } from "./MLHealthStatus";
 import type { SystemHealthResponse } from "../types";
 import { Button } from "../../../shared/components/Button";
 import { formatDurationSeconds, formatSecondsAgo } from "../../../shared/lib/format";
@@ -209,12 +210,7 @@ function FreshnessSection({ data, elapsed }: { data: SystemHealthResponse; elaps
       <FreshnessRow label="Technicals" seconds={techSec} greenMax={30} redThreshold={120} />
       <FreshnessRow label="Order Flow" seconds={flowSec} greenMax={30} redThreshold={120} />
       <FreshnessRow label="On-Chain" seconds={onchainSec} greenMax={300} redThreshold={600} />
-      <div className="flex justify-between items-center">
-        <span className="text-[10px] font-bold text-on-surface-variant uppercase">ML Models</span>
-        <span className={`text-xs font-bold tabular-nums ${freshness.ml_models_loaded === 0 ? "text-primary" : "text-on-surface"}`}>
-          {freshness.ml_models_loaded === 0 ? "No models loaded" : `${freshness.ml_models_loaded} models`}
-        </span>
-      </div>
+      <MLHealthStatus />
     </div>
   );
 }

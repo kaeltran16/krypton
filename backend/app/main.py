@@ -145,7 +145,7 @@ def _build_raw_indicators(
     pat_score, pattern_conf, liq_score, liq_conf, liq_clusters, liq_details,
     confluence_score, confluence_conf, ml_score, ml_confidence,
     blended, indicator_preliminary, scaled, levels, outer, snap_info, llm_contribution,
-    regime=None, llm_result=None,
+    regime=None, llm_result=None, ensemble_disagreement=None,
 ) -> dict:
     """Build the raw_indicators JSONB dict for a signal."""
     return {
@@ -167,6 +167,7 @@ def _build_raw_indicators(
         # ── Existing keys ──
         "ml_score": ml_score,
         "ml_confidence": ml_confidence,
+        "ensemble_disagreement": ensemble_disagreement,
         "blended_score": blended,
         "indicator_preliminary": indicator_preliminary,
         "effective_sl_atr": scaled["sl_atr"],
@@ -1210,6 +1211,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             blended=blended, indicator_preliminary=indicator_preliminary,
             scaled=scaled, levels=levels, outer=outer, snap_info=snap_info,
             llm_contribution=llm_contribution, regime=regime, llm_result=llm_result,
+            ensemble_disagreement=ml_prediction.get("ensemble_disagreement") if ml_prediction else None,
         ),
         "detected_patterns": detected_patterns or None,
         "engine_snapshot": engine_snapshot,
@@ -1832,6 +1834,23 @@ async def lifespan(app: FastAPI):
     if getattr(settings, "ml_enabled", False):
         from app.api.ml import _reload_predictors
         _reload_predictors(app, settings)
+
+    # Load regime classifier if available
+    app.state.regime_classifier = None
+    regime_model_dir = os.path.join(
+        getattr(settings, "ml_checkpoint_dir", "models"), "regime"
+    )
+    if os.path.isdir(regime_model_dir):
+        try:
+            from app.engine.regime_classifier import RegimeClassifier
+            clf = RegimeClassifier.load(regime_model_dir)
+            if not clf.is_stale():
+                app.state.regime_classifier = clf
+                logger.info("Regime classifier loaded (not stale)")
+            else:
+                logger.warning("Regime classifier is stale (>30 days), using heuristic")
+        except Exception as e:
+            logger.error("Failed to load regime classifier: %s", e)
 
     yield
 

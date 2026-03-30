@@ -23,7 +23,7 @@ PRIORITY_LAYERS: list[set[str]] = [
     {"regime_caps", "regime_outer", "atr_levels"},  # layer 1
     {"sigmoid_curves", "order_flow", "pattern_strengths", "pattern_boosts",
      "indicator_periods", "mean_reversion", "llm_factors", "onchain",
-     "mr_pressure", "liquidation", "confluence"},  # layer 2
+     "mr_pressure", "liquidation", "confluence", "ensemble"},  # layer 2
 ]
 
 
@@ -518,6 +518,36 @@ PARAM_GROUPS["ml_blending"] = {
     },
     "constraints": _ml_blending_ok,
     "priority": _priority_for("ml_blending"),
+}
+
+
+def _ensemble_ok(c: dict[str, Any]) -> bool:
+    return (
+        c["disagreement_scale"] > 0
+        and c["stale_decay_days"] > c["stale_fresh_days"] > 0
+        and 0 < c["stale_floor"] < 1
+        and 0 < c["confidence_cap_partial"] <= 1
+    )
+
+
+PARAM_GROUPS["ensemble"] = {
+    "params": {
+        "disagreement_scale": "ensemble.disagreement_scale",
+        "stale_fresh_days": "ensemble.stale_fresh_days",
+        "stale_decay_days": "ensemble.stale_decay_days",
+        "stale_floor": "ensemble.stale_floor",
+        "confidence_cap_partial": "ensemble.confidence_cap_partial",
+    },
+    "sweep_method": "de",
+    "sweep_ranges": {
+        "disagreement_scale": (2.0, 20.0, None),
+        "stale_fresh_days": (3.0, 14.0, None),
+        "stale_decay_days": (14.0, 45.0, None),
+        "stale_floor": (0.1, 0.5, None),
+        "confidence_cap_partial": (0.3, 0.7, None),
+    },
+    "constraints": _ensemble_ok,
+    "priority": _priority_for("ensemble"),
 }
 
 

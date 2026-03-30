@@ -17,6 +17,13 @@ from app.ml.model import SignalLSTM
 
 logger = logging.getLogger(__name__)
 
+# Temporal split boundaries for 3-member ensemble
+_ENSEMBLE_SPLITS = [
+    (0.0, 0.8),
+    (0.1, 0.9),
+    (0.2, 1.0),
+]
+
 
 @dataclass
 class TrainConfig:
@@ -45,7 +52,7 @@ class Trainer:
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def train(
+    def train_one_model(
         self,
         features: np.ndarray,
         direction: np.ndarray,
@@ -55,9 +62,10 @@ class Trainer:
         progress_callback: callable | None = None,
         feature_names: list[str] | None = None,
     ) -> dict:
-        """Run full training loop.
+        """Train a single SignalLSTM model.
 
-        Returns dict with train_loss, val_loss, best_epoch.
+        Returns dict with train_loss, val_loss, best_epoch, direction_accuracy,
+        precision_per_class, recall_per_class, version.
         """
         cfg = self.config
         input_size = features.shape[1]
@@ -397,3 +405,174 @@ class Trainer:
             "precision_per_class": precision_per_class,
             "recall_per_class": recall_per_class,
         }
+
+    def train_ensemble(
+        self,
+        features: np.ndarray,
+        direction: np.ndarray,
+        sl_atr: np.ndarray,
+        tp1_atr: np.ndarray,
+        tp2_atr: np.ndarray,
+        progress_callback: callable | None = None,
+        feature_names: list[str] | None = None,
+    ) -> dict:
+        """Train a 3-member ensemble on overlapping temporal splits.
+
+        Members are trained in parallel via ThreadPoolExecutor for ~3x speedup.
+        Members whose slice yields fewer than seq_len * 2 samples are skipped.
+        Falls back to single-model training if fewer than 2 members are viable.
+
+        Returns dict with 'members' list and 'n_members'.
+        """
+        import json as _json
+        import shutil
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from datetime import datetime as _dt, timezone as _tz
+
+        cfg = self.config
+        n = len(features)
+        min_per_slice = cfg.seq_len * 2
+
+        if feature_names is None:
+            feature_names = [f"feature_{i}" for i in range(features.shape[1])]
+
+        staging_dir = os.path.join(cfg.checkpoint_dir, ".ensemble_staging")
+        os.makedirs(staging_dir, exist_ok=True)
+
+        def _train_member(idx, start_frac, end_frac):
+            """Train a single ensemble member on its temporal slice."""
+            s = int(n * start_frac)
+            e = int(n * end_frac)
+            sl_feat = features[s:e]
+            sl_dir = direction[s:e]
+            sl_sl = sl_atr[s:e]
+            sl_tp1 = tp1_atr[s:e]
+            sl_tp2 = tp2_atr[s:e]
+
+            if len(sl_feat) < min_per_slice:
+                logger.warning(
+                    "Ensemble member %d: only %d samples (need %d), skipping",
+                    idx, len(sl_feat), min_per_slice,
+                )
+                return None
+
+            member_dir = os.path.join(staging_dir, f"member_{idx}")
+            os.makedirs(member_dir, exist_ok=True)
+
+            member_cfg = TrainConfig(
+                epochs=cfg.epochs,
+                batch_size=cfg.batch_size,
+                seq_len=cfg.seq_len,
+                hidden_size=cfg.hidden_size,
+                num_layers=cfg.num_layers,
+                dropout=cfg.dropout,
+                lr=cfg.lr,
+                weight_decay=cfg.weight_decay,
+                reg_loss_weight=cfg.reg_loss_weight,
+                val_ratio=cfg.val_ratio,
+                patience=cfg.patience,
+                warmup_epochs=cfg.warmup_epochs,
+                noise_std=cfg.noise_std,
+                label_smoothing=cfg.label_smoothing,
+                checkpoint_dir=member_dir,
+                neutral_subsample_ratio=cfg.neutral_subsample_ratio,
+            )
+            member_trainer = Trainer(member_cfg)
+            try:
+                result = member_trainer.train_one_model(
+                    sl_feat, sl_dir, sl_sl, sl_tp1, sl_tp2,
+                    progress_callback=progress_callback,
+                    feature_names=feature_names,
+                )
+            except ValueError as e:
+                logger.warning("Ensemble member %d failed: %s", idx, e)
+                return None
+
+            # Read temperature from saved config
+            config_path = os.path.join(member_dir, "model_config.json")
+            with open(config_path) as f:
+                saved_config = _json.load(f)
+
+            return {
+                "index": idx,
+                "trained_at": _dt.now(_tz.utc).isoformat(),
+                "val_loss": result["best_val_loss"],
+                "temperature": saved_config.get("temperature", 1.0),
+                "data_range": [start_frac, end_frac],
+                "direction_accuracy": result.get("direction_accuracy", 0.0),
+                "precision_per_class": result.get("precision_per_class"),
+                "recall_per_class": result.get("recall_per_class"),
+            }
+
+        # Train all members in parallel
+        members = []
+        with ThreadPoolExecutor(max_workers=len(_ENSEMBLE_SPLITS)) as pool:
+            futures = {
+                pool.submit(_train_member, idx, s, e): idx
+                for idx, (s, e) in enumerate(_ENSEMBLE_SPLITS)
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    members.append(result)
+
+        # Sort by index so checkpoint naming is deterministic
+        members.sort(key=lambda m: m["index"])
+
+        if len(members) < 2:
+            logger.warning(
+                "Only %d ensemble members viable, falling back to single-model training",
+                len(members),
+            )
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            result = self.train_one_model(
+                features, direction, sl_atr, tp1_atr, tp2_atr,
+                progress_callback, feature_names,
+            )
+            return {"members": [], "n_members": 0, "fallback": result}
+
+        # Move member checkpoints to final location with canonical names.
+        # Write .pt files first, ensemble_config.json LAST — this is the
+        # detection file that _reload_predictors() checks, so it must only
+        # appear after all .pt files are in place.
+        for m in members:
+            idx = m["index"]
+            src_pt = os.path.join(staging_dir, f"member_{idx}", "best_model.pt")
+            dst_pt = os.path.join(cfg.checkpoint_dir, f"ensemble_{idx}.pt")
+            shutil.copy2(src_pt, dst_pt)
+
+        # Write ensemble_config.json LAST for atomic visibility
+        input_size = features.shape[1]
+        ensemble_config = {
+            "n_members": len(members),
+            "input_size": input_size,
+            "hidden_size": cfg.hidden_size,
+            "num_layers": cfg.num_layers,
+            "dropout": cfg.dropout,
+            "seq_len": cfg.seq_len,
+            "feature_names": feature_names,
+            "members": members,
+        }
+        with open(os.path.join(cfg.checkpoint_dir, "ensemble_config.json"), "w") as f:
+            _json.dump(ensemble_config, f, indent=2)
+
+        # Clean up staging
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+        return {"members": members, "n_members": len(members)}
+
+    def train(
+        self,
+        features: np.ndarray,
+        direction: np.ndarray,
+        sl_atr: np.ndarray,
+        tp1_atr: np.ndarray,
+        tp2_atr: np.ndarray,
+        progress_callback: callable | None = None,
+        feature_names: list[str] | None = None,
+    ) -> dict:
+        """Backward-compatible wrapper for train_one_model."""
+        return self.train_one_model(
+            features, direction, sl_atr, tp1_atr, tp2_atr,
+            progress_callback, feature_names,
+        )

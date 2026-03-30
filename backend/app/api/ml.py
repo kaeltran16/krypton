@@ -275,13 +275,33 @@ async def start_training(body: TrainRequest, request: Request):
                     train_feature_names = [f"feature_{i}" for i in range(actual_cols)]
 
                 trainer = Trainer(train_config)
-                pair_result = await asyncio.to_thread(
-                    trainer.train, features, direction, sl, tp1, tp2, on_progress, train_feature_names,
+                ensemble_result = await asyncio.to_thread(
+                    trainer.train_ensemble, features, direction, sl, tp1, tp2, on_progress, train_feature_names,
                 )
 
-                # Patch config with feature flags so inference knows which
-                # optional feature groups were used
-                config_path = os.path.join(pair_checkpoint_dir, "model_config.json")
+                # If ensemble fell back to single model, use fallback result
+                if ensemble_result.get("fallback"):
+                    pair_result = ensemble_result["fallback"]
+                else:
+                    # Use best member's metrics as the pair-level summary
+                    best_member = min(ensemble_result["members"], key=lambda m: m["val_loss"])
+                    pair_result = {
+                        "best_val_loss": best_member["val_loss"],
+                        "best_epoch": 0,
+                        "train_loss": [],
+                        "val_loss": [],
+                        "version": "",
+                        "direction_accuracy": best_member.get("direction_accuracy", 0.0),
+                        "precision_per_class": best_member.get("precision_per_class"),
+                        "recall_per_class": best_member.get("recall_per_class"),
+                        "ensemble_members": ensemble_result["members"],
+                    }
+
+                # Patch config with feature flags
+                if ensemble_result.get("fallback"):
+                    config_path = os.path.join(pair_checkpoint_dir, "model_config.json")
+                else:
+                    config_path = os.path.join(pair_checkpoint_dir, "ensemble_config.json")
                 if os.path.isfile(config_path):
                     import json as _j
                     with open(config_path) as f:
@@ -451,6 +471,123 @@ async def reload_predictors(request: Request):
     }
 
 
+@router.get("/health", dependencies=[require_auth()])
+async def ml_health(request: Request):
+    """Return ML subsystem health."""
+    predictors = getattr(request.app.state, "ml_predictors", {})
+    classifier = getattr(request.app.state, "regime_classifier", None)
+
+    # Ensemble info
+    total_members = 0
+    stale_members = 0
+    oldest_member_days = 0
+    for pred in predictors.values():
+        n = getattr(pred, "n_members", 1)
+        total_members += n
+        stale_members += getattr(pred, "stale_member_count", 0)
+        age = getattr(pred, "oldest_member_age_days", 0)
+        if age > oldest_member_days:
+            oldest_member_days = age
+
+    # Regime classifier info
+    clf_active = classifier is not None
+    clf_age = getattr(classifier, "age_days", None) if classifier else None
+    clf_fallback = not clf_active
+    if classifier:
+        clf_fallback = classifier.is_stale()
+
+    return {
+        "ml_health": {
+            "ensemble": {
+                "pairs_loaded": len(predictors),
+                "members_loaded": total_members,
+                "members_stale": stale_members,
+                "oldest_member_days": round(oldest_member_days, 1),
+            },
+            "regime_classifier": {
+                "active": clf_active and not clf_fallback,
+                "age_days": clf_age,
+                "fallback": clf_fallback,
+            },
+        }
+    }
+
+
+@router.post("/regime/train", dependencies=[require_auth()])
+async def train_regime_classifier(request: Request, lookback_days: int = 90, horizon: int = 48):
+    """Train global regime classifier on candle data from all pairs."""
+    import numpy as np
+    from app.engine.regime_classifier import RegimeClassifier, build_regime_features, MIN_TRAINING_SAMPLES, MIN_MACRO_F1
+    from app.engine.regime_labels import generate_regime_labels
+
+    db = request.app.state.db
+    settings = request.app.state.settings
+    pairs = getattr(settings, "pairs", ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "WIF-USDT-SWAP"])
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+
+    all_features = []
+    all_labels = []
+
+    for pair in pairs:
+        async with db.session_factory() as session:
+            rows = (await session.execute(
+                select(Candle)
+                .where(Candle.pair == pair, Candle.timeframe == "1h", Candle.timestamp >= cutoff)
+                .order_by(Candle.timestamp)
+            )).scalars().all()
+
+        if len(rows) < horizon + 20:
+            continue
+
+        import pandas as pd
+        df = pd.DataFrame([{
+            "open": float(r.open), "high": float(r.high),
+            "low": float(r.low), "close": float(r.close),
+            "volume": float(r.volume),
+        } for r in rows])
+
+        labels = generate_regime_labels(df, horizon=horizon)
+        features, feature_names = build_regime_features(df)
+
+        # Drop last horizon rows (labels are default there) and warmup rows
+        valid = slice(20, len(df) - horizon)
+        all_features.append(features[valid])
+        all_labels.append(labels.values[valid])
+
+    if not all_features:
+        raise HTTPException(400, "No pairs had enough candle data")
+
+    combined_features = np.concatenate(all_features)
+    combined_labels = np.concatenate(all_labels)
+
+    if len(combined_features) < MIN_TRAINING_SAMPLES:
+        raise HTTPException(
+            400,
+            f"Only {len(combined_features)} samples available (need {MIN_TRAINING_SAMPLES})",
+        )
+
+    clf = RegimeClassifier()
+    metrics = await asyncio.to_thread(
+        clf.train, combined_features, combined_labels, feature_names,
+    )
+
+    if metrics["macro_f1"] < MIN_MACRO_F1:
+        logger.warning(
+            "Regime classifier F1 %.3f below threshold %.3f — not promoting",
+            metrics["macro_f1"], MIN_MACRO_F1,
+        )
+        return {"status": "rejected", "reason": "below_f1_threshold", "metrics": metrics}
+
+    # Save model
+    regime_dir = os.path.join(getattr(settings, "ml_checkpoint_dir", "models"), "regime")
+    clf.save(regime_dir)
+    request.app.state.regime_classifier = clf
+    logger.info("Regime classifier trained and promoted (F1=%.3f)", metrics["macro_f1"])
+
+    return {"status": "promoted", "metrics": metrics}
+
+
 OKX_BAR_MAP = {"15m": "15m", "1h": "1H", "4h": "4H"}
 
 
@@ -601,27 +738,55 @@ def _reload_predictors(app, settings):
     """Reload per-pair ML predictors from checkpoints."""
     import os
     from app.ml.predictor import Predictor
+    from app.ml.ensemble_predictor import EnsemblePredictor
     from app.ml.features import get_feature_names
+
     predictors = {}
     checkpoint_dir = getattr(settings, "ml_checkpoint_dir", "models")
     if not os.path.isdir(checkpoint_dir):
         return
+    disagreement_scale = getattr(settings, "ensemble_disagreement_scale", 8.0)
+    stale_fresh = getattr(settings, "ensemble_stale_fresh_days", 7.0)
+    stale_decay = getattr(settings, "ensemble_stale_decay_days", 21.0)
+    stale_floor = getattr(settings, "ensemble_stale_floor", 0.3)
+    cap_partial = getattr(settings, "ensemble_confidence_cap_partial", 0.5)
+
     for entry in os.listdir(checkpoint_dir):
         pair_dir = os.path.join(checkpoint_dir, entry)
         if not os.path.isdir(pair_dir):
             continue
+
+        ensemble_config = os.path.join(pair_dir, "ensemble_config.json")
         model_path = os.path.join(pair_dir, "best_model.pt")
-        if os.path.isfile(model_path):
-            try:
-                predictor = Predictor(model_path)
-                feature_names = get_feature_names(
-                    flow_used=predictor.flow_used,
-                    regime_used=predictor.regime_used,
-                    btc_used=predictor.btc_used,
+
+        try:
+            if os.path.isfile(ensemble_config):
+                predictor = EnsemblePredictor(
+                    pair_dir,
+                    ensemble_disagreement_scale=disagreement_scale,
+                    stale_fresh_days=stale_fresh,
+                    stale_decay_days=stale_decay,
+                    stale_floor=stale_floor,
+                    confidence_cap_partial=cap_partial,
                 )
-                predictor.set_available_features(feature_names)
-                predictors[entry] = predictor
-                logger.info(f"ML predictor loaded for {entry}")
-            except Exception as e:
-                logger.error(f"Failed to load ML predictor for {entry}: {e}")
+                logger.info(
+                    "Ensemble predictor loaded for %s (%d members)",
+                    entry, predictor.n_members,
+                )
+            elif os.path.isfile(model_path):
+                predictor = Predictor(model_path)
+                logger.info("Legacy predictor loaded for %s", entry)
+            else:
+                continue
+
+            feature_names = get_feature_names(
+                flow_used=predictor.flow_used,
+                regime_used=predictor.regime_used,
+                btc_used=predictor.btc_used,
+            )
+            predictor.set_available_features(feature_names)
+            predictors[entry] = predictor
+        except Exception as e:
+            logger.error("Failed to load ML predictor for %s: %s", entry, e)
+
     app.state.ml_predictors = predictors
