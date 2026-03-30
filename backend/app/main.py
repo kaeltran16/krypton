@@ -1353,6 +1353,7 @@ async def check_pending_signals(app: FastAPI):
     """Check all PENDING signals against recent candles for outcome resolution."""
     db = app.state.db
     redis = app.state.redis
+    settings = app.state.settings
 
     from app.engine.outcome_resolver import resolve_signal_outcome
 
