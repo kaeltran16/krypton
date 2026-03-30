@@ -1,5 +1,5 @@
 import os
-from pathlib import Path  # noqa: F401
+from pathlib import Path
 from typing import Literal
 
 import yaml
