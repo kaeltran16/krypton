@@ -179,7 +179,92 @@ class PerformanceTracker:
 
         return results
 
-    async def optimize(self, pair: str, timeframe: str, dry_run: bool = False):
+    def _gp_objective(self, params, signals, candles_map):
+        """Objective function for GP optimizer. Returns value to minimize.
+
+        signals: list of signal dicts (same schema as signals_data in optimize())
+        candles_map: dict mapping signal index to candle list (same as optimize())
+        """
+        sl_atr, tp1_atr, tp2_atr = params
+
+        if tp1_atr < sl_atr or tp2_atr < tp1_atr * 1.2:
+            return 999.0
+
+        pnls = []
+        for idx, sig in enumerate(signals):
+            candles = candles_map.get(idx, [])
+            if not candles:
+                continue
+            # Apply per-signal strength/vol factors (same as sweep path)
+            sl = sl_atr * sig["sl_strength_factor"] * sig["vol_factor"]
+            tp1 = tp1_atr * sig["tp_strength_factor"] * sig["vol_factor"]
+            tp2 = tp2_atr * sig["tp_strength_factor"] * sig["vol_factor"]
+            result = self.replay_signal(
+                direction=sig["direction"],
+                entry=sig["entry"],
+                atr=sig["atr"],
+                sl_atr=sl,
+                tp1_atr=tp1,
+                tp2_atr=tp2,
+                candles=candles,
+                created_at=sig["created_at"],
+            )
+            if result is not None:
+                pnls.append(result["outcome_pnl_pct"])
+
+        sortino = self.compute_sortino(pnls)
+        if sortino is None:
+            return 0.0
+        if sortino == float("inf"):
+            return -999.0
+        return -sortino
+
+    def _gp_optimize(self, signals, candles_map, current_sl, current_tp1, current_tp2):
+        """Run GP-based 3D joint optimization of SL/TP1/TP2 ATR multipliers.
+
+        signals: list of signal dicts (same schema as signals_data in optimize())
+        candles_map: dict mapping signal index to candle list (same as optimize())
+        Returns (sl, tp1, tp2) tuple or None on failure (triggers sweep fallback).
+        """
+        try:
+            from skopt import gp_minimize
+            from skopt.space import Real
+        except ImportError:
+            logger.warning("scikit-optimize not installed, falling back to sweep")
+            return None
+
+        space = [
+            Real(SL_RANGE[0], SL_RANGE[1], name="sl_atr"),
+            Real(TP1_RANGE[0], TP1_RANGE[1], name="tp1_atr"),
+            Real(TP2_RANGE[0], TP2_RANGE[1], name="tp2_atr"),
+        ]
+
+        def objective(params):
+            return self._gp_objective(params, signals, candles_map)
+
+        try:
+            result = gp_minimize(
+                func=objective,
+                dimensions=space,
+                x0=[current_sl, current_tp1, current_tp2],
+                n_calls=40,
+                n_initial_points=8,
+                acq_func="EI",
+                random_state=42,
+            )
+            best_sl, best_tp1, best_tp2 = result.x
+            best_sortino = -result.fun if result.fun not in (0.0, -999.0) else 0.0
+            logger.info(
+                f"GP optimizer: best_sortino={best_sortino:.3f}, "
+                f"params=({best_sl:.2f}, {best_tp1:.2f}, {best_tp2:.2f}), "
+                f"n_calls={len(result.func_vals)}"
+            )
+            return best_sl, best_tp1, best_tp2
+        except Exception as e:
+            logger.error(f"GP optimization failed: {e}, falling back to sweep")
+            return None
+
+    async def optimize(self, pair: str, timeframe: str, dry_run: bool = False, settings=None):
         """Run 1D optimization for each multiplier dimension.
 
         Fetches the rolling window of resolved signals, batch-loads candles,
@@ -328,39 +413,63 @@ class PerformanceTracker:
             current_tp1 = row.current_tp1_atr
             current_tp2 = row.current_tp2_atr
 
-            adjustments = []
-
-            for dim, candidates, current, bounds, max_adj in [
-                ("sl", sl_candidates, current_sl, SL_RANGE, MAX_SL_ADJ),
-                ("tp1", tp1_candidates, current_tp1, TP1_RANGE, MAX_TP_ADJ),
-                ("tp2", tp2_candidates, current_tp2, TP2_RANGE, MAX_TP_ADJ),
-            ]:
-                # Ensure current value is in candidate list for fair comparison
-                current_rounded = round(current, 1)
-                if current_rounded not in candidates:
-                    candidates = sorted(candidates + [current_rounded])
-
-                sweep_results = self._sweep_dimension(
-                    signals_data, candles_map, dim, candidates,
+            # -- Try GP optimization if configured --
+            gp_result = None
+            if settings is not None and settings.atr_optimizer_mode == "gp":
+                loop = asyncio.get_running_loop()
+                gp_result = await loop.run_in_executor(
+                    None, self._gp_optimize,
+                    signals_data, candles_map, current_sl, current_tp1, current_tp2,
                 )
-                # Find best candidate
-                scored = [(v, s) for v, s in sweep_results.items() if s is not None]
-                if not scored:
-                    continue
-                best_val, best_sortino = max(scored, key=lambda x: x[1])
-                if round(best_val, 2) == round(current, 2):
-                    continue
-                # Only apply if best candidate actually improves over current
-                current_sortino = sweep_results.get(current_rounded)
-                if current_sortino is not None and best_sortino <= current_sortino:
-                    continue
-                new_val = self._apply_guardrails(current, best_val, bounds, max_adj)
-                if new_val != current:
-                    adjustments.append({
-                        "dimension": dim, "old": current, "new": new_val,
-                        "sortino": best_sortino,
-                        "clamped": new_val != best_val,
-                    })
+
+            if gp_result is not None:
+                gp_sl, gp_tp1, gp_tp2 = gp_result
+                # Apply same guardrails as sweep path
+                gp_sl = self._apply_guardrails(current_sl, gp_sl, SL_RANGE, MAX_SL_ADJ)
+                gp_tp1 = self._apply_guardrails(current_tp1, gp_tp1, TP1_RANGE, MAX_TP_ADJ)
+                gp_tp2 = self._apply_guardrails(current_tp2, gp_tp2, TP2_RANGE, MAX_TP_ADJ)
+
+                adjustments = []
+                if gp_sl != current_sl:
+                    adjustments.append({"dimension": "sl", "old": current_sl, "new": gp_sl, "sortino": None, "clamped": gp_sl != gp_result[0]})
+                if gp_tp1 != current_tp1:
+                    adjustments.append({"dimension": "tp1", "old": current_tp1, "new": gp_tp1, "sortino": None, "clamped": gp_tp1 != gp_result[1]})
+                if gp_tp2 != current_tp2:
+                    adjustments.append({"dimension": "tp2", "old": current_tp2, "new": gp_tp2, "sortino": None, "clamped": gp_tp2 != gp_result[2]})
+            else:
+                adjustments = []
+
+                for dim, candidates, current, bounds, max_adj in [
+                    ("sl", sl_candidates, current_sl, SL_RANGE, MAX_SL_ADJ),
+                    ("tp1", tp1_candidates, current_tp1, TP1_RANGE, MAX_TP_ADJ),
+                    ("tp2", tp2_candidates, current_tp2, TP2_RANGE, MAX_TP_ADJ),
+                ]:
+                    # Ensure current value is in candidate list for fair comparison
+                    current_rounded = round(current, 1)
+                    if current_rounded not in candidates:
+                        candidates = sorted(candidates + [current_rounded])
+
+                    sweep_results = self._sweep_dimension(
+                        signals_data, candles_map, dim, candidates,
+                    )
+                    # Find best candidate
+                    scored = [(v, s) for v, s in sweep_results.items() if s is not None]
+                    if not scored:
+                        continue
+                    best_val, best_sortino = max(scored, key=lambda x: x[1])
+                    if round(best_val, 2) == round(current, 2):
+                        continue
+                    # Only apply if best candidate actually improves over current
+                    current_sortino = sweep_results.get(current_rounded)
+                    if current_sortino is not None and best_sortino <= current_sortino:
+                        continue
+                    new_val = self._apply_guardrails(current, best_val, bounds, max_adj)
+                    if new_val != current:
+                        adjustments.append({
+                            "dimension": dim, "old": current, "new": new_val,
+                            "sortino": best_sortino,
+                            "clamped": new_val != best_val,
+                        })
 
             if not adjustments:
                 logger.info("Optimization for %s/%s: no changes", pair, timeframe)
@@ -450,7 +559,7 @@ class PerformanceTracker:
 
             await self.reload_cache()
 
-    async def check_optimization_triggers(self, session, resolved_pairs_timeframes: set[tuple[str, str]]):
+    async def check_optimization_triggers(self, session, resolved_pairs_timeframes: set[tuple[str, str]], settings=None):
         """After a batch of signals resolve, check if any buckets need optimization.
 
         Called once per check_pending_signals cycle (not per-signal) to avoid race conditions.
@@ -480,14 +589,14 @@ class PerformanceTracker:
                 await session.commit()
 
                 # Schedule optimization with reference tracking to prevent GC
-                task = asyncio.create_task(self._optimize_safe(pair, timeframe))
+                task = asyncio.create_task(self._optimize_safe(pair, timeframe, settings=settings))
                 self._tasks.add(task)
                 task.add_done_callback(self._tasks.discard)
 
-    async def _optimize_safe(self, pair: str, timeframe: str):
+    async def _optimize_safe(self, pair: str, timeframe: str, settings=None):
         """Wrapper that catches and logs optimization failures."""
         try:
-            await self.optimize(pair, timeframe)
+            await self.optimize(pair, timeframe, settings=settings)
         except Exception:
             logger.exception("Optimization failed for %s/%s", pair, timeframe)
 

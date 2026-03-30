@@ -34,9 +34,9 @@ from app.api.connections import ConnectionManager
 from app.api.ws import manager as ws_manager
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.constants import ORDER_FLOW_ASSET_SCALES
-from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, calculate_levels, blend_with_ml, compute_agreement, apply_agreement_factor, scale_atr_multipliers
+from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, aggregate_dual_pass, calculate_levels, blend_with_ml, compute_agreement, apply_agreement_factor, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
-from app.engine.llm import load_prompt_template, render_prompt, call_openrouter
+from app.engine.llm import load_prompt_template, render_prompt, call_openrouter_dual_pass
 from app.engine.risk import PositionSizer
 from app.engine.confluence import (
     CONFLUENCE_ONLY_TIMEFRAMES,
@@ -410,6 +410,11 @@ async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids
             logger.debug(f"Risk metrics enrichment skipped: {e}")
 
     signal_data["risk_metrics"] = risk_metrics
+    # Merge dual-pass LLM agreement into risk_metrics for observability
+    if signal_data.get("dual_pass_agreed") is not None:
+        if signal_data["risk_metrics"] is None:
+            signal_data["risk_metrics"] = {}
+        signal_data["risk_metrics"]["llm_dual_pass_agreed"] = signal_data.pop("dual_pass_agreed")
     signal_data["correlated_news_ids"] = correlated_news_ids
 
     await persist_signal(db, signal_data)
@@ -952,6 +957,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     # ── Step 5: LLM gate (on blended score) ──
     llm_result = None
+    standard_result = None
+    devils_result = None
     should_call_llm = (
         abs(blended) >= settings.engine_llm_threshold
         or mr_pressure_val >= settings.engine_mr_llm_trigger
@@ -981,23 +988,36 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 news=news_context,
                 candles=json.dumps(candles_data[-20:], indent=2),
             )
-            llm_result = await call_openrouter(
+            standard_result, devils_result = await call_openrouter_dual_pass(
                 prompt=rendered,
                 api_key=settings.openrouter_api_key,
                 model=settings.openrouter_model,
                 timeout=settings.engine_llm_timeout_seconds,
             )
+            llm_result = standard_result
         except Exception as e:
             logger.error(f"LLM call failed for {pair}:{timeframe}: {e}")
 
     # ── Step 6: Compute final score ──
     llm_contribution = 0
-    if llm_result:
-        llm_contribution = compute_llm_contribution(
-            llm_result.response.factors,
+    dual_pass_agreed = None
+    if standard_result:
+        contrib_standard = compute_llm_contribution(
+            standard_result.response.factors,
             settings.llm_factor_weights,
             settings.llm_factor_total_cap,
         )
+        if devils_result:
+            contrib_devils = compute_llm_contribution(
+                devils_result.response.factors,
+                settings.llm_factor_weights,
+                settings.llm_factor_total_cap,
+            )
+            llm_contribution, dual_pass_agreed = aggregate_dual_pass(
+                contrib_standard, contrib_devils, settings.llm_factor_total_cap,
+            )
+        else:
+            llm_contribution = contrib_standard
     final = compute_final_score(blended, llm_contribution)
     direction = "LONG" if final > 0 else "SHORT"
 
@@ -1194,6 +1214,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "detected_patterns": detected_patterns or None,
         "engine_snapshot": engine_snapshot,
         "confidence_tier": confidence_tier,
+        "dual_pass_agreed": dual_pass_agreed,
     }
 
     await _emit_signal(app, signal_data, levels, correlated_news_ids)
@@ -1407,7 +1428,7 @@ async def check_pending_signals(app: FastAPI):
         if resolved_pairs_timeframes and tracker is not None:
             async with db.session_factory() as trigger_session:
                 await tracker.check_optimization_triggers(
-                    trigger_session, resolved_pairs_timeframes
+                    trigger_session, resolved_pairs_timeframes, settings=settings
                 )
 
         # ── IC pruning: daily computation ──
@@ -1418,7 +1439,7 @@ async def check_pending_signals(app: FastAPI):
                 from app.engine.optimizer import run_ic_pruning_cycle
 
                 current_pruned = getattr(app.state, "pruned_sources", set())
-                updated = await run_ic_pruning_cycle(db, current_pruned, logger)
+                updated = await run_ic_pruning_cycle(db, current_pruned, logger, settings=settings)
                 if updated is not None:
                     app.state.pruned_sources = updated
                 app.state.last_ic_computed_at = now

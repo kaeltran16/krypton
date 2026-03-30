@@ -206,7 +206,7 @@ class TestUnifiedPipelineLLMBehavior:
         "availability": 1.0, "conviction": 0.9, "confidence": 0.9}
 
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist, \
-             patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_result), \
+             patch("app.main.call_openrouter_dual_pass", new_callable=AsyncMock, return_value=(llm_result, llm_result)), \
              patch("app.main.render_prompt", return_value="rendered"), \
              patch("app.main.compute_technical_score", return_value=strong_tech):
             await run_pipeline(app, CANDLE)
@@ -236,7 +236,7 @@ class TestUnifiedPipelineLLMBehavior:
         )
 
         with patch("app.main.persist_signal", new_callable=AsyncMock) as mock_persist, \
-             patch("app.main.call_openrouter", new_callable=AsyncMock, return_value=llm_result), \
+             patch("app.main.call_openrouter_dual_pass", new_callable=AsyncMock, return_value=(llm_result, llm_result)), \
              patch("app.main.render_prompt", return_value="rendered"):
             await run_pipeline(app, CANDLE)
             # May or may not emit depending on indicator score, but shouldn't crash

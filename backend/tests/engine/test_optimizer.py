@@ -1,6 +1,15 @@
 """Tests for optimizer models and logic."""
 
+import pytest
+
 from app.db.models import ParameterProposal, ShadowResult
+from app.engine.optimizer import (
+    compute_ew_ic,
+    should_prune_source,
+    should_reenable_source,
+    IC_PRUNE_THRESHOLD,
+    IC_REENABLE_THRESHOLD,
+)
 
 
 def test_parameter_proposal_model_exists():
@@ -164,3 +173,100 @@ def test_rollback_detection():
     for _ in range(OPTIMIZER_CONFIG["rollback_window"]):
         state.record_resolution(pnl_pct=-3.0)
     assert state.check_rollback_needed(1) is True
+
+
+# -- compute_ew_ic tests --
+
+
+def test_compute_ew_ic_empty():
+    assert compute_ew_ic([]) == 0.0
+
+
+def test_compute_ew_ic_single_value():
+    assert compute_ew_ic([0.3]) == 0.3
+
+
+def test_compute_ew_ic_short_history():
+    """With < 3 values, returns simple mean."""
+    assert compute_ew_ic([0.1, 0.2]) == pytest.approx(0.15)
+
+
+def test_compute_ew_ic_normal():
+    """Hand-calculated: init=mean(0.1,0.2,0.3)=0.2, then EW over 0.4, 0.5."""
+    # i=3: 0.1*0.4 + 0.9*0.2 = 0.22
+    # i=4: 0.1*0.5 + 0.9*0.22 = 0.248
+    result = compute_ew_ic([0.1, 0.2, 0.3, 0.4, 0.5])
+    assert result == pytest.approx(0.248)
+
+
+def test_compute_ew_ic_negative_trend():
+    """All negative ICs produce strongly negative EW-IC."""
+    result = compute_ew_ic([-0.1, -0.08, -0.12, -0.09, -0.11])
+    # init = mean(-0.1, -0.08, -0.12) = -0.1
+    # i=3: 0.1*(-0.09) + 0.9*(-0.1) = -0.099
+    # i=4: 0.1*(-0.11) + 0.9*(-0.099) = -0.1001
+    assert result == pytest.approx(-0.1001)
+
+
+def test_compute_ew_ic_exactly_three_values():
+    """With exactly 3 values, returns their mean (no EW iteration)."""
+    assert compute_ew_ic([0.1, 0.2, 0.3]) == pytest.approx(0.2)
+
+
+# -- should_prune_source tests --
+
+
+def test_should_prune_excluded_source():
+    """tech and liquidation are never pruned regardless of IC."""
+    bad_history = [-0.2] * 10
+    assert should_prune_source("tech", bad_history) is False
+    assert should_prune_source("liquidation", bad_history) is False
+
+
+def test_should_prune_insufficient_data():
+    """Less than 5 days of history should not trigger pruning."""
+    assert should_prune_source("order_flow", [-0.2, -0.3, -0.1, -0.2]) is False
+
+
+def test_should_prune_positive_ew_ic():
+    """Source with positive EW-IC should not be pruned."""
+    history = [0.1, 0.15, 0.2, 0.1, 0.12]
+    assert should_prune_source("order_flow", history) is False
+
+
+def test_should_prune_negative_ew_ic():
+    """Source with EW-IC below threshold should be pruned."""
+    history = [-0.1, -0.08, -0.12, -0.09, -0.11]
+    assert compute_ew_ic(history) < IC_PRUNE_THRESHOLD
+    assert should_prune_source("order_flow", history) is True
+
+
+def test_should_prune_borderline():
+    """Source with EW-IC just above threshold should not be pruned (< not <=)."""
+    # EW-IC = -0.04, which is above IC_PRUNE_THRESHOLD (-0.05)
+    history = [-0.04, -0.04, -0.04, -0.04, -0.04]
+    assert compute_ew_ic(history) > IC_PRUNE_THRESHOLD
+    assert should_prune_source("order_flow", history) is False
+
+
+# -- should_reenable_source tests --
+
+
+def test_should_reenable_insufficient_data():
+    """Less than 5 days of history should not trigger re-enable."""
+    assert should_reenable_source([0.1, 0.2, 0.3]) is False
+
+
+def test_should_reenable_positive_ew_ic():
+    """Source with EW-IC above 0 should be re-enabled."""
+    # Need enough positive momentum to overcome EW smoothing
+    history = [0.0, 0.02, 0.05, 0.08, 0.1]
+    assert compute_ew_ic(history) > IC_REENABLE_THRESHOLD
+    assert should_reenable_source(history) is True
+
+
+def test_should_reenable_still_negative():
+    """Source with negative EW-IC should not be re-enabled."""
+    history = [-0.2, -0.15, -0.1, -0.12, -0.08]
+    assert compute_ew_ic(history) < IC_REENABLE_THRESHOLD
+    assert should_reenable_source(history) is False

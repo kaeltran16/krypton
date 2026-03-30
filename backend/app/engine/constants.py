@@ -174,7 +174,6 @@ ML_WEIGHT_MAX = 0.30
 
 # -- IC pruning --
 IC_WINDOW_DAYS = 7
-IC_MIN_DAYS = 30
 
 
 PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -651,6 +650,27 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "description": "How strongly a trending parent opposes a mean-reverting child signal",
         "pipeline_stage": "Confluence Scoring -> Mean Reversion",
         "range": "0.20-0.80",
+    },
+    # -- Optimizer / IC Pruning --
+    "atr_optimizer_mode": {
+        "description": "ATR optimization algorithm: 'gp' for joint Bayesian (GP) optimization, 'sweep' for legacy sequential 1D sweeps",
+        "pipeline_stage": "Performance Tracker -> ATR Optimization",
+        "range": "'gp' or 'sweep'",
+    },
+    "ic_prune_threshold": {
+        "description": "EW-IC threshold below which a scoring source is pruned. More negative = harder to prune",
+        "pipeline_stage": "Optimizer -> IC Pruning",
+        "range": "-0.20 to 0.00",
+    },
+    "ic_reenable_threshold": {
+        "description": "EW-IC threshold above which a pruned source is re-enabled. Must be > ic_prune_threshold",
+        "pipeline_stage": "Optimizer -> IC Pruning",
+        "range": "-0.05 to 0.10",
+    },
+    "ew_ic_lookback_days": {
+        "description": "Number of days of IC history used for exponentially weighted IC computation",
+        "pipeline_stage": "Optimizer -> IC Pruning",
+        "range": "30-180",
     },
 }
 

@@ -1,5 +1,6 @@
 from app.engine.optimizer import (
     compute_ic,
+    compute_ew_ic,
     should_prune_source,
     should_reenable_source,
     compute_daily_ic_for_sources,
@@ -24,25 +25,25 @@ def test_ic_negative_correlation():
 
 
 def test_prune_below_threshold():
-    """Source with IC < -0.05 for 30 days should be pruned."""
-    ic_history = [-0.06, -0.07, -0.08]  # 3 entries all below threshold
-    assert should_prune_source("technical", ic_history, threshold=-0.05, min_days=3) is True
+    """Source with EW-IC < -0.05 should be pruned."""
+    ic_history = [-0.1, -0.08, -0.12, -0.09, -0.11]  # 5 entries, EW-IC well below
+    assert should_prune_source("order_flow", ic_history, threshold=-0.05) is True
 
 
 def test_no_prune_above_threshold():
-    ic_history = [-0.02, 0.01, 0.05]
-    assert should_prune_source("order_flow", ic_history, threshold=-0.05, min_days=3) is False
+    ic_history = [0.02, 0.04, 0.01, 0.05, 0.03]
+    assert should_prune_source("order_flow", ic_history, threshold=-0.05) is False
 
 
 def test_liquidation_excluded_from_pruning():
     """Liquidation source must be excluded from IC pruning per spec."""
-    ic_history = [-0.10, -0.10, -0.10]  # would normally be pruned
-    assert should_prune_source("liquidation", ic_history, threshold=-0.05, min_days=3) is False
+    ic_history = [-0.10, -0.10, -0.10, -0.10, -0.10]  # would normally be pruned
+    assert should_prune_source("liquidation", ic_history, threshold=-0.05) is False
 
 
 def test_re_enable_when_ic_recovers():
-    """Source should be re-enabled when IC recovers above 0.0."""
-    ic_history = [-0.06, -0.03, 0.01, 0.02]
+    """Source should be re-enabled when EW-IC recovers above 0.0."""
+    ic_history = [0.02, 0.04, 0.06, 0.08, 0.1]
     assert should_reenable_source(ic_history) is True
 
 
@@ -68,12 +69,12 @@ def test_compute_daily_ic_for_sources():
 def test_get_pruned_sources_returns_set():
     """Should return set of source names that should be pruned."""
     ic_histories = {
-        "tech": [-0.06, -0.07, -0.08],  # below threshold but excluded from pruning
-        "flow": [0.1, 0.2, 0.15],       # healthy
-        "onchain": [-0.06, -0.07, -0.08],  # below threshold for 3 days — prunable
-        "liquidation": [-0.10, -0.10, -0.10],  # excluded from pruning
+        "tech": [-0.10] * 10,          # below threshold but excluded from pruning
+        "flow": [0.1, 0.2, 0.15, 0.1, 0.12],  # healthy
+        "onchain": [-0.10] * 10,        # below threshold — prunable
+        "liquidation": [-0.10] * 10,    # excluded from pruning
     }
-    pruned = get_pruned_sources(ic_histories, threshold=-0.05, min_days=3)
+    pruned = get_pruned_sources(ic_histories, threshold=-0.05)
     assert "tech" not in pruned  # tech is excluded from pruning
     assert "onchain" in pruned
     assert "flow" not in pruned

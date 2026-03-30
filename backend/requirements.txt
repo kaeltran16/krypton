@@ -21,6 +21,7 @@ rapidfuzz==3.12.2
 feedparser==6.0.11
 trafilatura>=2.0
 scipy>=1.10
+scikit-optimize>=0.10
 PyJWT
 google-auth
 

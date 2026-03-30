@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     engine_liquidation_decay_half_life_hours: float = 4.0
     engine_liquidation_asymmetry_steepness: float = 3.0
 
+    atr_optimizer_mode: Literal["gp", "sweep"] = "gp"
+    ic_prune_threshold: float = -0.05
+    ic_reenable_threshold: float = 0.0
+    ew_ic_lookback_days: int = 90
+
     # on-chain data
     onchain_enabled: bool = True
     onchain_poll_interval_seconds: int = 300
@@ -129,7 +134,7 @@ class Settings(BaseSettings):
         "funding_extreme": 5.0, "crowded_positioning": 5.0,
         "pattern_confirmation": 5.0, "news_catalyst": 7.0,
     })
-    llm_factor_total_cap: float = 35.0
+    llm_factor_total_cap: float = 25.0
 
     # push notifications
     vapid_private_key: str = ""

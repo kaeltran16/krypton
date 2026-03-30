@@ -103,6 +103,13 @@ async def get_parameters(request: Request, _key: str = require_auth()):
 
     params["learned_atr"] = learned_atr
 
+    params["optimizer"] = {
+        "atr_optimizer_mode": _configurable(settings.atr_optimizer_mode),
+        "ic_prune_threshold": _configurable(settings.ic_prune_threshold),
+        "ic_reenable_threshold": _configurable(settings.ic_reenable_threshold),
+        "ew_ic_lookback_days": _configurable(settings.ew_ic_lookback_days),
+    }
+
     params["descriptions"] = PARAMETER_DESCRIPTIONS
 
     return params
@@ -135,7 +142,7 @@ def _regime_row_to_dict(rw) -> dict:
 
 
 class ApplyRequest(BaseModel):
-    changes: dict[str, float | int | dict]
+    changes: dict[str, float | int | str | dict]
     confirm: bool = False
 
 
@@ -156,6 +163,10 @@ _PIPELINE_SETTINGS_MAP = {
     "blending.confluence.adx_strength_center": ("engine_confluence_adx_strength_center", "confluence_adx_strength_center"),
     "blending.confluence.adx_conviction_ratio": ("engine_confluence_adx_conviction_ratio", "confluence_adx_conviction_ratio"),
     "blending.confluence.mr_penalty_factor": ("engine_confluence_mr_penalty_factor", "confluence_mr_penalty_factor"),
+    "optimizer.atr_optimizer_mode": ("atr_optimizer_mode", "atr_optimizer_mode"),
+    "optimizer.ic_prune_threshold": ("ic_prune_threshold", "ic_prune_threshold"),
+    "optimizer.ic_reenable_threshold": ("ic_reenable_threshold", "ic_reenable_threshold"),
+    "optimizer.ew_ic_lookback_days": ("ew_ic_lookback_days", "ew_ic_lookback_days"),
 }
 
 _SCORING_PARAMS_MAP = {

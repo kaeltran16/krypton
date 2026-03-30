@@ -261,6 +261,10 @@ class PipelineSettings(Base):
     liquidation_asymmetry_steepness: Mapped[float | None] = mapped_column(Float, nullable=True)
     pattern_strength_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     pattern_boost_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    atr_optimizer_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    ic_prune_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ic_reenable_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ew_ic_lookback_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

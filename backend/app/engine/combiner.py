@@ -158,6 +158,26 @@ def compute_final_score(blended_score: int, llm_contribution: int) -> int:
     return max(-100, min(100, blended_score + llm_contribution))
 
 
+def aggregate_dual_pass(
+    contrib_a: int, contrib_b: int, cap: float,
+) -> tuple[int, bool]:
+    """Aggregate standard and devil's advocate LLM contributions.
+
+    Returns (merged_contribution, agreed). Standard call direction is preferred
+    on disagreement since it uses the primary analysis prompt.
+    """
+    agreed = (contrib_a >= 0) == (contrib_b >= 0) or contrib_a == 0 or contrib_b == 0
+
+    if agreed:
+        merged = (contrib_a + contrib_b) / 2
+    else:
+        magnitude = min(abs(contrib_a), abs(contrib_b)) / 2
+        sign = 1 if contrib_a >= 0 else -1
+        merged = sign * magnitude
+
+    return round(max(-cap, min(cap, merged))), agreed
+
+
 def _validate_llm_levels(direction: str, levels: dict) -> bool:
     """Sanity-check that LLM levels make directional sense."""
     if direction == "LONG":

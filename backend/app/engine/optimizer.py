@@ -523,6 +523,25 @@ IC_PRUNE_THRESHOLD = -0.05
 IC_REENABLE_THRESHOLD = 0.0
 IC_PRUNE_EXCLUDED_SOURCES = {"tech", "liquidation"}
 
+EW_IC_LOOKBACK_DAYS = 90
+
+
+def compute_ew_ic(ic_history: list[float], alpha: float = 0.1) -> float:
+    """Compute exponentially weighted IC from daily IC history.
+
+    Initializes with mean of first 3 values to avoid first-value bias.
+    Alpha=0.1 gives ~10-day half-life.
+    """
+    if not ic_history:
+        return 0.0
+    if len(ic_history) < 3:
+        return sum(ic_history) / len(ic_history)
+    ew_ic = sum(ic_history[:3]) / 3
+    for ic in ic_history[3:]:
+        ew_ic = alpha * ic + (1 - alpha) * ew_ic
+    return ew_ic
+
+
 _IC_SOURCE_KEYS = {key: f"{key}_score" for key in OUTER_KEYS}
 
 
@@ -541,22 +560,20 @@ def should_prune_source(
     source_name: str,
     ic_history: list[float],
     threshold: float = IC_PRUNE_THRESHOLD,
-    min_days: int = 30,
 ) -> bool:
-    """Check if a source should be pruned based on IC history."""
+    """Check if a source should be pruned based on EW-IC."""
     if source_name in IC_PRUNE_EXCLUDED_SOURCES:
         return False
-    if len(ic_history) < min_days:
+    if len(ic_history) < 5:
         return False
-    recent = ic_history[-min_days:]
-    return all(ic < threshold for ic in recent)
+    return compute_ew_ic(ic_history) < threshold
 
 
 def should_reenable_source(ic_history: list[float]) -> bool:
-    """Check if a pruned source should be re-enabled."""
-    if not ic_history:
+    """Check if a pruned source should be re-enabled based on EW-IC."""
+    if len(ic_history) < 5:
         return False
-    return ic_history[-1] > IC_REENABLE_THRESHOLD
+    return compute_ew_ic(ic_history) > IC_REENABLE_THRESHOLD
 
 
 def compute_daily_ic_for_sources(resolved_signals: list[dict]) -> dict[str, float]:
@@ -572,25 +589,28 @@ def compute_daily_ic_for_sources(resolved_signals: list[dict]) -> dict[str, floa
 def get_pruned_sources(
     ic_histories: dict[str, list[float]],
     threshold: float = IC_PRUNE_THRESHOLD,
-    min_days: int = 30,
 ) -> set[str]:
-    """Return set of source names that should be pruned based on IC history."""
+    """Return set of source names that should be pruned based on EW-IC."""
     pruned = set()
     for source_name, history in ic_histories.items():
-        if should_prune_source(source_name, history, threshold, min_days):
+        if should_prune_source(source_name, history, threshold):
             pruned.add(source_name)
     return pruned
 
 
 async def run_ic_pruning_cycle(
-    db, current_pruned: set[str], logger,
+    db, current_pruned: set[str], logger, settings=None,
 ) -> set[str] | None:
     """Run daily IC computation and return updated pruned_sources set, or None if skipped."""
     from datetime import timedelta
     from sqlalchemy import select
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from app.db.models import Signal, SourceICHistory
-    from app.engine.constants import IC_WINDOW_DAYS, IC_MIN_DAYS
+    from app.engine.constants import IC_WINDOW_DAYS
+
+    prune_threshold = settings.ic_prune_threshold if settings else IC_PRUNE_THRESHOLD
+    reenable_threshold = settings.ic_reenable_threshold if settings else IC_REENABLE_THRESHOLD
+    lookback_days = settings.ew_ic_lookback_days if settings else EW_IC_LOOKBACK_DAYS
 
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=IC_WINDOW_DAYS)
@@ -633,7 +653,7 @@ async def run_ic_pruning_cycle(
 
         result = await session.execute(
             select(SourceICHistory)
-            .where(SourceICHistory.date >= today - timedelta(days=IC_MIN_DAYS))
+            .where(SourceICHistory.date >= today - timedelta(days=lookback_days))
             .order_by(SourceICHistory.date)
         )
         all_ic = result.scalars().all()
@@ -643,12 +663,13 @@ async def run_ic_pruning_cycle(
     for row in all_ic:
         ic_histories.setdefault(row.source, []).append(row.ic_value)
 
-    new_pruned = get_pruned_sources(ic_histories, min_days=IC_MIN_DAYS)
+    new_pruned = get_pruned_sources(ic_histories, threshold=prune_threshold)
 
     for src in list(current_pruned):
-        if src in ic_histories and should_reenable_source(ic_histories[src]):
-            new_pruned.discard(src)
-            logger.info(f"IC pruning: re-enabled source '{src}'")
+        if src in ic_histories:
+            if compute_ew_ic(ic_histories[src]) > reenable_threshold:
+                new_pruned.discard(src)
+                logger.info(f"IC pruning: re-enabled source '{src}'")
 
     if new_pruned != current_pruned:
         added = new_pruned - current_pruned

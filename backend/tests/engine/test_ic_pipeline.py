@@ -37,21 +37,24 @@ def test_compute_daily_ic_reads_source_scores():
     assert ic_map["flow"] > 0
 
 
-def test_get_pruned_sources_respects_min_days():
-    """Sources need 30 consecutive bad days before pruning."""
-    # Only 10 days of bad IC — not enough
-    histories = {"flow": [-0.1] * 10}
-    pruned = get_pruned_sources(histories, threshold=-0.05, min_days=30)
+def test_get_pruned_sources_uses_ew_ic():
+    """Sources with bad EW-IC are pruned; insufficient data is not."""
+    # Only 4 days of bad IC — not enough (need >= 5)
+    histories = {"flow": [-0.1] * 4}
+    pruned = get_pruned_sources(histories, threshold=-0.05)
     assert "flow" not in pruned
 
-    # 30 days of bad IC — should prune
-    histories = {"flow": [-0.1] * 30}
-    pruned = get_pruned_sources(histories, threshold=-0.05, min_days=30)
+    # 10 days of bad IC — EW-IC well below threshold, should prune
+    histories = {"flow": [-0.1] * 10}
+    pruned = get_pruned_sources(histories, threshold=-0.05)
     assert "flow" in pruned
 
 
-def test_reenable_checks_latest_only():
-    """Re-enable checks only the latest IC value."""
-    # 29 bad days then 1 good day
-    history = [-0.1] * 29 + [0.05]
+def test_reenable_checks_ew_ic():
+    """Re-enable checks EW-IC, not just the latest value."""
+    # All positive history — EW-IC positive, should re-enable
+    history = [0.02, 0.04, 0.06, 0.08, 0.1]
     assert should_reenable_source(history) is True
+    # Mostly negative — EW-IC still negative, should not re-enable
+    history = [-0.1] * 29 + [0.05]
+    assert should_reenable_source(history) is False

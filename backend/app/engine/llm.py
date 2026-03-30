@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -18,6 +19,14 @@ SYSTEM_PROMPT = (
     "Apply equal scrutiny to both long and short setups."
 )
 
+DEVILS_ADVOCATE_SYSTEM_PROMPT = (
+    "You are a critical analyst reviewing a crypto futures trade setup. "
+    "Your task is to identify the strongest case AGAINST the prevailing signal "
+    "direction. Score the top 3-5 factors that support the opposing view. "
+    "Focus on concrete evidence — divergences, overextension, exhaustion signals, "
+    "positioning extremes, key levels. Be genuinely contrarian."
+)
+
 MAX_FACTORS = 5
 
 
@@ -34,6 +43,7 @@ async def call_openrouter(
     api_key: str,
     model: str,
     timeout: int = 30,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> LLMResult | None:
     """Call OpenRouter API and parse response into LLMResult with token usage."""
     headers = {
@@ -43,7 +53,7 @@ async def call_openrouter(
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.5,
@@ -74,6 +84,26 @@ async def call_openrouter(
     except Exception as e:
         logger.error(f"OpenRouter call failed: {e}")
         return None
+
+
+async def call_openrouter_dual_pass(
+    prompt: str,
+    api_key: str,
+    model: str,
+    timeout: int = 30,
+) -> tuple[LLMResult | None, LLMResult | None]:
+    """Call OpenRouter twice concurrently: standard + devil's advocate.
+
+    Returns (standard_result, devils_result). Either may be None on failure.
+    """
+    results = await asyncio.gather(
+        call_openrouter(prompt, api_key, model, timeout, system_prompt=SYSTEM_PROMPT),
+        call_openrouter(prompt, api_key, model, timeout, system_prompt=DEVILS_ADVOCATE_SYSTEM_PROMPT),
+        return_exceptions=True,
+    )
+    standard = results[0] if not isinstance(results[0], BaseException) else None
+    devils = results[1] if not isinstance(results[1], BaseException) else None
+    return standard, devils
 
 
 def parse_llm_response(content: str) -> LLMResponse | None:

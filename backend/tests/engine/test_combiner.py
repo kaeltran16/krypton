@@ -4,6 +4,7 @@ from app.engine.combiner import (
     compute_preliminary_score,
     compute_llm_contribution,
     compute_final_score,
+    aggregate_dual_pass,
     calculate_levels,
     blend_with_ml,
     compute_agreement,
@@ -741,3 +742,61 @@ class TestAgreementFactor:
             source_availabilities=[1.0, 1.0, 1.0],
         )
         assert result == 0
+
+
+def test_aggregate_dual_pass_both_positive():
+    """Both calls agree bullish — average the contributions."""
+    result, agreed = aggregate_dual_pass(10, 8, 25.0)
+    assert result == 9
+    assert agreed is True
+
+
+def test_aggregate_dual_pass_both_negative():
+    """Both calls agree bearish — average the contributions."""
+    result, agreed = aggregate_dual_pass(-12, -8, 25.0)
+    assert result == -10
+    assert agreed is True
+
+
+def test_aggregate_dual_pass_disagree_positive_standard():
+    """Standard bullish, devil's advocate bearish — small positive."""
+    result, agreed = aggregate_dual_pass(12, -6, 25.0)
+    # magnitude = min(12, 6) / 2 = 3.0, sign = +1
+    assert result == 3
+    assert agreed is False
+
+
+def test_aggregate_dual_pass_disagree_negative_standard():
+    """Standard bearish, devil's advocate bullish — small negative."""
+    result, agreed = aggregate_dual_pass(-15, 8, 25.0)
+    # magnitude = min(15, 8) / 2 = 4.0, sign = -1
+    assert result == -4
+    assert agreed is False
+
+
+def test_aggregate_dual_pass_capped():
+    """Agreed contributions exceeding cap are clamped."""
+    result, agreed = aggregate_dual_pass(30, 30, 25.0)
+    assert result == 25
+    assert agreed is True
+
+
+def test_aggregate_dual_pass_negative_capped():
+    """Agreed negative contributions exceeding cap are clamped."""
+    result, agreed = aggregate_dual_pass(-30, -30, 25.0)
+    assert result == -25
+    assert agreed is True
+
+
+def test_aggregate_dual_pass_zero_standard():
+    """Zero standard contribution counts as agreement."""
+    result, agreed = aggregate_dual_pass(0, 5, 25.0)
+    assert agreed is True
+    assert result == 2  # round((0+5)/2) with banker's rounding
+
+
+def test_aggregate_dual_pass_both_zero():
+    """Both zero — trivial agreement."""
+    result, agreed = aggregate_dual_pass(0, 0, 25.0)
+    assert result == 0
+    assert agreed is True

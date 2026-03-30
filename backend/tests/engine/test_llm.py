@@ -5,12 +5,15 @@ import pytest
 
 from app.engine.llm import (
     OPENROUTER_URL,
+    SYSTEM_PROMPT,
+    DEVILS_ADVOCATE_SYSTEM_PROMPT,
     call_openrouter,
+    call_openrouter_dual_pass,
     load_prompt_template,
     parse_llm_response,
     render_prompt,
 )
-from app.engine.models import FactorType
+from app.engine.models import FactorType, LLMFactor, LLMResponse, LLMResult
 
 
 @pytest.fixture
@@ -188,3 +191,79 @@ async def test_call_openrouter_api_error():
         mock_client_cls.return_value = _mock_async_client(post_return=mock_response)
         result = await call_openrouter("test prompt", "fake-key", "test-model")
         assert result is None
+
+
+@pytest.mark.asyncio
+async def test_call_openrouter_dual_pass_both_succeed():
+    """Both standard and devil's advocate calls succeed."""
+    mock_result = LLMResult(
+        response=LLMResponse(
+            factors=[LLMFactor(type="level_breakout", direction="bullish", strength=2, reason="test")],
+            explanation="test",
+        ),
+        prompt_tokens=100,
+        completion_tokens=50,
+        model="test-model",
+    )
+    with patch("app.engine.llm.call_openrouter", new_callable=AsyncMock, return_value=mock_result) as mock_call:
+        standard, devils = await call_openrouter_dual_pass("prompt", "key", "model")
+        assert standard is not None
+        assert devils is not None
+        assert mock_call.call_count == 2
+        # Verify different system prompts used
+        calls = mock_call.call_args_list
+        assert calls[0].kwargs["system_prompt"] == SYSTEM_PROMPT
+        assert calls[1].kwargs["system_prompt"] == DEVILS_ADVOCATE_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_call_openrouter_dual_pass_standard_fails():
+    """Standard call fails — both results reflect failure."""
+    async def side_effect(prompt, api_key, model, timeout=30, system_prompt=SYSTEM_PROMPT):
+        if system_prompt == SYSTEM_PROMPT:
+            return None
+        return LLMResult(
+            response=LLMResponse(
+                factors=[LLMFactor(type="level_breakout", direction="bearish", strength=1, reason="test")],
+                explanation="test",
+            ),
+            prompt_tokens=100,
+            completion_tokens=50,
+            model="test-model",
+        )
+
+    with patch("app.engine.llm.call_openrouter", side_effect=side_effect):
+        standard, devils = await call_openrouter_dual_pass("prompt", "key", "model")
+        assert standard is None
+        assert devils is not None
+
+
+@pytest.mark.asyncio
+async def test_call_openrouter_dual_pass_devils_fails():
+    """Devil's advocate call fails — standard result still returned."""
+    async def side_effect(prompt, api_key, model, timeout=30, system_prompt=SYSTEM_PROMPT):
+        if system_prompt == DEVILS_ADVOCATE_SYSTEM_PROMPT:
+            return None
+        return LLMResult(
+            response=LLMResponse(
+                factors=[LLMFactor(type="level_breakout", direction="bullish", strength=2, reason="test")],
+                explanation="test",
+            ),
+            prompt_tokens=100,
+            completion_tokens=50,
+            model="test-model",
+        )
+
+    with patch("app.engine.llm.call_openrouter", side_effect=side_effect):
+        standard, devils = await call_openrouter_dual_pass("prompt", "key", "model")
+        assert standard is not None
+        assert devils is None
+
+
+@pytest.mark.asyncio
+async def test_call_openrouter_dual_pass_both_fail():
+    """Both calls fail — both None."""
+    with patch("app.engine.llm.call_openrouter", new_callable=AsyncMock, return_value=None):
+        standard, devils = await call_openrouter_dual_pass("prompt", "key", "model")
+        assert standard is None
+        assert devils is None

@@ -468,3 +468,75 @@ async def test_bootstrap_creates_rows_from_backtests(mock_session_factory):
     assert added_row.current_sl_atr == 1.8
     assert added_row.current_tp1_atr == 2.5
     assert added_row.current_tp2_atr == 4.0
+
+
+def test_gp_objective_constraint_violation():
+    """Constraint violations return penalty value."""
+    tracker = PerformanceTracker(session_factory=None)
+    # tp1 < sl violates constraint
+    result = tracker._gp_objective([2.0, 1.5, 4.0], [], {})
+    assert result == 999.0
+    # tp2 < tp1 * 1.2 violates constraint
+    result = tracker._gp_objective([1.0, 2.0, 2.2], [], {})
+    assert result == 999.0
+
+
+def test_gp_objective_valid_params():
+    """Valid parameters compute negative Sortino from replayed signals."""
+    tracker = PerformanceTracker(session_factory=None)
+    sig_candles = [
+        {"high": 51500.0, "low": 49500.0, "timestamp": datetime(2026, 1, 1, 1, tzinfo=timezone.utc)},
+        {"high": 52000.0, "low": 50500.0, "timestamp": datetime(2026, 1, 1, 2, tzinfo=timezone.utc)},
+    ]
+    signals = [
+        {
+            "direction": "LONG",
+            "entry": 50000.0,
+            "atr": 500.0,
+            "sl_strength_factor": 1.0,
+            "tp_strength_factor": 1.0,
+            "vol_factor": 1.0,
+            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        },
+    ]
+    candles_map = {0: sig_candles}
+    # sl=1.5, tp1=2.0, tp2=3.0 — within constraints (tp2 >= tp1*1.2)
+    result = tracker._gp_objective([1.5, 2.0, 3.0], signals, candles_map)
+    # Should return a finite number (negative Sortino or 0.0)
+    assert result != 999.0
+    assert isinstance(result, float)
+
+
+def test_gp_objective_empty_signals():
+    """No signals produces neutral result (0.0), not penalty."""
+    tracker = PerformanceTracker(session_factory=None)
+    result = tracker._gp_objective([1.5, 2.0, 3.0], [], {})
+    assert result == 0.0
+
+
+def test_gp_optimize_returns_tuple_or_none():
+    """_gp_optimize returns (sl, tp1, tp2) tuple or None on failure."""
+    tracker = PerformanceTracker(session_factory=None)
+    sig_candles = [
+        {"high": 51500.0, "low": 49500.0, "timestamp": datetime(2026, 1, 1, 1, tzinfo=timezone.utc)},
+        {"high": 52000.0, "low": 50500.0, "timestamp": datetime(2026, 1, 1, 2, tzinfo=timezone.utc)},
+        {"high": 52500.0, "low": 51000.0, "timestamp": datetime(2026, 1, 1, 3, tzinfo=timezone.utc)},
+    ]
+    signals = [
+        {
+            "direction": "LONG",
+            "entry": 50000.0,
+            "atr": 500.0,
+            "sl_strength_factor": 1.0,
+            "tp_strength_factor": 1.0,
+            "vol_factor": 1.0,
+            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        },
+    ]
+    candles_map = {0: sig_candles}
+    result = tracker._gp_optimize(signals, candles_map, 1.5, 2.0, 3.0)
+    if result is not None:
+        sl, tp1, tp2 = result
+        assert 0.8 <= sl <= 2.5
+        assert 1.0 <= tp1 <= 4.0
+        assert 2.0 <= tp2 <= 6.0
