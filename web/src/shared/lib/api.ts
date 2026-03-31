@@ -148,7 +148,7 @@ export interface TradeHistoryEntry {
   tp2_price: number | null;
   pnl_pct: number;
   duration_minutes: number;
-  outcome: "TP1_HIT" | "SL_HIT" | "EXPIRED";
+  outcome: "TP1_HIT" | "TP2_HIT" | "TP1_TRAIL" | "TP1_TP2" | "SL_HIT" | "EXPIRED";
   signal_score: number;
   signal_reason: string | null;
   opened_at: string;

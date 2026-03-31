@@ -114,7 +114,7 @@ class PerformanceTracker:
             "take_profit_2": entry + sign * tp2_atr * atr,
             "created_at": created_at,
         }
-        return resolve_signal_outcome(signal_dict, candles)
+        return resolve_signal_outcome(signal_dict, candles, atr=atr)
 
     @staticmethod
     def _apply_guardrails(old: float, new: float, bounds: tuple[float, float], max_adj: float) -> float:

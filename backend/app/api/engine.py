@@ -103,6 +103,10 @@ async def get_parameters(request: Request, _key: str = require_auth()):
 
     params["learned_atr"] = learned_atr
 
+    params["risk"] = {
+        "correlation_dampening_floor": _configurable(settings.engine_correlation_dampening_floor),
+    }
+
     params["optimizer"] = {
         "atr_optimizer_mode": _configurable(settings.atr_optimizer_mode),
         "ic_prune_threshold": _configurable(settings.ic_prune_threshold),
@@ -133,6 +137,7 @@ def _regime_row_to_dict(rw) -> dict:
                 "pattern": getattr(rw, f"{regime}_pattern_weight"),
                 "liquidation": getattr(rw, f"{regime}_liquidation_weight"),
                 "confluence": getattr(rw, f"{regime}_confluence_weight"),
+                "news": getattr(rw, f"{regime}_news_weight"),
             },
         }
     return result
@@ -163,6 +168,7 @@ _PIPELINE_SETTINGS_MAP = {
     "blending.confluence.adx_strength_center": ("engine_confluence_adx_strength_center", "confluence_adx_strength_center"),
     "blending.confluence.adx_conviction_ratio": ("engine_confluence_adx_conviction_ratio", "confluence_adx_conviction_ratio"),
     "blending.confluence.mr_penalty_factor": ("engine_confluence_mr_penalty_factor", "confluence_mr_penalty_factor"),
+    "risk.correlation_dampening_floor": ("engine_correlation_dampening_floor", "correlation_dampening_floor"),
     "optimizer.atr_optimizer_mode": ("atr_optimizer_mode", "atr_optimizer_mode"),
     "optimizer.ic_prune_threshold": ("ic_prune_threshold", "ic_prune_threshold"),
     "optimizer.ic_reenable_threshold": ("ic_reenable_threshold", "ic_reenable_threshold"),

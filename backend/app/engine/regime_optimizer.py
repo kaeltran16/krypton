@@ -8,6 +8,7 @@ from typing import Any
 from app.engine.backtester import run_backtest, BacktestConfig
 from app.engine.combiner import compute_preliminary_score
 from app.engine.regime import REGIMES, CAP_KEYS, OUTER_KEYS, blend_outer_weights
+from app.engine.risk import WIN_OUTCOMES
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +281,7 @@ def optimize_from_signals(
         scores = {key: ri.get(f"{key}_score", 0) for key in OUTER_KEYS}
         confs = {key: ri.get(f"{key}_confidence", 0.0) for key in OUTER_KEYS}
         available = frozenset(k for k in OUTER_KEYS if scores[k] != 0 or confs[k] != 0)
-        is_win = sig["outcome"] in ("TP1_HIT", "TP2_HIT")
+        is_win = sig["outcome"] in WIN_OUTCOMES
         pnl = sig.get("outcome_pnl_pct") or 0.0
         entry = float(sig.get("entry", 0))
         sl = float(sig.get("stop_loss", 0))

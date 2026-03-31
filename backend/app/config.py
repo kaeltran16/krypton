@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     engine_confluence_mr_penalty_factor: float = 0.50
     engine_mr_llm_trigger: float = 0.30
 
+    # execution parameters (optimizer-tunable)
+    engine_kelly_fraction: float = 0.35
+    engine_partial_fraction: float = 0.50
+    engine_trail_atr_multiplier: float = 1.0
+
     # liquidation scoring
     engine_liquidation_weight: float = 0.0
     engine_liquidation_cluster_max_score: float = 30.0
@@ -85,6 +90,9 @@ class Settings(BaseSettings):
     engine_liquidation_proximity_steepness: float = 2.0
     engine_liquidation_decay_half_life_hours: float = 4.0
     engine_liquidation_asymmetry_steepness: float = 3.0
+
+    # cross-pair correlation dampener
+    engine_correlation_dampening_floor: float = 0.4
 
     atr_optimizer_mode: Literal["gp", "sweep"] = "gp"
     ic_prune_threshold: float = -0.05

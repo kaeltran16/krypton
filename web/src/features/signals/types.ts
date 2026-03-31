@@ -1,6 +1,6 @@
 export type Direction = "LONG" | "SHORT";
 export type Timeframe = "15m" | "1h" | "4h";
-export type SignalOutcome = "PENDING" | "TP1_HIT" | "TP2_HIT" | "SL_HIT" | "EXPIRED";
+export type SignalOutcome = "PENDING" | "TP1_HIT" | "TP2_HIT" | "TP1_TRAIL" | "TP1_TP2" | "SL_HIT" | "EXPIRED";
 export type UserStatus = "OBSERVED" | "TRADED" | "SKIPPED";
 
 export interface SignalLevels {

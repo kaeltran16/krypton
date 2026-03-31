@@ -37,7 +37,8 @@ from app.engine.constants import ORDER_FLOW_ASSET_SCALES
 from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, aggregate_dual_pass, calculate_levels, blend_with_ml, compute_agreement, apply_agreement_factor, scale_atr_multipliers
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.llm import load_prompt_template, render_prompt, call_openrouter_dual_pass
-from app.engine.risk import PositionSizer
+from app.engine.risk import PositionSizer, compute_correlation_factor, compute_kelly_risk, TERMINAL_OUTCOMES
+from app.engine.news_scorer import compute_news_score
 from app.engine.confluence import (
     CONFLUENCE_ONLY_TIMEFRAMES,
     TIMEFRAME_CACHE_TTL, TIMEFRAME_ANCESTORS, compute_confluence_score,
@@ -143,7 +144,8 @@ def _apply_pipeline_overrides(settings, ps):
 def _build_raw_indicators(
     *, tech_result, tech_conf, flow_result, onchain_score, onchain_conf,
     pat_score, pattern_conf, liq_score, liq_conf, liq_clusters, liq_details,
-    confluence_score, confluence_conf, ml_score, ml_confidence,
+    confluence_score, confluence_conf, news_score=0, news_conf=0.0,
+    ml_score, ml_confidence,
     blended, indicator_preliminary, scaled, levels, outer, snap_info, llm_contribution,
     regime=None, llm_result=None, ensemble_disagreement=None,
 ) -> dict:
@@ -163,6 +165,8 @@ def _build_raw_indicators(
         "liquidation_confidence": liq_conf,
         "confluence_score": confluence_score,
         "confluence_confidence": confluence_conf,
+        "news_score": news_score,
+        "news_confidence": news_conf,
         "regime_steady": tech_result["indicators"].get("regime_steady"),
         # ── Existing keys ──
         "ml_score": ml_score,
@@ -347,6 +351,54 @@ async def persist_pipeline_evaluation(db: Database, eval_data: dict):
         logger.error(f"Failed to persist pipeline evaluation for {eval_data.get('pair')}:{eval_data.get('timeframe')}: {e}")
 
 
+async def _compute_correlation_dampener(
+    pair: str, direction: str, db, redis, settings,
+) -> dict:
+    """Fetch open positions + candle returns, compute correlation factor."""
+    # Fetch PENDING signals as proxy for open positions
+    open_positions = []
+    async with db.session_factory() as session:
+        result = await session.execute(
+            select(Signal.pair, Signal.direction)
+            .where(Signal.outcome == "PENDING")
+            .limit(50)
+        )
+        for row in result.all():
+            if row.pair != pair:
+                open_positions.append({"pair": row.pair, "direction": row.direction})
+
+    if not open_positions:
+        return {"factor": 1.0, "max_correlation": 0.0, "correlated_pair": None}
+
+    # Build returns from Redis candle cache for all relevant pairs
+    all_pairs = list({pair} | {p["pair"] for p in open_positions})
+    tf = "15m"
+
+    async def _fetch_returns(p: str) -> tuple[str, list[float]] | None:
+        try:
+            raw = await redis.lrange(f"candles:{p}:{tf}", -25, -1)
+            if raw and len(raw) >= 5:
+                closes = [float(json.loads(c)["close"]) for c in raw]
+                return p, [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
+        except Exception:
+            pass
+        return None
+
+    results = await asyncio.gather(*[_fetch_returns(p) for p in all_pairs])
+    returns_by_pair: dict[str, list[float]] = {r[0]: r[1] for r in results if r is not None}
+
+    dampening_floor = getattr(settings, "engine_correlation_dampening_floor", 0.4)
+
+    return compute_correlation_factor(
+        new_pair=pair,
+        new_direction=direction,
+        open_positions=open_positions,
+        returns_by_pair=returns_by_pair,
+        lookback=20,
+        dampening_floor=dampening_floor,
+    )
+
+
 async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids=None):
     """Persist signal, compute risk metrics, broadcast, and push."""
     settings = app.state.settings
@@ -356,6 +408,7 @@ async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids
 
     # Enrich with risk metrics if OKX client is available
     risk_metrics = None
+    kelly_meta = None
     okx_client = getattr(app.state, "okx_client", None)
     if okx_client:
         try:
@@ -374,6 +427,24 @@ async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids
                         if rs:
                             risk_per_trade = rs.risk_per_trade
                             max_pos_usd = rs.max_position_size_usd
+
+                        outcomes_result = await session.execute(
+                            select(Signal.outcome, Signal.outcome_pnl_pct).where(
+                                Signal.pair == signal_data["pair"],
+                                Signal.timeframe == signal_data["timeframe"],
+                                Signal.outcome.in_(TERMINAL_OUTCOMES),
+                            ).order_by(Signal.created_at.desc()).limit(100)
+                        )
+                        rows = outcomes_result.all()
+                        recent_outcomes = [
+                            {"outcome": r.outcome, "outcome_pnl_pct": float(r.outcome_pnl_pct)}
+                            for r in rows
+                        ]
+                        kelly_meta = compute_kelly_risk(
+                            recent_outcomes,
+                            kelly_fraction=settings.engine_kelly_fraction,
+                        )
+                        risk_per_trade = min(kelly_meta["risk_per_trade"], risk_per_trade)
                 except Exception:
                     pass
 
@@ -407,9 +478,30 @@ async def _emit_signal(app, signal_data: dict, levels: dict, correlated_news_ids
                     lot_size=lot_size,
                     min_order_size=min_order_size,
                 )
+
+                # Cross-pair correlation dampener
+                if risk_metrics:
+                    try:
+                        corr_result = await _compute_correlation_dampener(
+                            signal_data["pair"], signal_data["direction"],
+                            db, redis, settings,
+                        )
+                        if corr_result["factor"] < 1.0:
+                            risk_metrics["position_size_usd"] = round(
+                                risk_metrics["position_size_usd"] * corr_result["factor"], 2
+                            )
+                            risk_metrics["position_size_base"] = round(
+                                risk_metrics["position_size_base"] * corr_result["factor"], 8
+                            )
+                        risk_metrics["correlation_dampener"] = corr_result
+                    except Exception as e:
+                        logger.debug(f"Correlation dampener skipped: {e}")
+
         except Exception as e:
             logger.debug(f"Risk metrics enrichment skipped: {e}")
 
+    if risk_metrics and kelly_meta:
+        risk_metrics["kelly"] = kelly_meta
     signal_data["risk_metrics"] = risk_metrics
     # Merge dual-pass LLM agreement into risk_metrics for observability
     if signal_data.get("dual_pass_agreed") is not None:
@@ -684,6 +776,17 @@ async def run_pipeline(app: FastAPI, candle: dict):
             logger.debug(f"On-chain scoring skipped: {e}")
     onchain_score = onchain_result["score"]
 
+    # News sentiment scoring
+    news_result = {"score": 0, "availability": 0.0, "conviction": 0.0, "confidence": 0.0}
+    try:
+        news_result = await compute_news_score(
+            pair, db,
+            lookback_minutes=getattr(settings, "news_llm_context_window_minutes", 120),
+        )
+    except Exception as e:
+        logger.debug(f"News sentiment scoring skipped: {e}")
+    news_score = news_result["score"]
+
     # Liquidation scoring (if collector available)
     liq_score = 0
     liq_conf = 0.0
@@ -729,6 +832,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
     pattern_w = outer["pattern"]
     liq_w = outer.get("liquidation", 0.0)
     conf_w = outer.get("confluence", 0.0)
+    news_w = outer.get("news", 0.0)
 
     tech_avail = tech_result.get("availability", tech_result.get("confidence", 0.0))
     tech_conv = tech_result.get("conviction", 1.0)
@@ -742,10 +846,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
     liq_conv = liq_result.get("conviction", 1.0)
     confluence_avail = confluence_result.get("availability", confluence_conf)
     confluence_conv = confluence_result.get("conviction", 1.0)
+    news_avail = news_result.get("availability", news_result.get("confidence", 0.0))
+    news_conv = news_result.get("conviction", 1.0)
 
     pruned = getattr(app.state, "pruned_sources", set())
     avail_vars = {"tech": tech_avail, "flow": flow_avail, "onchain": onchain_avail,
-                  "pattern": pattern_avail, "liquidation": liq_avail, "confluence": confluence_avail}
+                  "pattern": pattern_avail, "liquidation": liq_avail, "confluence": confluence_avail,
+                  "news": news_avail}
     for src in pruned:
         if src in avail_vars:
             avail_vars[src] = 0.0
@@ -755,11 +862,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
     pattern_avail = avail_vars["pattern"]
     liq_avail = avail_vars["liquidation"]
     confluence_avail = avail_vars["confluence"]
+    news_avail = avail_vars["news"]
 
     tech_conf = tech_result.get("confidence", 0.0)
     flow_conf = flow_result.get("confidence", 0.0)
     onchain_conf = onchain_result.get("confidence", 0.0)
     pattern_conf = pat_result.get("confidence", 0.0)
+    news_conf = news_result.get("confidence", 0.0)
 
     prelim_result = compute_preliminary_score(
         tech_result["score"],
@@ -786,16 +895,20 @@ async def run_pipeline(app: FastAPI, candle: dict):
         confluence_weight=conf_w,
         confluence_availability=confluence_avail,
         confluence_conviction=confluence_conv,
+        news_score=news_score,
+        news_weight=news_w,
+        news_availability=news_avail,
+        news_conviction=news_conv,
     )
     indicator_preliminary = prelim_result["score"]
     confidence_tier = compute_confidence_tier(prelim_result["avg_confidence"])
 
     source_scores = [
         tech_result["score"], flow_result["score"], onchain_score,
-        pat_score, liq_score, confluence_score,
+        pat_score, liq_score, confluence_score, news_score,
     ]
     source_avails = [tech_avail, flow_avail, onchain_avail,
-                     pattern_avail, liq_avail, confluence_avail]
+                     pattern_avail, liq_avail, confluence_avail, news_avail]
     indicator_preliminary = apply_agreement_factor(
         indicator_preliminary, source_scores, source_avails,
     )
@@ -1050,6 +1163,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "order_flow": round(flow_result["score"], 1),
         "onchain": round(onchain_score, 1) if onchain_available else None,
         "patterns": round(pat_score, 1) if pat_score else None,
+        "news": round(news_score, 1) if news_score else None,
         "regime_blend": round(indicator_preliminary, 1),
         "ml_gate": round(ml_score, 1) if ml_score is not None else None,
         "llm_gate": round(llm_contribution, 2) if llm_contribution else None,
@@ -1080,6 +1194,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "pattern": {"availability": pattern_avail, "conviction": pattern_conv},
         "liquidation": {"availability": liq_avail, "conviction": liq_conv},
         "confluence": {"availability": confluence_avail, "conviction": confluence_conv},
+        "news": {"availability": news_avail, "conviction": news_conv},
     }
 
     eval_ts = candle.get("timestamp")
@@ -1100,6 +1215,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         pattern_score=round(pat_score) if pat_score else None,
         liquidation_score=round(liq_score) if liq_score else None,
         confluence_score=round(confluence_score) if confluence_score else None,
+        news_score=round(news_score) if news_score else None,
         indicator_preliminary=round(indicator_preliminary),
         blended_score=round(blended),
         ml_score=ml_score,
@@ -1207,6 +1323,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             pat_score=pat_score, pattern_conf=pattern_conf,
             liq_score=liq_score, liq_conf=liq_conf, liq_clusters=liq_clusters, liq_details=liq_details,
             confluence_score=confluence_score, confluence_conf=confluence_conf,
+            news_score=news_score, news_conf=news_conf,
             ml_score=ml_score, ml_confidence=ml_confidence,
             blended=blended, indicator_preliminary=indicator_preliminary,
             scaled=scaled, levels=levels, outer=outer, snap_info=snap_info,
@@ -1351,6 +1468,20 @@ async def handle_long_short_data(app: FastAPI, data: dict):
     flow["_last_updated"] = time.time()
 
 
+def _compute_atr_from_candles(candles: list[dict], period: int = 14) -> float | None:
+    """Compute ATR(period) from raw candle dicts. Returns None if insufficient data."""
+    if len(candles) < period + 1:
+        return None
+    trs = []
+    for i in range(1, len(candles)):
+        h = float(candles[i].get("high", candles[i].get("h", 0)))
+        l = float(candles[i].get("low", candles[i].get("l", 0)))
+        prev_c = float(candles[i - 1].get("close", candles[i - 1].get("c", 0)))
+        tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+        trs.append(tr)
+    return sum(trs[-period:]) / period
+
+
 async def check_pending_signals(app: FastAPI):
     """Check all PENDING signals against recent candles for outcome resolution."""
     db = app.state.db
@@ -1365,29 +1496,38 @@ async def check_pending_signals(app: FastAPI):
         )
         pending = result.scalars().all()
         resolved_pairs_timeframes: set[tuple[str, str]] = set()
+        candle_cache: dict[str, tuple[list[dict], float | None]] = {}
 
         for signal in pending:
-            # Check expiry (24h)
             age = (datetime.now(timezone.utc) - signal.created_at).total_seconds()
-            if age > 86400:
-                signal.outcome = "EXPIRED"
-                signal.outcome_at = datetime.now(timezone.utc)
-                signal.outcome_duration_minutes = round(age / 60)
-                resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
-                continue
 
             cache_key = f"candles:{signal.pair}:{signal.timeframe}"
-            raw_candles = await redis.lrange(cache_key, -200, -1)
-            if not raw_candles:
-                continue
+            if cache_key not in candle_cache:
+                raw_candles = await redis.lrange(cache_key, -200, -1)
+                if not raw_candles:
+                    candle_cache[cache_key] = ([], None)
+                else:
+                    parsed_all = [json.loads(c) for c in raw_candles]
+                    candle_cache[cache_key] = (parsed_all, _compute_atr_from_candles(parsed_all))
 
-            import json as _json
-            candles_data = [_json.loads(c) for c in raw_candles]
+            candles_data, atr_val = candle_cache[cache_key]
+            if not candles_data:
+                if age > 86400:
+                    signal.outcome = "EXPIRED"
+                    signal.outcome_at = datetime.now(timezone.utc)
+                    signal.outcome_duration_minutes = round(age / 60)
+                    resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
+                continue
 
             # Only check candles after signal creation
             signal_ts = signal.created_at.isoformat()
             candles_after = [c for c in candles_data if c["timestamp"] > signal_ts]
             if not candles_after:
+                if age > 86400:
+                    signal.outcome = "EXPIRED"
+                    signal.outcome_at = datetime.now(timezone.utc)
+                    signal.outcome_duration_minutes = round(age / 60)
+                    resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
                 continue
 
             signal_dict = {
@@ -1409,12 +1549,32 @@ async def check_pending_signals(app: FastAPI):
                     "timestamp": c["timestamp"],
                 })
 
-            outcome = resolve_signal_outcome(signal_dict, parsed)
+            force_close = parsed[-1]["close"] if age > 86400 else None
+
+            outcome = resolve_signal_outcome(
+                signal_dict, parsed,
+                atr=atr_val * settings.engine_trail_atr_multiplier if atr_val else None,
+                partial_fraction=settings.engine_partial_fraction,
+                force_close_price=force_close,
+            )
             if outcome:
                 signal.outcome = outcome["outcome"]
                 signal.outcome_at = outcome["outcome_at"]
                 signal.outcome_pnl_pct = outcome["outcome_pnl_pct"]
                 signal.outcome_duration_minutes = outcome["outcome_duration_minutes"]
+                if outcome.get("partial_exit_pnl_pct") is not None:
+                    meta = {
+                        "partial_exit_pnl_pct": outcome["partial_exit_pnl_pct"],
+                        "partial_exit_at": outcome["partial_exit_at"].isoformat() if outcome.get("partial_exit_at") else None,
+                        "trail_exit_pnl_pct": outcome.get("trail_exit_pnl_pct"),
+                        "trail_exit_price": outcome.get("trail_exit_price"),
+                    }
+                    signal.risk_metrics = {**(signal.risk_metrics or {}), "partial_exit": meta}
+                resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
+            elif age > 86400:
+                signal.outcome = "EXPIRED"
+                signal.outcome_at = datetime.now(timezone.utc)
+                signal.outcome_duration_minutes = round(age / 60)
                 resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
 
         await session.commit()

@@ -5,17 +5,7 @@ import { useSignalStore } from "../../signals/store";
 import { formatScore, formatRelativeTime, formatPair } from "../../../shared/lib/format";
 import type { Signal } from "../../signals/types";
 import { Badge } from "../../../shared/components/Badge";
-import type { ComponentProps } from "react";
-
-type BadgeColor = ComponentProps<typeof Badge>["color"];
-
-const OUTCOME_BADGE: Record<string, { label: string; color: BadgeColor }> = {
-  PENDING: { label: "PENDING", color: "accent" },
-  TP1_HIT: { label: "TP1",     color: "long" },
-  TP2_HIT: { label: "TP2",     color: "long" },
-  SL_HIT:  { label: "SL",      color: "short" },
-  EXPIRED: { label: "EXP",     color: "muted" },
-};
+import { OUTCOME_BADGE } from "../../../shared/lib/outcomes";
 
 export function RecentSignals() {
   const [, setTick] = useState(0);

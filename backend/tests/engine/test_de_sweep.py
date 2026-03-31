@@ -199,10 +199,11 @@ class TestBuildRegimeWeights:
         rw = _build_regime_weights(candidate)
         assert rw.trending_trend_cap == 35.0        # overridden
         assert rw.ranging_trend_cap == 18            # from DEFAULT_CAPS
-        assert rw.trending_tech_weight == 0.36       # from DEFAULT_OUTER_WEIGHTS
-        assert rw.ranging_tech_weight == 0.32        # from DEFAULT_OUTER_WEIGHTS
-        assert rw.volatile_flow_weight == 0.18       # from DEFAULT_OUTER_WEIGHTS
-        assert rw.volatile_pattern_weight == 0.10    # from DEFAULT_OUTER_WEIGHTS
+        assert rw.trending_tech_weight == 0.34       # from DEFAULT_OUTER_WEIGHTS
+        assert rw.ranging_tech_weight == 0.29        # from DEFAULT_OUTER_WEIGHTS
+        assert rw.volatile_flow_weight == 0.16       # from DEFAULT_OUTER_WEIGHTS
+        assert rw.volatile_pattern_weight == 0.09    # from DEFAULT_OUTER_WEIGHTS
+        assert rw.trending_news_weight == 0.06       # news weight added
 
 
 class TestRunDeSweep:

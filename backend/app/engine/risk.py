@@ -99,6 +99,162 @@ def compute_rr_ratios(
     return {"tp1_rr": tp1_rr, "tp2_rr": tp2_rr}
 
 
+TERMINAL_OUTCOMES = frozenset({"TP1_HIT", "TP2_HIT", "SL_HIT", "TP1_TRAIL", "TP1_TP2"})
+WIN_OUTCOMES = frozenset({"TP1_HIT", "TP2_HIT", "TP1_TRAIL", "TP1_TP2"})
+
+
+def compute_kelly_risk(
+    recent_outcomes: list[dict],
+    kelly_fraction: float = 0.35,
+    min_signals: int = 50,
+    default_risk: float = 0.01,
+    floor: float = 0.005,
+    ceiling: float = 0.02,
+) -> dict:
+    """Compute adaptive risk_per_trade using fractional Kelly criterion.
+
+    Returns dict with risk_per_trade, kelly_raw, win_rate, odds, sample_size, source.
+    """
+    terminal = [o for o in recent_outcomes if o["outcome"] in TERMINAL_OUTCOMES]
+    n = len(terminal)
+
+    if n < min_signals:
+        return {
+            "risk_per_trade": default_risk,
+            "kelly_raw": 0.0,
+            "win_rate": 0.0,
+            "odds": 0.0,
+            "sample_size": n,
+            "source": "default",
+        }
+
+    wins = [o for o in terminal if o["outcome"] in WIN_OUTCOMES]
+    win_rate = len(wins) / n
+
+    pos_pnls = [o["outcome_pnl_pct"] for o in terminal if o["outcome_pnl_pct"] > 0]
+    neg_pnls = [abs(o["outcome_pnl_pct"]) for o in terminal if o["outcome_pnl_pct"] < 0]
+
+    avg_win = sum(pos_pnls) / len(pos_pnls) if pos_pnls else 0.0
+    avg_loss = sum(neg_pnls) / len(neg_pnls) if neg_pnls else 0.0
+
+    if avg_win == 0.0 and avg_loss == 0.0:
+        return {
+            "risk_per_trade": default_risk,
+            "kelly_raw": 0.0,
+            "win_rate": win_rate,
+            "odds": 0.0,
+            "sample_size": n,
+            "source": "default",
+        }
+    if avg_loss == 0.0:
+        return {
+            "risk_per_trade": ceiling,
+            "kelly_raw": 1.0,
+            "win_rate": win_rate,
+            "odds": float("inf"),
+            "sample_size": n,
+            "source": "kelly",
+        }
+    if avg_win == 0.0:
+        return {
+            "risk_per_trade": floor,
+            "kelly_raw": -1.0,
+            "win_rate": win_rate,
+            "odds": 0.0,
+            "sample_size": n,
+            "source": "kelly",
+        }
+
+    odds = avg_win / avg_loss
+    kelly_raw = win_rate - (1 - win_rate) / odds
+    kelly_frac = kelly_raw * kelly_fraction
+    risk = max(floor, min(ceiling, kelly_frac))
+
+    return {
+        "risk_per_trade": round(risk, 6),
+        "kelly_raw": round(kelly_raw, 6),
+        "win_rate": round(win_rate, 4),
+        "odds": round(odds, 4),
+        "sample_size": n,
+        "source": "kelly",
+    }
+
+
+def compute_correlation_factor(
+    new_pair: str,
+    new_direction: str,
+    open_positions: list[dict],
+    returns_by_pair: dict[str, list[float]],
+    lookback: int = 20,
+    dampening_floor: float = 0.4,
+) -> dict:
+    """Compute position size dampening based on correlation with open positions.
+
+    Args:
+        new_pair: Pair of the new signal (e.g. "BTC-USDT-SWAP").
+        new_direction: "LONG" or "SHORT".
+        open_positions: List of dicts with "pair" and "direction" keys.
+        returns_by_pair: Per-pair list of recent candle-over-candle returns.
+            Keys are pair strings, values are lists of float returns.
+        lookback: Number of candles for rolling correlation.
+        dampening_floor: Minimum multiplier (0.4 = 60% max reduction).
+
+    Returns:
+        Dict with "factor" (float 0.4-1.0), "max_correlation" (float),
+        and "correlated_pair" (str or None).
+    """
+    if not open_positions or new_pair not in returns_by_pair:
+        return {"factor": 1.0, "max_correlation": 0.0, "correlated_pair": None}
+
+    new_returns = returns_by_pair[new_pair]
+    if len(new_returns) < lookback:
+        return {"factor": 1.0, "max_correlation": 0.0, "correlated_pair": None}
+
+    max_corr = 0.0
+    correlated_pair = None
+
+    for pos in open_positions:
+        if pos["direction"] != new_direction:
+            continue
+        pos_pair = pos["pair"]
+        if pos_pair == new_pair or pos_pair not in returns_by_pair:
+            continue
+
+        pos_returns = returns_by_pair[pos_pair]
+        if len(pos_returns) < lookback:
+            continue
+
+        corr = _pearson(new_returns[-lookback:], pos_returns[-lookback:])
+        if abs(corr) > max_corr:
+            max_corr = abs(corr)
+            correlated_pair = pos_pair
+
+    # Linear dampening: 1.0 at corr=0, dampening_floor at corr=1.0
+    factor = max(dampening_floor, 1.0 - max_corr * (1.0 - dampening_floor))
+
+    return {
+        "factor": round(factor, 4),
+        "max_correlation": round(max_corr, 4),
+        "correlated_pair": correlated_pair,
+    }
+
+
+def _pearson(x: list[float], y: list[float]) -> float:
+    """Compute Pearson correlation between two equal-length lists."""
+    n = len(x)
+    if n < 2:
+        return 0.0
+    mean_x = sum(x) / n
+    mean_y = sum(y) / n
+    cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+    var_x = sum((xi - mean_x) ** 2 for xi in x)
+    var_y = sum((yi - mean_y) ** 2 for yi in y)
+    denom = math.sqrt(var_x * var_y)
+    if denom == 0:
+        return 0.0
+    return cov / denom
+
+
 class RiskGuard:
     """Evaluates whether a trade should be allowed based on configurable risk rules."""
 

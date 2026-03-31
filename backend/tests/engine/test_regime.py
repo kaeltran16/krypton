@@ -3,7 +3,7 @@ import pytest
 
 from app.engine.regime import (
     compute_regime_mix, blend_caps, blend_outer_weights,
-    DEFAULT_CAPS, DEFAULT_OUTER_WEIGHTS,
+    DEFAULT_CAPS, DEFAULT_OUTER_WEIGHTS, OUTER_KEYS,
 )
 
 
@@ -95,10 +95,10 @@ class TestBlendOuterWeights:
         total = sum(weights.values())
         assert abs(total - 1.0) < 1e-9
 
-    def test_returns_six_keys(self):
+    def test_returns_all_outer_keys(self):
         regime = {"trending": 0.3, "ranging": 0.25, "volatile": 0.25, "steady": 0.2}
         weights = blend_outer_weights(regime, None)
-        assert len(weights) == 6
+        assert len(weights) == len(OUTER_KEYS)
 
     def test_pure_trending_returns_trending_weights(self):
         regime = {"trending": 1.0, "ranging": 0.0, "volatile": 0.0, "steady": 0.0}
@@ -109,10 +109,6 @@ class TestBlendOuterWeights:
     def test_none_weights_uses_defaults(self):
         regime = {"trending": 0.4, "ranging": 0.2, "volatile": 0.2, "steady": 0.2}
         weights = blend_outer_weights(regime, None)
-        assert "tech" in weights
-        assert "flow" in weights
-        assert "onchain" in weights
-        assert "pattern" in weights
-        assert "liquidation" in weights
-        assert "confluence" in weights
-        assert len(weights) == 6
+        for key in OUTER_KEYS:
+            assert key in weights
+        assert len(weights) == len(OUTER_KEYS)

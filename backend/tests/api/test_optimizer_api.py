@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from tests.conftest import make_test_jwt
 from app.engine.optimizer import OptimizerState
+from app.engine.param_groups import PARAM_GROUPS
 
 
 @pytest.fixture
@@ -27,7 +28,7 @@ async def test_get_optimizer_status(client, app, optimizer_state):
     assert "groups" in data
     assert "global_profit_factor" in data
     assert "active_shadow" in data
-    assert len(data["groups"]) == 19
+    assert len(data["groups"]) == len(PARAM_GROUPS)
 
 
 @pytest.mark.asyncio

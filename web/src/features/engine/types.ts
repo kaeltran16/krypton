@@ -48,6 +48,7 @@ export interface PipelineScores {
   order_flow: number | null;
   onchain: number | null;
   patterns: number | null;
+  news: number | null;
   regime_blend: number | null;
   ml_gate: number | null;
   llm_gate: number | null;
@@ -86,6 +87,7 @@ export interface EngineParameters {
   regime_weights: Record<string, Record<string, Record<string, RegimeCapWeights>>>;
   learned_atr: Record<string, Record<string, LearnedAtrEntry>>;
   performance_tracker: Record<string, Record<string, ParameterValue>>;
+  risk: Record<string, ParameterValue>;
   optimizer: Record<string, ParameterValue>;
   descriptions?: Record<string, ParamDescription>;
 }

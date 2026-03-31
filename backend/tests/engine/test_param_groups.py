@@ -14,7 +14,7 @@ def test_all_groups_defined():
         "atr_levels", "sigmoid_curves", "order_flow", "pattern_strengths",
         "pattern_boosts", "indicator_periods", "mean_reversion", "llm_factors",
         "onchain", "mr_pressure", "liquidation", "confluence",
-        "agreement", "conviction", "ml_blending",
+        "agreement", "conviction", "ml_blending", "ensemble", "execution",
     }
     assert set(PARAM_GROUPS.keys()) == expected
 

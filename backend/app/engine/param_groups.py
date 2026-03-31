@@ -23,7 +23,7 @@ PRIORITY_LAYERS: list[set[str]] = [
     {"regime_caps", "regime_outer", "atr_levels"},  # layer 1
     {"sigmoid_curves", "order_flow", "pattern_strengths", "pattern_boosts",
      "indicator_periods", "mean_reversion", "llm_factors", "onchain",
-     "mr_pressure", "liquidation", "confluence", "ensemble"},  # layer 2
+     "mr_pressure", "liquidation", "confluence", "ensemble", "execution"},  # layer 2
 ]
 
 
@@ -548,6 +548,31 @@ PARAM_GROUPS["ensemble"] = {
     },
     "constraints": _ensemble_ok,
     "priority": _priority_for("ensemble"),
+}
+
+
+def _execution_ok(c: dict[str, Any]) -> bool:
+    return (
+        0.1 <= c["kelly_fraction"] <= 0.5
+        and 0.25 <= c["partial_fraction"] <= 0.75
+        and 0.5 <= c["trail_atr_multiplier"] <= 2.0
+    )
+
+
+PARAM_GROUPS["execution"] = {
+    "params": {
+        "kelly_fraction": "execution.kelly_fraction",
+        "partial_fraction": "execution.partial_fraction",
+        "trail_atr_multiplier": "execution.trail_atr_multiplier",
+    },
+    "sweep_method": "grid",
+    "sweep_ranges": {
+        "kelly_fraction": (0.15, 0.50, 0.05),
+        "partial_fraction": (0.25, 0.75, 0.05),
+        "trail_atr_multiplier": (0.75, 1.50, 0.25),
+    },
+    "constraints": _execution_ok,
+    "priority": _priority_for("execution"),
 }
 
 

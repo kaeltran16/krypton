@@ -30,12 +30,17 @@ def compute_preliminary_score(
     confluence_weight: float = 0.0,
     confluence_availability: float | None = None,
     confluence_conviction: float | None = None,
+    news_score: int = 0,
+    news_weight: float = 0.0,
+    news_availability: float | None = None,
+    news_conviction: float | None = None,
     tech_confidence: float = 0.0,
     flow_confidence: float = 0.0,
     onchain_confidence: float = 0.0,
     pattern_confidence: float = 0.0,
     liquidation_confidence: float = 0.0,
     confluence_confidence: float = 0.0,
+    news_confidence: float = 0.0,
     conviction_floor: float = CONVICTION_FLOOR,
 ) -> dict:
     avails = [
@@ -45,6 +50,7 @@ def compute_preliminary_score(
         pattern_availability if pattern_availability is not None else pattern_confidence,
         liquidation_availability if liquidation_availability is not None else liquidation_confidence,
         confluence_availability if confluence_availability is not None else confluence_confidence,
+        news_availability if news_availability is not None else news_confidence,
     ]
     convictions = [
         tech_conviction if tech_conviction is not None else 1.0,
@@ -53,11 +59,12 @@ def compute_preliminary_score(
         pattern_conviction if pattern_conviction is not None else 1.0,
         liquidation_conviction if liquidation_conviction is not None else 1.0,
         confluence_conviction if confluence_conviction is not None else 1.0,
+        news_conviction if news_conviction is not None else 1.0,
     ]
     base_weights = [tech_weight, flow_weight, onchain_weight, pattern_weight,
-                    liquidation_weight, confluence_weight]
+                    liquidation_weight, confluence_weight, news_weight]
     scores = [technical_score, order_flow_score, onchain_score, pattern_score,
-              liquidation_score, confluence_score]
+              liquidation_score, confluence_score, news_score]
 
     ew = [w * a for w, a in zip(base_weights, avails)]
     total = sum(ew)

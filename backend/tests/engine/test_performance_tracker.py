@@ -106,9 +106,12 @@ def test_sortino_empty():
 
 
 def test_replay_long_tp1_hit():
-    """Replay LONG signal where TP1 is hit."""
+    """Replay LONG signal where TP1 is hit, then trail resolves."""
+    # tp1=51000, trail starts at 51000-500=50500
+    # candle 2: trail ratchets to max(50500, 51200-500)=50700, low=50400<=50700 → trail hit
     candles = [
         {"high": 51100.0, "low": 50500.0, "timestamp": datetime(2025, 1, 1, 1, tzinfo=timezone.utc)},
+        {"high": 51200.0, "low": 50400.0, "timestamp": datetime(2025, 1, 1, 2, tzinfo=timezone.utc)},
     ]
     result = PerformanceTracker.replay_signal(
         direction="LONG", entry=50000.0, atr=500.0,
@@ -116,7 +119,7 @@ def test_replay_long_tp1_hit():
         candles=candles, created_at=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
     )
     assert result is not None
-    assert result["outcome"] == "TP1_HIT"
+    assert result["outcome"] == "TP1_TRAIL"
     assert result["outcome_pnl_pct"] > 0
 
 
@@ -293,18 +296,26 @@ async def test_optimize_updates_multipliers(mock_session_factory):
         }
         mock_signals.append(sig)
 
-    # Mock candles
+    # Mock candles (2 per signal: +30min and +45min so trail resolves for TP1 hits)
     mock_candles = []
     for i in range(50):
-        c = MagicMock()
-        c.timestamp = base_time + timedelta(hours=i * 2, minutes=30)
+        c1 = MagicMock()
+        c1.timestamp = base_time + timedelta(hours=i * 2, minutes=30)
+        c2 = MagicMock()
+        c2.timestamp = base_time + timedelta(hours=i * 2, minutes=45)
         if i % 3 != 0:
-            c.high = 51100.0
-            c.low = 49900.0
+            c1.high = 51100.0
+            c1.low = 49900.0
+            # trail starts at tp1-atr=50500, ratchets to max(50500,51100-500)=50600
+            c2.high = 51100.0
+            c2.low = 50400.0  # low<=50600 → trail hit
         else:
-            c.high = 50100.0
-            c.low = 49200.0
-        mock_candles.append(c)
+            c1.high = 50100.0
+            c1.low = 49200.0
+            c2.high = 50100.0
+            c2.low = 49500.0
+        mock_candles.append(c1)
+        mock_candles.append(c2)
 
     call_count = 0
     def mock_execute(query):

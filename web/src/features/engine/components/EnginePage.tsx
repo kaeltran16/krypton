@@ -263,6 +263,7 @@ export default function EnginePage() {
       <ParameterCategory title="Pattern Strengths" params={params.patterns.strengths} descriptions={descriptions} />
       <ParameterCategory title="Performance Tracker" params={params.performance_tracker.optimization_params} descriptions={descriptions} />
       <ParameterCategory title="Optimization Guardrails" params={params.performance_tracker.guardrails} descriptions={descriptions} />
+      {params.risk && <ParameterCategory title="Risk — Correlation Dampener" params={params.risk} descriptions={descriptions} onEdit={handleEdit} dotPathPrefix="risk" />}
 
       {allPairs.length > 0 && (<>
         <SectionLabel as="h3" color="primary" className="-mb-1">Per-Pair Parameters</SectionLabel>

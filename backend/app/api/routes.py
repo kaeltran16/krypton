@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.api.auth import require_auth
 from app.db.models import Signal, PerformanceTrackerRow
 from app.engine.performance_tracker import DEFAULT_SL, DEFAULT_TP1, DEFAULT_TP2
+from app.engine.risk import WIN_OUTCOMES
 from app.engine.combiner import (
     calculate_levels,
     compute_final_score,
@@ -63,7 +64,7 @@ def _compute_streaks(resolved: list[Signal]) -> dict:
     prev_is_win = None
 
     for s in sorted_signals:
-        is_win = s.outcome in ("TP1_HIT", "TP2_HIT")
+        is_win = s.outcome in WIN_OUTCOMES
         if prev_is_win is None or is_win == prev_is_win:
             streak += 1 if is_win else -1
         else:
@@ -364,7 +365,7 @@ def create_router() -> APIRouter:
                     "pnl_distribution": [],
                 }
             else:
-                wins = [s for s in resolved if s.outcome in ("TP1_HIT", "TP2_HIT")]
+                wins = [s for s in resolved if s.outcome in WIN_OUTCOMES]
                 losses = [s for s in resolved if s.outcome == "SL_HIT"]
                 expired = [s for s in resolved if s.outcome == "EXPIRED"]
 
@@ -382,7 +383,7 @@ def create_router() -> APIRouter:
                     p["total"] += 1
                     pnl = float(s.outcome_pnl_pct or 0)
                     p["pnl_sum"] += pnl
-                    if s.outcome in ("TP1_HIT", "TP2_HIT"):
+                    if s.outcome in WIN_OUTCOMES:
                         p["wins"] += 1
                     elif s.outcome == "SL_HIT":
                         p["losses"] += 1
@@ -395,7 +396,7 @@ def create_router() -> APIRouter:
                 for s in resolved:
                     t = by_timeframe.setdefault(s.timeframe, {"wins": 0, "total": 0})
                     t["total"] += 1
-                    if s.outcome in ("TP1_HIT", "TP2_HIT"):
+                    if s.outcome in WIN_OUTCOMES:
                         t["wins"] += 1
                 for t in by_timeframe.values():
                     t["win_rate"] = round(t["wins"] / t["total"] * 100, 1)
@@ -406,7 +407,7 @@ def create_router() -> APIRouter:
                     d["total"] += 1
                     pnl = float(s.outcome_pnl_pct or 0)
                     d["pnl_sum"] += pnl
-                    if s.outcome in ("TP1_HIT", "TP2_HIT"):
+                    if s.outcome in WIN_OUTCOMES:
                         d["wins"] += 1
                     elif s.outcome == "SL_HIT":
                         d["losses"] += 1
@@ -490,7 +491,7 @@ def create_router() -> APIRouter:
             bucket = day_buckets.setdefault(day, {"date": day, "signal_count": 0, "net_pnl": 0.0, "wins": 0, "losses": 0})
             bucket["signal_count"] += 1
             bucket["net_pnl"] += float(s.outcome_pnl_pct or 0)
-            if s.outcome in ("TP1_HIT", "TP2_HIT"):
+            if s.outcome in WIN_OUTCOMES:
                 bucket["wins"] += 1
             elif s.outcome == "SL_HIT":
                 bucket["losses"] += 1

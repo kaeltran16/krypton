@@ -16,6 +16,7 @@ const DEFAULT_NODES: Record<string, NodeData> = {
   order_flow: { label: "Order Flow" },
   onchain: { label: "On-Chain" },
   patterns: { label: "Patterns" },
+  news: { label: "News" },
   regime_blend: { label: "Regime Blend" },
   ml_gate: { label: "ML Gate" },
   llm_gate: { label: "LLM Gate" },
@@ -75,8 +76,8 @@ export default function PipelineFlow({ nodes }: Props) {
       {/* Flow: 2-row layout */}
       <div className="space-y-2">
         {/* Source scores row */}
-        <div className="grid grid-cols-4 gap-1">
-          {["technical", "order_flow", "onchain", "patterns"].map((key) => (
+        <div className="grid grid-cols-5 gap-1">
+          {["technical", "order_flow", "onchain", "patterns", "news"].map((key) => (
             <ScoreNode
               key={key}
               data={merged[key]}

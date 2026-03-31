@@ -9,7 +9,7 @@ from sqlalchemy import select, and_
 
 from app.api.auth import require_auth
 from app.db.models import RiskSettings, Signal
-from app.engine.risk import RiskGuard
+from app.engine.risk import RiskGuard, TERMINAL_OUTCOMES
 
 router = APIRouter(prefix="/api/risk")
 
@@ -206,7 +206,7 @@ async def get_risk_status(request: Request, _user=require_auth()):
         result = await session.execute(
             select(Signal).where(
                 and_(
-                    Signal.outcome.in_(["TP1_HIT", "TP2_HIT", "SL_HIT"]),
+                    Signal.outcome.in_(TERMINAL_OUTCOMES),
                     Signal.outcome_at >= today_start,
                 )
             )

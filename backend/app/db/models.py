@@ -126,6 +126,7 @@ class PipelineEvaluation(Base):
     pattern_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     liquidation_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confluence_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    news_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     indicator_preliminary: Mapped[int] = mapped_column(Integer, nullable=False)
     blended_score: Mapped[int] = mapped_column(Integer, nullable=False)
     ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -270,6 +271,7 @@ class PipelineSettings(Base):
     ensemble_stale_decay_days: Mapped[float | None] = mapped_column(Float, nullable=True)
     ensemble_stale_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     ensemble_confidence_cap_partial: Mapped[float | None] = mapped_column(Float, nullable=True)
+    correlation_dampening_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -460,6 +462,12 @@ class RegimeWeights(Base):
     ranging_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.08, server_default="0.08")
     volatile_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12, server_default="0.12")
     steady_confluence_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.14, server_default="0.14")
+
+    # News sentiment weights (4 regimes x 1 weight)
+    trending_news_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.06, server_default="0.06")
+    ranging_news_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.08, server_default="0.08")
+    volatile_news_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.12, server_default="0.12")
+    steady_news_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.04, server_default="0.04")
 
     # per-pair ADX center for trend strength sigmoid
     adx_center: Mapped[float] = mapped_column(Float, nullable=False, default=20.0, server_default="20.0")

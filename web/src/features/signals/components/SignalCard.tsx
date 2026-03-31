@@ -5,6 +5,7 @@ import { PatternBadges } from "./PatternBadges";
 import { Button } from "../../../shared/components/Button";
 import { Badge } from "../../../shared/components/Badge";
 import { ProgressBar } from "../../../shared/components/ProgressBar";
+import { OUTCOME_COLOR, OUTCOME_LABEL } from "../../../shared/lib/outcomes";
 
 interface SignalCardProps {
   signal: Signal;
@@ -141,19 +142,6 @@ function RRFallback({ levels }: { levels: Signal["levels"] }) {
   );
 }
 
-const OUTCOME_COLOR: Record<string, "long" | "short" | "muted"> = {
-  TP1_HIT: "long",
-  TP2_HIT: "long",
-  SL_HIT:  "short",
-  EXPIRED: "muted",
-};
-
-const OUTCOME_LABEL: Record<string, string> = {
-  TP1_HIT: "TP1 Hit",
-  TP2_HIT: "TP2 Hit",
-  SL_HIT:  "SL Hit",
-  EXPIRED: "Expired",
-};
 
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const color = OUTCOME_COLOR[outcome] ?? "muted";

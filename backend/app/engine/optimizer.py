@@ -22,7 +22,7 @@ from app.engine.regime import OUTER_KEYS
 
 logger = logging.getLogger(__name__)
 
-_NON_BACKTESTABLE = frozenset({"order_flow", "llm_factors", "onchain", "ensemble"})
+_NON_BACKTESTABLE = frozenset({"order_flow", "llm_factors", "onchain", "ensemble", "execution"})
 _BACKTESTABLE_OUTER = frozenset({"tech", "pattern"})
 
 OPTIMIZER_CONFIG = {

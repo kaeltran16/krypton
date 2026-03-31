@@ -7,6 +7,7 @@ import { useSignalsByDate } from "../hooks/useSignalsByDate";
 import type { CalendarDay, CalendarResponse, Signal } from "../types";
 import { MetricCard } from "../../../shared/components/MetricCard";
 import { Badge } from "../../../shared/components/Badge";
+import { OUTCOME_COLOR } from "../../../shared/lib/outcomes";
 import { Skeleton } from "../../../shared/components/Skeleton";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -247,7 +248,7 @@ function SignalDayCard({ signal }: { signal: Signal }) {
 
   const outcomeBadge = signal.outcome !== "PENDING" ? (
     <Badge
-      color={(signal.outcome === "TP1_HIT" || signal.outcome === "TP2_HIT") ? "long" : signal.outcome === "EXPIRED" ? "muted" : "short"}
+      color={OUTCOME_COLOR[signal.outcome] ?? "muted"}
       className="text-[10px]"
     >
       {signal.outcome.replace("_", " ")}

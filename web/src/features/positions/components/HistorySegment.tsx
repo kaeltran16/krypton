@@ -6,6 +6,7 @@ import { Badge } from "../../../shared/components/Badge";
 import { Button } from "../../../shared/components/Button";
 import { PillSelect } from "../../../shared/components/PillSelect";
 import { Skeleton } from "../../../shared/components/Skeleton";
+import { OUTCOME_COLOR } from "../../../shared/lib/outcomes";
 
 const PAIR_OPTIONS = ["All", "BTC", "ETH", "WIF"] as const;
 type PairFilter = (typeof PAIR_OPTIONS)[number];
@@ -15,13 +16,6 @@ const PAIR_MAP: Record<PairFilter, string | undefined> = {
   BTC: "BTC-USDT-SWAP",
   ETH: "ETH-USDT-SWAP",
   WIF: "WIF-USDT-SWAP",
-};
-
-const OUTCOME_COLOR: Record<string, "long" | "short" | "muted"> = {
-  TP1_HIT: "long",
-  TP2_HIT: "long",
-  SL_HIT: "short",
-  EXPIRED: "muted",
 };
 
 const PAGE_SIZE = 20;
