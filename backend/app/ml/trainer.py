@@ -61,6 +61,7 @@ class Trainer:
         tp2_atr: np.ndarray,
         progress_callback: callable | None = None,
         feature_names: list[str] | None = None,
+        _skip_drift_stats: bool = False,
     ) -> dict:
         """Train a single SignalLSTM model.
 
@@ -72,6 +73,10 @@ class Trainer:
 
         if feature_names is None:
             feature_names = [f"feature_{i}" for i in range(input_size)]
+
+        if not _skip_drift_stats:
+            pre_subsample_features = features.copy()
+            pre_subsample_n = len(features)
 
         # Subsample NEUTRAL class to reduce imbalance
         if cfg.neutral_subsample_ratio < 1.0:
@@ -394,6 +399,29 @@ class Trainer:
                 precision_per_class[cls_name] = tp / (tp + fp) if (tp + fp) > 0 else 0.0
                 recall_per_class[cls_name] = tp / (tp + fn) if (tp + fn) > 0 else 0.0
 
+        drift_stats = None
+        if _skip_drift_stats:
+            pass
+        elif use_val and val_loader is not None:
+            from app.ml.drift import compute_drift_stats
+            pre_split = int(pre_subsample_n * (1 - cfg.val_ratio))
+            drift_stats = compute_drift_stats(
+                model, val_loader, pre_subsample_features[:pre_split],
+                input_size,
+            )
+        else:
+            logger.info("Skipping drift stats: no validation set available")
+
+        if drift_stats is not None:
+            import json as _json
+            config_path = os.path.join(cfg.checkpoint_dir, "model_config.json")
+            if os.path.exists(config_path):
+                with open(config_path) as f:
+                    config_meta = _json.load(f)
+                config_meta["drift_stats"] = drift_stats
+                with open(config_path, "w") as f:
+                    _json.dump(config_meta, f, indent=2)
+
         return {
             "train_loss": train_losses,
             "val_loss": val_losses,
@@ -483,6 +511,7 @@ class Trainer:
                     sl_feat, sl_dir, sl_sl, sl_tp1, sl_tp2,
                     progress_callback=progress_callback,
                     feature_names=feature_names,
+                    _skip_drift_stats=True,
                 )
             except ValueError as e:
                 logger.warning("Ensemble member %d failed: %s", idx, e)
@@ -553,6 +582,47 @@ class Trainer:
             "feature_names": feature_names,
             "members": members,
         }
+
+        drift_stats = None
+        first_member_dir = os.path.join(staging_dir, f"member_{members[0]['index']}")
+        first_pt = os.path.join(first_member_dir, "best_model.pt")
+
+        if os.path.exists(first_pt):
+            perm_model = SignalLSTM(
+                input_size=features.shape[1],
+                hidden_size=cfg.hidden_size,
+                num_layers=cfg.num_layers,
+                dropout=cfg.dropout,
+            ).to(self.device)
+            perm_model.load_state_dict(
+                torch.load(first_pt, map_location=self.device, weights_only=True)
+            )
+            perm_model.eval()
+
+            n = len(features)
+            val_start = int(n * (1 - cfg.val_ratio))
+            val_feat = features[val_start:]
+            val_dir = direction[val_start:]
+            val_sl = sl_atr[val_start:]
+            val_tp1 = tp1_atr[val_start:]
+            val_tp2 = tp2_atr[val_start:]
+
+            if len(val_feat) > cfg.seq_len:
+                val_ds = CandleDataset(
+                    val_feat, val_dir, val_sl, val_tp1, val_tp2,
+                    seq_len=cfg.seq_len,
+                )
+                val_loader = DataLoader(val_ds, batch_size=cfg.batch_size, shuffle=False)
+
+                from app.ml.drift import compute_drift_stats
+                drift_stats = compute_drift_stats(
+                    perm_model, val_loader, features[:val_start],
+                    features.shape[1],
+                )
+
+        if drift_stats is not None:
+            ensemble_config["drift_stats"] = drift_stats
+
         with open(os.path.join(cfg.checkpoint_dir, "ensemble_config.json"), "w") as f:
             _json.dump(ensemble_config, f, indent=2)
 

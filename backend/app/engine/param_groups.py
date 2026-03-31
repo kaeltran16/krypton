@@ -527,6 +527,9 @@ def _ensemble_ok(c: dict[str, Any]) -> bool:
         and c["stale_decay_days"] > c["stale_fresh_days"] > 0
         and 0 < c["stale_floor"] < 1
         and 0 < c["confidence_cap_partial"] <= 1
+        and c["drift_psi_severe"] > c["drift_psi_moderate"] > 0
+        and c["drift_penalty_severe"] > c["drift_penalty_moderate"] > 0
+        and c["drift_penalty_severe"] <= 1.0
     )
 
 
@@ -537,6 +540,10 @@ PARAM_GROUPS["ensemble"] = {
         "stale_decay_days": "ensemble.stale_decay_days",
         "stale_floor": "ensemble.stale_floor",
         "confidence_cap_partial": "ensemble.confidence_cap_partial",
+        "drift_psi_moderate": "ensemble.drift_psi_moderate",
+        "drift_psi_severe": "ensemble.drift_psi_severe",
+        "drift_penalty_moderate": "ensemble.drift_penalty_moderate",
+        "drift_penalty_severe": "ensemble.drift_penalty_severe",
     },
     "sweep_method": "de",
     "sweep_ranges": {
@@ -545,6 +552,10 @@ PARAM_GROUPS["ensemble"] = {
         "stale_decay_days": (14.0, 45.0, None),
         "stale_floor": (0.1, 0.5, None),
         "confidence_cap_partial": (0.3, 0.7, None),
+        "drift_psi_moderate": (0.05, 0.20, None),
+        "drift_psi_severe": (0.15, 0.40, None),
+        "drift_penalty_moderate": (0.1, 0.5, None),
+        "drift_penalty_severe": (0.3, 0.8, None),
     },
     "constraints": _ensemble_ok,
     "priority": _priority_for("ensemble"),

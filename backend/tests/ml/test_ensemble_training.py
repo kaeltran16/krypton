@@ -132,3 +132,34 @@ def test_train_ensemble_staging_dir_cleaned_up(tmp_checkpoint, synthetic_data):
     )
     staging = os.path.join(tmp_checkpoint, ".ensemble_staging")
     assert not os.path.exists(staging)
+
+
+def test_ensemble_stores_drift_stats(tmp_checkpoint):
+    """Ensemble training should write drift_stats to ensemble_config.json."""
+    import json
+    rng = np.random.default_rng(42)
+    n = 300
+    input_size = 10
+    features = rng.standard_normal((n, input_size)).astype(np.float32)
+    direction = rng.integers(0, 3, n).astype(np.int64)
+    sl = rng.uniform(0.5, 2, n).astype(np.float32)
+    tp1 = rng.uniform(1, 3, n).astype(np.float32)
+    tp2 = rng.uniform(2, 5, n).astype(np.float32)
+    feature_names = [f"feat_{i}" for i in range(input_size)]
+
+    cfg = TrainConfig(
+        epochs=3, batch_size=32, seq_len=10,
+        hidden_size=16, num_layers=1, dropout=0.1,
+        patience=100, checkpoint_dir=tmp_checkpoint,
+    )
+    trainer = Trainer(cfg)
+    result = trainer.train_ensemble(features, direction, sl, tp1, tp2, feature_names=feature_names)
+
+    if result.get("n_members", 0) >= 2:
+        config_path = os.path.join(tmp_checkpoint, "ensemble_config.json")
+        assert os.path.exists(config_path)
+        with open(config_path) as f:
+            config = json.load(f)
+        assert "drift_stats" in config
+        ds = config["drift_stats"]
+        assert len(ds["top_feature_indices"]) == 5

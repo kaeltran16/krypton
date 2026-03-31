@@ -173,6 +173,10 @@ _PIPELINE_SETTINGS_MAP = {
     "optimizer.ic_prune_threshold": ("ic_prune_threshold", "ic_prune_threshold"),
     "optimizer.ic_reenable_threshold": ("ic_reenable_threshold", "ic_reenable_threshold"),
     "optimizer.ew_ic_lookback_days": ("ew_ic_lookback_days", "ew_ic_lookback_days"),
+    "ensemble.drift_psi_moderate": ("drift_psi_moderate", "drift_psi_moderate"),
+    "ensemble.drift_psi_severe": ("drift_psi_severe", "drift_psi_severe"),
+    "ensemble.drift_penalty_moderate": ("drift_penalty_moderate", "drift_penalty_moderate"),
+    "ensemble.drift_penalty_severe": ("drift_penalty_severe", "drift_penalty_severe"),
 }
 
 _SCORING_PARAMS_MAP = {

@@ -147,3 +147,41 @@ class TestTrainer:
             for cls in ("long", "short", "neutral"):
                 assert cls in result["recall_per_class"]
                 assert 0.0 <= result["recall_per_class"][cls] <= 1.0
+
+
+def test_train_stores_drift_stats(tmp_path):
+    """Training should write drift_stats to model_config.json."""
+    import json
+    rng = np.random.default_rng(42)
+    n = 200
+    input_size = 10
+    features = rng.standard_normal((n, input_size)).astype(np.float32)
+    direction = rng.integers(0, 3, n).astype(np.int64)
+    sl = rng.uniform(0.5, 2, n).astype(np.float32)
+    tp1 = rng.uniform(1, 3, n).astype(np.float32)
+    tp2 = rng.uniform(2, 5, n).astype(np.float32)
+    feature_names = [f"feat_{i}" for i in range(input_size)]
+
+    cfg = TrainConfig(
+        epochs=3, batch_size=32, seq_len=10,
+        hidden_size=16, num_layers=1, dropout=0.1,
+        patience=100, checkpoint_dir=str(tmp_path),
+    )
+    trainer = Trainer(cfg)
+    trainer.train_one_model(features, direction, sl, tp1, tp2, feature_names=feature_names)
+
+    config_path = tmp_path / "model_config.json"
+    assert config_path.exists()
+    with open(config_path) as f:
+        config = json.load(f)
+
+    assert "drift_stats" in config
+    ds = config["drift_stats"]
+    assert "top_feature_indices" in ds
+    assert "feature_distributions" in ds
+    assert len(ds["top_feature_indices"]) == 5
+    for idx in ds["top_feature_indices"]:
+        dist = ds["feature_distributions"][str(idx)]
+        assert "bin_edges" in dist
+        assert "proportions" in dist
+        assert len(dist["proportions"]) == 10

@@ -271,6 +271,10 @@ class PipelineSettings(Base):
     ensemble_stale_decay_days: Mapped[float | None] = mapped_column(Float, nullable=True)
     ensemble_stale_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     ensemble_confidence_cap_partial: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drift_psi_moderate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drift_psi_severe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drift_penalty_moderate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drift_penalty_severe: Mapped[float | None] = mapped_column(Float, nullable=True)
     correlation_dampening_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

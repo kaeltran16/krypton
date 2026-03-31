@@ -5,8 +5,10 @@ import numpy as np
 import torch
 import pytest
 
+from app.ml.drift import DriftConfig
 from app.ml.model import SignalLSTM
 from app.ml.predictor import Predictor
+from tests.ml.conftest import make_drift_stats
 
 
 def _save_model(input_size=15, hidden_size=32, num_layers=1, dropout=0.0,
@@ -100,3 +102,63 @@ class TestConfigFlags:
         assert predictor.regime_used is False
         assert predictor.btc_used is False
         assert predictor.flow_used is False
+
+
+class TestDriftPenalty:
+
+    def test_no_drift_stats_no_penalty(self):
+        """Old checkpoints without drift_stats should work unchanged."""
+        path = _save_model(input_size=15)
+        predictor = Predictor(path)
+        features = np.random.randn(50, 15).astype(np.float32)
+        result = predictor.predict(features)
+        assert result["direction"] in ("LONG", "SHORT", "NEUTRAL")
+        assert result.get("drift_penalty", 0.0) == 0.0
+
+    def test_drift_penalty_reduces_confidence(self):
+        """When drift stats indicate severe drift, confidence should decrease."""
+        rng = np.random.default_rng(42)
+        input_size = 15
+
+        training_data = rng.standard_normal((500, input_size)).astype(np.float32)
+        drift_stats = make_drift_stats(training_data, [0, 1, 2, 3, 4])
+
+        path = _save_model(input_size=input_size, extra_config={"drift_stats": drift_stats})
+        drifted_features = (rng.standard_normal((50, input_size)) * 5 + 3).astype(np.float32)
+
+        pred_with_penalty = Predictor(path)
+        result_with = pred_with_penalty.predict(drifted_features)
+
+        no_penalty_config = DriftConfig(psi_moderate=10.0, psi_severe=20.0)
+        pred_no_penalty = Predictor(path, drift_config=no_penalty_config)
+        result_without = pred_no_penalty.predict(drifted_features)
+
+        assert result_with["drift_penalty"] > 0
+        if result_without["confidence"] > 0:
+            assert result_with["confidence"] <= result_without["confidence"]
+
+    def test_drift_penalty_in_result(self):
+        """predict() should include drift_penalty in result."""
+        path = _save_model(input_size=15)
+        predictor = Predictor(path)
+        features = np.random.randn(50, 15).astype(np.float32)
+        result = predictor.predict(features)
+        assert "drift_penalty" in result
+
+    def test_custom_drift_thresholds(self):
+        """Predictor should accept drift threshold overrides."""
+        rng = np.random.default_rng(42)
+        input_size = 15
+
+        training_data = rng.standard_normal((500, input_size)).astype(np.float32)
+        drift_stats = make_drift_stats(training_data, [0, 1, 2, 3, 4])
+
+        path = _save_model(input_size=input_size, extra_config={"drift_stats": drift_stats})
+
+        predictor = Predictor(
+            path,
+            drift_config=DriftConfig(psi_moderate=10.0, psi_severe=20.0),
+        )
+        drifted_features = (rng.standard_normal((50, input_size)) * 5 + 3).astype(np.float32)
+        result = predictor.predict(drifted_features)
+        assert result["drift_penalty"] == 0.0

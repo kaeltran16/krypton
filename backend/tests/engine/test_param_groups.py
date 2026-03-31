@@ -84,3 +84,54 @@ def test_regime_caps_constraint_sum_per_regime():
         "steady_squeeze_cap": 20, "steady_volume_cap": 25,
     }
     assert validate_candidate("regime_caps", valid) is True
+
+
+def test_ensemble_constraint_accepts_valid_drift_params():
+    """Valid drift params should pass the ensemble constraint."""
+    constraint = PARAM_GROUPS["ensemble"]["constraints"]
+    c = {
+        "disagreement_scale": 8.0,
+        "stale_fresh_days": 7.0,
+        "stale_decay_days": 21.0,
+        "stale_floor": 0.3,
+        "confidence_cap_partial": 0.5,
+        "drift_psi_moderate": 0.1,
+        "drift_psi_severe": 0.25,
+        "drift_penalty_moderate": 0.3,
+        "drift_penalty_severe": 0.6,
+    }
+    assert constraint(c) is True
+
+
+def test_ensemble_constraint_rejects_inverted_psi():
+    """drift_psi_severe must be > drift_psi_moderate."""
+    constraint = PARAM_GROUPS["ensemble"]["constraints"]
+    c = {
+        "disagreement_scale": 8.0,
+        "stale_fresh_days": 7.0,
+        "stale_decay_days": 21.0,
+        "stale_floor": 0.3,
+        "confidence_cap_partial": 0.5,
+        "drift_psi_moderate": 0.25,
+        "drift_psi_severe": 0.1,
+        "drift_penalty_moderate": 0.3,
+        "drift_penalty_severe": 0.6,
+    }
+    assert constraint(c) is False
+
+
+def test_ensemble_constraint_rejects_penalty_over_one():
+    """drift_penalty_severe must be <= 1.0."""
+    constraint = PARAM_GROUPS["ensemble"]["constraints"]
+    c = {
+        "disagreement_scale": 8.0,
+        "stale_fresh_days": 7.0,
+        "stale_decay_days": 21.0,
+        "stale_floor": 0.3,
+        "confidence_cap_partial": 0.5,
+        "drift_psi_moderate": 0.1,
+        "drift_psi_severe": 0.25,
+        "drift_penalty_moderate": 0.3,
+        "drift_penalty_severe": 1.5,
+    }
+    assert constraint(c) is False

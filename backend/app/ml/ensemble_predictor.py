@@ -8,6 +8,7 @@ import time
 import numpy as np
 import torch
 
+from app.ml.drift import DriftConfig, feature_drift_penalty
 from app.ml.model import SignalLSTM
 from app.ml.predictor import DIRECTION_MAP
 
@@ -50,6 +51,7 @@ class EnsemblePredictor:
         stale_decay_days: float = 21.0,
         stale_floor: float = 0.3,
         confidence_cap_partial: float = 0.5,
+        drift_config: DriftConfig | None = None,
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._disagreement_scale = ensemble_disagreement_scale
@@ -57,6 +59,7 @@ class EnsemblePredictor:
         self._stale_decay_days = stale_decay_days
         self._stale_floor = stale_floor
         self._confidence_cap_partial = confidence_cap_partial
+        self._drift_config = drift_config or DriftConfig()
 
         config_path = os.path.join(checkpoint_dir, "ensemble_config.json")
         with open(config_path) as f:
@@ -68,6 +71,7 @@ class EnsemblePredictor:
         self.flow_used = config.get("flow_used", False)
         self.regime_used = config.get("regime_used", False)
         self.btc_used = config.get("btc_used", False)
+        self._drift_stats = config.get("drift_stats")
 
         self._feature_map = None
         self._available_features = None
@@ -198,6 +202,11 @@ class EnsemblePredictor:
         uncertainty_penalty = min(1.0, disagreement * self._disagreement_scale)
         confidence = raw_confidence * (1.0 - uncertainty_penalty)
 
+        drift_pen = feature_drift_penalty(
+            window, self._drift_stats, top_k=3, config=self._drift_config,
+        )
+        confidence *= (1.0 - drift_pen)
+
         # Cap confidence for partial ensembles
         if self.n_members == 2:
             confidence = min(confidence, self._confidence_cap_partial)
@@ -209,4 +218,5 @@ class EnsemblePredictor:
             "tp1_atr": float(mean_reg[1]),
             "tp2_atr": float(mean_reg[2]),
             "ensemble_disagreement": disagreement,
+            "drift_penalty": drift_pen,
         }

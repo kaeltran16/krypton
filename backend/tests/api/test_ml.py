@@ -1,4 +1,7 @@
 """Tests for ML API endpoints."""
+import json
+import os
+import tempfile
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
@@ -263,3 +266,53 @@ async def test_train_persists_run_to_db(ml_app, ml_client):
     assert isinstance(add_calls[0], MLTrainingRun)
     assert add_calls[0].preset_label == "Quick Test"
     assert add_calls[0].status == "running"
+
+
+def test_reload_predictors_passes_drift_settings(ml_app):
+    """_reload_predictors should pass drift config values to predictor constructors."""
+    import torch
+    from app.api.ml import _reload_predictors
+    from app.ml.model import SignalLSTM
+
+    settings = ml_app.state.settings
+    settings.drift_psi_moderate = 0.15
+    settings.drift_psi_severe = 0.30
+    settings.drift_penalty_moderate = 0.2
+    settings.drift_penalty_severe = 0.5
+
+    # Create a real temporary ensemble checkpoint
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pair_dir = os.path.join(tmpdir, "BTC-USDT-SWAP")
+        os.makedirs(pair_dir)
+
+        input_size = 10
+        model = SignalLSTM(input_size=input_size, hidden_size=16, num_layers=1, dropout=0.0)
+        for i in range(3):
+            torch.save(model.state_dict(), os.path.join(pair_dir, f"ensemble_{i}.pt"))
+
+        config = {
+            "n_members": 3,
+            "input_size": input_size,
+            "hidden_size": 16,
+            "num_layers": 1,
+            "dropout": 0.0,
+            "seq_len": 10,
+            "feature_names": [f"f{j}" for j in range(input_size)],
+            "members": [
+                {"index": i, "trained_at": "2026-03-31T12:00:00", "val_loss": 0.4,
+                 "temperature": 1.0, "data_range": [0.0, 1.0]}
+                for i in range(3)
+            ],
+        }
+        with open(os.path.join(pair_dir, "ensemble_config.json"), "w") as f:
+            json.dump(config, f)
+
+        settings.ml_checkpoint_dir = tmpdir
+        _reload_predictors(ml_app, settings)
+
+        predictor = ml_app.state.ml_predictors.get("BTC-USDT-SWAP")
+        assert predictor is not None
+        assert predictor._drift_config.psi_moderate == 0.15
+        assert predictor._drift_config.psi_severe == 0.30
+        assert predictor._drift_config.penalty_moderate == 0.2
+        assert predictor._drift_config.penalty_severe == 0.5

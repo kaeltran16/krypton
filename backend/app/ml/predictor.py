@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from app.ml.drift import DriftConfig, feature_drift_penalty
 from app.ml.model import SignalLSTM
 
 logger = logging.getLogger(__name__)
@@ -29,9 +30,15 @@ MC_DROPOUT_PASSES = 5
 class Predictor:
     """Loads a trained model checkpoint and runs inference."""
 
-    def __init__(self, checkpoint_path: str, max_age_days: int = 14):
+    def __init__(
+        self,
+        checkpoint_path: str,
+        max_age_days: int = 14,
+        drift_config: DriftConfig | None = None,
+    ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._max_confidence = 1.0
+        self._drift_config = drift_config or DriftConfig()
 
         # Load config from JSON sidecar (avoids weights_only restrictions)
         config_path = os.path.join(os.path.dirname(checkpoint_path), "model_config.json")
@@ -54,6 +61,7 @@ class Predictor:
             self._expected_features = self._expected_features[:self.input_size]
         self._feature_map = None
         self._available_features = None
+        self._drift_stats = config.get("drift_stats")
 
         # Check checkpoint age
         import time as _time
@@ -171,6 +179,11 @@ class Predictor:
         uncertainty_penalty = min(1.0, prob_variance * 10)
         confidence = raw_confidence * (1.0 - uncertainty_penalty)
 
+        drift_pen = feature_drift_penalty(
+            window, self._drift_stats, top_k=3, config=self._drift_config,
+        )
+        confidence *= (1.0 - drift_pen)
+
         # Cap confidence for stale models
         confidence = min(confidence, self._max_confidence)
 
@@ -181,4 +194,5 @@ class Predictor:
             "tp1_atr": float(mean_reg[1]),
             "tp2_atr": float(mean_reg[2]),
             "mc_variance": prob_variance,
+            "drift_penalty": drift_pen,
         }

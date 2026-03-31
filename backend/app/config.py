@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     ensemble_stale_decay_days: float = 21.0
     ensemble_stale_floor: float = 0.3
     ensemble_confidence_cap_partial: float = 0.5
+    drift_psi_moderate: float = 0.1
+    drift_psi_severe: float = 0.25
+    drift_penalty_moderate: float = 0.3
+    drift_penalty_severe: float = 0.6
     ml_sl_min_atr: float = 1.0
     ml_sl_max_atr: float = 3.5
     ml_tp1_min_atr: float = 1.0

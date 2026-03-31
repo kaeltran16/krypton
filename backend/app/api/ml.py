@@ -750,6 +750,13 @@ def _reload_predictors(app, settings):
     stale_decay = getattr(settings, "ensemble_stale_decay_days", 21.0)
     stale_floor = getattr(settings, "ensemble_stale_floor", 0.3)
     cap_partial = getattr(settings, "ensemble_confidence_cap_partial", 0.5)
+    from app.ml.drift import DriftConfig
+    drift_config = DriftConfig(
+        psi_moderate=getattr(settings, "drift_psi_moderate", 0.1),
+        psi_severe=getattr(settings, "drift_psi_severe", 0.25),
+        penalty_moderate=getattr(settings, "drift_penalty_moderate", 0.3),
+        penalty_severe=getattr(settings, "drift_penalty_severe", 0.6),
+    )
 
     for entry in os.listdir(checkpoint_dir):
         pair_dir = os.path.join(checkpoint_dir, entry)
@@ -768,13 +775,17 @@ def _reload_predictors(app, settings):
                     stale_decay_days=stale_decay,
                     stale_floor=stale_floor,
                     confidence_cap_partial=cap_partial,
+                    drift_config=drift_config,
                 )
                 logger.info(
                     "Ensemble predictor loaded for %s (%d members)",
                     entry, predictor.n_members,
                 )
             elif os.path.isfile(model_path):
-                predictor = Predictor(model_path)
+                predictor = Predictor(
+                    model_path,
+                    drift_config=drift_config,
+                )
                 logger.info("Legacy predictor loaded for %s", entry)
             else:
                 continue
