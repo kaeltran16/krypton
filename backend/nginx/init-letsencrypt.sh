@@ -1,6 +1,7 @@
 #!/bin/bash
 # First-time SSL certificate setup
 # Usage: ./init-letsencrypt.sh <domain> <email>
+# Run from the backend/ directory.
 
 set -e
 
@@ -14,31 +15,22 @@ fi
 
 echo "--- Requesting SSL certificate for $DOMAIN ---"
 
-# Start nginx temporarily for ACME challenge
-# First, create a temporary nginx config without SSL
-cat > /tmp/nginx-temp.conf << 'NGINX'
-worker_processes auto;
-events { worker_connections 1024; }
-http {
-    server {
-        listen 80;
-        server_name _;
-        location /.well-known/acme-challenge/ {
-            root /var/www/certbot;
-        }
-        location / {
-            return 200 'ok';
-        }
-    }
-}
-NGINX
+# Stop any running services
+docker compose -f docker-compose.prod.yml down
 
-# Copy temp config
-cp nginx/nginx.conf nginx/nginx.conf.bak
-cp /tmp/nginx-temp.conf nginx/nginx.conf
+# Create a temporary compose override that starts nginx in HTTP-only mode
+cat > docker-compose.init-ssl.yml << 'EOF'
+services:
+  nginx:
+    command: >
+      sh -c "echo 'server { listen 80; location /.well-known/acme-challenge/ { root /var/www/certbot; } location / { return 200 ok; } }' > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+EOF
 
-# Start just nginx
-docker compose -f docker-compose.prod.yml up -d nginx
+# Start nginx in HTTP-only mode (override disables SSL config)
+docker compose -f docker-compose.prod.yml -f docker-compose.init-ssl.yml up -d nginx
+
+echo "Waiting for nginx to be ready..."
+sleep 3
 
 # Request certificate
 docker compose -f docker-compose.prod.yml run --rm certbot certonly \
@@ -49,15 +41,11 @@ docker compose -f docker-compose.prod.yml run --rm certbot certonly \
   --no-eff-email \
   -d "$DOMAIN"
 
-# Restore real nginx config
-cp nginx/nginx.conf.bak nginx/nginx.conf
-rm nginx/nginx.conf.bak
-
-# Update nginx.conf with actual domain
-sed -i "s/\${DOMAIN}/$DOMAIN/g" nginx/nginx.conf
-
-# Restart everything
+# Clean up
 docker compose -f docker-compose.prod.yml down
+rm docker-compose.init-ssl.yml
+
+# Start all services normally (certs now exist)
 docker compose -f docker-compose.prod.yml up -d
 
 echo "--- SSL setup complete for $DOMAIN ---"
