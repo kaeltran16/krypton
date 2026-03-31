@@ -24,6 +24,7 @@ _DB_TO_SETTINGS = {
     "signal_threshold": "engine_signal_threshold",
     "news_alerts_enabled": "news_high_impact_push_enabled",
     "news_context_window": "news_llm_context_window_minutes",
+    "cooldown_max_candles": "engine_cooldown_max_candles",
 }
 
 
@@ -34,6 +35,7 @@ class PipelineSettingsUpdate(BaseModel):
     onchain_enabled: bool | None = None
     news_alerts_enabled: bool | None = None
     news_context_window: int | None = Field(None, ge=1, le=1440)
+    cooldown_max_candles: int | None = Field(None, ge=0, le=10)
 
     @field_validator("pairs")
     @classmethod
@@ -66,6 +68,7 @@ def _row_to_dict(ps: PipelineSettings) -> dict:
         "onchain_enabled": ps.onchain_enabled,
         "news_alerts_enabled": ps.news_alerts_enabled,
         "news_context_window": ps.news_context_window,
+        "cooldown_max_candles": ps.cooldown_max_candles,
         "updated_at": ps.updated_at.isoformat() if ps.updated_at else None,
     }
 

@@ -616,6 +616,7 @@ export const api = {
   getMonitorEvaluations: (params?: {
     pair?: string;
     emitted?: boolean;
+    suppressed?: boolean;
     after?: string;
     before?: string;
     limit?: number;
@@ -624,6 +625,7 @@ export const api = {
     const query = new URLSearchParams();
     if (params?.pair) query.set("pair", params.pair);
     if (params?.emitted !== undefined) query.set("emitted", String(params.emitted));
+    if (params?.suppressed !== undefined) query.set("suppressed", String(params.suppressed));
     if (params?.after) query.set("after", params.after);
     if (params?.before) query.set("before", params.before);
     if (params?.limit) query.set("limit", String(params.limit));

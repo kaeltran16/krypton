@@ -54,8 +54,8 @@ export function EvaluationTable({
             <span className="text-right"><ScoreCell value={e.tech_score} /></span>
             <span className="text-right"><ScoreCell value={e.flow_score} /></span>
             <span className="text-right">
-              <Badge color={e.emitted ? "long" : "muted"} pill>
-                {e.emitted ? "emit" : "rej"}
+              <Badge color={e.emitted ? "long" : e.suppressed_reason ? "accent" : "muted"} pill>
+                {e.emitted ? "emit" : e.suppressed_reason ? "cool" : "rej"}
               </Badge>
             </span>
           </button>

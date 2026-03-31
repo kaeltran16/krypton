@@ -49,6 +49,7 @@ def _make_app(regime_weights=None):
     app.state.settings.vapid_claims_email = ""
     app.state.settings.news_llm_context_window_minutes = 30
     app.state.settings.openrouter_api_key = ""
+    app.state.settings.engine_cooldown_max_candles = 3
     app.state.settings.pairs = ["BTC-USDT-SWAP"]
     app.state.settings.timeframes = ["1h"]
 

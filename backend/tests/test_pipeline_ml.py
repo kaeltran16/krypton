@@ -58,6 +58,7 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     settings.engine_confluence_adx_conviction_ratio = 0.60
     settings.engine_confluence_mr_penalty_factor = 0.50
     settings.onchain_enabled = False
+    settings.engine_cooldown_max_candles = 3
     settings.pairs = ["BTC-USDT-SWAP"]
     app.state.settings = settings
     app.state.order_flow = {"BTC-USDT-SWAP": {}}

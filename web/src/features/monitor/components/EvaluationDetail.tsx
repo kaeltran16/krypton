@@ -47,6 +47,11 @@ export function EvaluationDetail({ evaluation: e }: { evaluation: PipelineEvalua
 
   return (
     <Card padding="sm" className="mt-1 mb-2 border border-outline-variant/10">
+      {e.suppressed_reason && (
+        <div className="mb-2 px-2 py-1 rounded bg-accent/10 text-xs text-accent">
+          {e.suppressed_reason}
+        </div>
+      )}
       <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-2">
         Scoring Pipeline
       </p>

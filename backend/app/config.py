@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # cross-pair correlation dampener
     engine_correlation_dampening_floor: float = 0.4
 
+    # anti-whipsaw cooldown
+    engine_cooldown_max_candles: int = 3
+
     atr_optimizer_mode: Literal["gp", "sweep"] = "gp"
     ic_prune_threshold: float = -0.05
     ic_reenable_threshold: float = 0.0

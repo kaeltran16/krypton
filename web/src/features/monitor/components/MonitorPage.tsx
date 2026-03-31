@@ -15,8 +15,9 @@ const PAIR_OPTIONS = [
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
-  { value: "true", label: "Emitted" },
-  { value: "false", label: "Rejected" },
+  { value: "emitted", label: "Emitted" },
+  { value: "rejected", label: "Rejected" },
+  { value: "suppressed", label: "Suppressed" },
 ];
 
 const PERIOD_OPTIONS = [
@@ -47,8 +48,8 @@ export function MonitorPage() {
         />
         <Dropdown
           options={STATUS_OPTIONS}
-          value={filters.emitted === null ? "" : String(filters.emitted)}
-          onChange={(v) => updateFilter("emitted", v === "" ? null : v === "true")}
+          value={filters.suppressed ? "suppressed" : filters.emitted === null ? "" : filters.emitted ? "emitted" : "rejected"}
+          onChange={(v) => updateFilter("status", v)}
           size="sm"
           ariaLabel="Filter by status"
         />

@@ -10,6 +10,7 @@ export function useMonitorData() {
   const [filters, setFilters] = useState<MonitorFilters>({
     pair: null,
     emitted: null,
+    suppressed: null,
     period: "24h",
   });
   const [items, setItems] = useState<PipelineEvaluation[]>([]);
@@ -32,6 +33,7 @@ export function useMonitorData() {
         api.getMonitorEvaluations({
           pair: filters.pair ?? undefined,
           emitted: filters.emitted ?? undefined,
+          suppressed: filters.suppressed ?? undefined,
           after,
           limit: 50,
           offset: fromOffset,
@@ -61,8 +63,17 @@ export function useMonitorData() {
   const refresh = useCallback(() => fetchData(true), [fetchData]);
   const loadMore = useCallback(() => fetchData(false), [fetchData]);
 
-  const updateFilter = useCallback(<K extends keyof MonitorFilters>(key: K, value: MonitorFilters[K]) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  const updateFilter = useCallback(<K extends keyof MonitorFilters | "status">(key: K, value: K extends keyof MonitorFilters ? MonitorFilters[K] : string) => {
+    if (key === "status") {
+      const v = value as string;
+      setFilters((prev) => ({
+        ...prev,
+        emitted: v === "emitted" ? true : v === "rejected" ? false : null,
+        suppressed: v === "suppressed" ? true : null,
+      }));
+    } else {
+      setFilters((prev) => ({ ...prev, [key]: value }));
+    }
   }, []);
 
   const hasMore = items.length < total;

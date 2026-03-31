@@ -41,6 +41,7 @@ def _eval_to_dict(e: PipelineEvaluation) -> dict:
         "pattern_score": e.pattern_score,
         "liquidation_score": e.liquidation_score,
         "confluence_score": e.confluence_score,
+        "news_score": e.news_score,
         "indicator_preliminary": e.indicator_preliminary,
         "blended_score": e.blended_score,
         "ml_score": round(e.ml_score, 4) if e.ml_score is not None else None,
@@ -50,6 +51,7 @@ def _eval_to_dict(e: PipelineEvaluation) -> dict:
         "indicators": e.indicators,
         "regime": e.regime,
         "availabilities": e.availabilities,
+        "suppressed_reason": e.suppressed_reason,
     }
 
 
@@ -59,6 +61,7 @@ async def list_evaluations(
     _user: dict = require_auth(),
     pair: str | None = Query(None),
     emitted: bool | None = Query(None),
+    suppressed: bool | None = Query(None),
     after: datetime | None = Query(None),
     before: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
@@ -75,6 +78,13 @@ async def list_evaluations(
         if emitted is not None:
             q = q.where(PipelineEvaluation.emitted == emitted)
             count_q = count_q.where(PipelineEvaluation.emitted == emitted)
+        if suppressed is not None:
+            if suppressed:
+                q = q.where(PipelineEvaluation.suppressed_reason.isnot(None))
+                count_q = count_q.where(PipelineEvaluation.suppressed_reason.isnot(None))
+            else:
+                q = q.where(PipelineEvaluation.suppressed_reason.is_(None))
+                count_q = count_q.where(PipelineEvaluation.suppressed_reason.is_(None))
         if after is not None:
             q = q.where(PipelineEvaluation.evaluated_at >= after)
             count_q = count_q.where(PipelineEvaluation.evaluated_at >= after)

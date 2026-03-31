@@ -136,6 +136,7 @@ class PipelineEvaluation(Base):
     indicators: Mapped[dict] = mapped_column(JSONB, nullable=False)
     regime: Mapped[dict] = mapped_column(JSONB, nullable=False)
     availabilities: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    suppressed_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_pipeline_eval_pair_time", "pair", "evaluated_at"),
@@ -276,6 +277,7 @@ class PipelineSettings(Base):
     drift_penalty_moderate: Mapped[float | None] = mapped_column(Float, nullable=True)
     drift_penalty_severe: Mapped[float | None] = mapped_column(Float, nullable=True)
     correlation_dampening_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cooldown_max_candles: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

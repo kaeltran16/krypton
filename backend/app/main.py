@@ -46,6 +46,7 @@ from app.engine.confluence import (
 from app.engine.regime import blend_outer_weights, smooth_regime_mix
 from app.engine.structure import collect_structure_levels, snap_levels_to_structure
 from app.engine.optimizer import lookup_signal_threshold
+from app.engine.cooldown import check_cooldown, update_streak_on_sl, reset_streak
 from app.db.models import RegimeWeights
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ _OVERRIDE_MAP = {
     "liquidation_proximity_steepness": "engine_liquidation_proximity_steepness",
     "liquidation_decay_half_life_hours": "engine_liquidation_decay_half_life_hours",
     "liquidation_asymmetry_steepness": "engine_liquidation_asymmetry_steepness",
+    "cooldown_max_candles": "engine_cooldown_max_candles",
 }
 
 
@@ -1141,7 +1143,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
         pair, dominant, getattr(app.state, "learned_thresholds", {}),
         default=settings.engine_signal_threshold,
     )
-    emitted = abs(final) >= effective_threshold
+    suppressed_reason = None
+    if abs(final) >= effective_threshold:
+        suppressed_reason = await check_cooldown(
+            redis, pair, timeframe, direction,
+            cooldown_max_candles=settings.engine_cooldown_max_candles,
+        )
+    emitted = abs(final) >= effective_threshold and suppressed_reason is None
 
     _log_pipeline_evaluation(
         pair=pair, timeframe=timeframe,
@@ -1169,6 +1177,8 @@ async def run_pipeline(app: FastAPI, candle: dict):
         "llm_gate": round(llm_contribution, 2) if llm_contribution else None,
         "signal": round(final, 1),
         "emitted": emitted,
+        "suppressed": suppressed_reason is not None,
+        "suppressed_reason": suppressed_reason,
     })
 
     app.state.last_pipeline_cycle = time.time()
@@ -1225,6 +1235,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         indicators=eval_indicators,
         regime=eval_regime,
         availabilities=eval_availabilities,
+        suppressed_reason=suppressed_reason,
     )
 
     if not emitted:
@@ -1517,6 +1528,7 @@ async def check_pending_signals(app: FastAPI):
                     signal.outcome_at = datetime.now(timezone.utc)
                     signal.outcome_duration_minutes = round(age / 60)
                     resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
+                    await reset_streak(redis, signal.pair, signal.timeframe, signal.direction)
                 continue
 
             # Only check candles after signal creation
@@ -1528,6 +1540,7 @@ async def check_pending_signals(app: FastAPI):
                     signal.outcome_at = datetime.now(timezone.utc)
                     signal.outcome_duration_minutes = round(age / 60)
                     resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
+                    await reset_streak(redis, signal.pair, signal.timeframe, signal.direction)
                 continue
 
             signal_dict = {
@@ -1571,11 +1584,19 @@ async def check_pending_signals(app: FastAPI):
                     }
                     signal.risk_metrics = {**(signal.risk_metrics or {}), "partial_exit": meta}
                 resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
+                if outcome["outcome"] == "SL_HIT":
+                    await update_streak_on_sl(
+                        redis, signal.pair, signal.timeframe,
+                        signal.direction, outcome["outcome_at"],
+                    )
+                else:
+                    await reset_streak(redis, signal.pair, signal.timeframe, signal.direction)
             elif age > 86400:
                 signal.outcome = "EXPIRED"
                 signal.outcome_at = datetime.now(timezone.utc)
                 signal.outcome_duration_minutes = round(age / 60)
                 resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
+                await reset_streak(redis, signal.pair, signal.timeframe, signal.direction)
 
         await session.commit()
 

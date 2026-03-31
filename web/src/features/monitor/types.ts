@@ -13,6 +13,7 @@ export interface PipelineEvaluation {
   pattern_score: number | null;
   liquidation_score: number | null;
   confluence_score: number | null;
+  news_score: number | null;
   indicator_preliminary: number;
   blended_score: number;
   ml_score: number | null;
@@ -22,6 +23,7 @@ export interface PipelineEvaluation {
   indicators: Record<string, number>;
   regime: { trending: number; ranging: number; volatile: number };
   availabilities: Record<string, { availability: number; conviction: number }>;
+  suppressed_reason: string | null;
 }
 
 export interface MonitorSummary {
@@ -46,5 +48,6 @@ export type MonitorPeriod = "1h" | "6h" | "24h" | "7d";
 export interface MonitorFilters {
   pair: string | null;
   emitted: boolean | null;
+  suppressed: boolean | null;
   period: MonitorPeriod;
 }
