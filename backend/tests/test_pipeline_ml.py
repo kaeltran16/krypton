@@ -76,6 +76,9 @@ def _make_mock_app(*, ml_predictors=None, prompt_template=None):
     app.state.pruned_sources = set()
     app.state.liquidation_collector = None
 
+    from app.engine.llm_calibration import LLMCalibrationState
+    app.state.llm_calibration = LLMCalibrationState(window=30, floor=0.5)
+
     redis = AsyncMock()
     redis.lrange.return_value = _make_candle_list()
     app.state.redis = redis

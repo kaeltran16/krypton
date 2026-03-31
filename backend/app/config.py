@@ -155,6 +155,8 @@ class Settings(BaseSettings):
         "pattern_confirmation": 5.0, "news_catalyst": 7.0,
     })
     llm_factor_total_cap: float = 25.0
+    engine_calibration_window: int = 30
+    engine_calibration_floor: float = 0.5
 
     # push notifications
     vapid_private_key: str = ""

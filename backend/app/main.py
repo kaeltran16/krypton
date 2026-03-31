@@ -47,7 +47,12 @@ from app.engine.regime import blend_outer_weights, smooth_regime_mix
 from app.engine.structure import collect_structure_levels, snap_levels_to_structure
 from app.engine.optimizer import lookup_signal_threshold
 from app.engine.cooldown import check_cooldown, update_streak_on_sl, reset_streak
-from app.db.models import RegimeWeights
+from app.db.models import RegimeWeights, LLMFactorOutcome
+from app.engine.llm_calibration import (
+    LLMCalibrationState,
+    apply_calibration,
+    compute_factor_correctness,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +81,8 @@ _OVERRIDE_MAP = {
     "liquidation_decay_half_life_hours": "engine_liquidation_decay_half_life_hours",
     "liquidation_asymmetry_steepness": "engine_liquidation_asymmetry_steepness",
     "cooldown_max_candles": "engine_cooldown_max_candles",
+    "calibration_window": "engine_calibration_window",
+    "calibration_floor": "engine_calibration_floor",
 }
 
 
@@ -1118,15 +1125,23 @@ async def run_pipeline(app: FastAPI, candle: dict):
     llm_contribution = 0
     dual_pass_agreed = None
     if standard_result:
+        calibration = getattr(app.state, "llm_calibration", None)
+        if calibration is not None:
+            calibrated_weights = apply_calibration(
+                settings.llm_factor_weights,
+                calibration.get_multipliers(pair),
+            )
+        else:
+            calibrated_weights = settings.llm_factor_weights
         contrib_standard = compute_llm_contribution(
             standard_result.response.factors,
-            settings.llm_factor_weights,
+            calibrated_weights,
             settings.llm_factor_total_cap,
         )
         if devils_result:
             contrib_devils = compute_llm_contribution(
                 devils_result.response.factors,
-                settings.llm_factor_weights,
+                calibrated_weights,
                 settings.llm_factor_total_cap,
             )
             llm_contribution, dual_pass_agreed = aggregate_dual_pass(
@@ -1598,7 +1613,47 @@ async def check_pending_signals(app: FastAPI):
                 resolved_pairs_timeframes.add((signal.pair, signal.timeframe))
                 await reset_streak(redis, signal.pair, signal.timeframe, signal.direction)
 
+        # Record LLM factor outcomes for calibration (same transaction as signal resolution)
+        calibration = getattr(app.state, "llm_calibration", None)
+        factor_rows = []
+        if calibration is not None:
+            for signal in pending:
+                if signal.outcome not in TERMINAL_OUTCOMES:
+                    continue
+                if not signal.llm_factors:
+                    continue
+                for f in signal.llm_factors:
+                    correct = compute_factor_correctness(
+                        f["direction"], signal.direction, signal.outcome,
+                    )
+                    factor_rows.append({
+                        "signal_id": signal.id,
+                        "pair": signal.pair,
+                        "factor_type": f["type"],
+                        "direction": f["direction"],
+                        "strength": f["strength"],
+                        "correct": correct,
+                        "resolved_at": signal.outcome_at,
+                    })
+            for row in factor_rows:
+                session.add(LLMFactorOutcome(**row))
+
         await session.commit()
+
+        # Update in-memory calibration state after commit
+        if calibration is not None and factor_rows:
+            try:
+                by_signal: dict[int, list[dict]] = {}
+                for row in factor_rows:
+                    by_signal.setdefault(row["signal_id"], []).append(row)
+                batch = [
+                    (sig_id, outcomes[0]["pair"], outcomes)
+                    for sig_id, outcomes in by_signal.items()
+                ]
+                calibration.record_outcomes_batch(batch)
+                logger.info("Recorded %d LLM factor outcomes for calibration", len(factor_rows))
+            except Exception as e:
+                logger.exception("Failed to update calibration state: %s", e)
 
         # Notify optimizer of resolved signals
         optimizer = getattr(app.state, "optimizer", None)
@@ -1751,6 +1806,40 @@ async def lifespan(app: FastAPI):
 
     app.state.smoothed_regime = {}
 
+    # LLM factor calibration state
+    app.state.llm_calibration = LLMCalibrationState(
+        window=settings.engine_calibration_window,
+        floor=settings.engine_calibration_floor,
+    )
+    try:
+        async with db.session_factory() as session:
+            from sqlalchemy import text
+            cal_window = settings.engine_calibration_window
+            stmt = text("""
+                WITH ranked AS (
+                    SELECT signal_id, pair, factor_type, direction, strength,
+                           correct, resolved_at,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY factor_type, pair
+                               ORDER BY resolved_at DESC
+                           ) AS rn
+                    FROM llm_factor_outcome
+                    WHERE resolved_at > NOW() - INTERVAL '90 days'
+                )
+                SELECT signal_id, pair, factor_type, direction, strength,
+                       correct, resolved_at
+                FROM ranked
+                WHERE rn <= :partition_limit
+                ORDER BY resolved_at
+            """)
+            result = await session.execute(stmt, {"partition_limit": cal_window})
+            rows = [dict(r._mapping) for r in result.fetchall()]
+            app.state.llm_calibration.load_records(rows)
+            if rows:
+                logger.info("Loaded %d LLM factor outcome records for calibration", len(rows))
+    except Exception as e:
+        logger.warning("Failed to load LLM calibration state: %s", e)
+
     # Load PipelineSettings from DB and patch onto in-memory settings
     _db_to_settings = {
         "signal_threshold": "engine_signal_threshold",
@@ -1775,6 +1864,11 @@ async def lifespan(app: FastAPI):
                     "mean_rev_blend_ratio": ps.mean_rev_blend_ratio,
                 }
                 _apply_pipeline_overrides(settings, ps)
+                if getattr(ps, "calibration_window", None) is not None or getattr(ps, "calibration_floor", None) is not None:
+                    app.state.llm_calibration.update_config(
+                        window=settings.engine_calibration_window,
+                        floor=settings.engine_calibration_floor,
+                    )
                 app.state.pattern_strength_overrides = getattr(ps, "pattern_strength_overrides", None)
                 app.state.pattern_boost_overrides = getattr(ps, "pattern_boost_overrides", None)
             else:

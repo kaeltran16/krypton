@@ -25,6 +25,8 @@ _DB_TO_SETTINGS = {
     "news_alerts_enabled": "news_high_impact_push_enabled",
     "news_context_window": "news_llm_context_window_minutes",
     "cooldown_max_candles": "engine_cooldown_max_candles",
+    "calibration_window": "engine_calibration_window",
+    "calibration_floor": "engine_calibration_floor",
 }
 
 
@@ -36,6 +38,8 @@ class PipelineSettingsUpdate(BaseModel):
     news_alerts_enabled: bool | None = None
     news_context_window: int | None = Field(None, ge=1, le=1440)
     cooldown_max_candles: int | None = Field(None, ge=0, le=10)
+    calibration_window: int | None = Field(None, ge=1, le=200)
+    calibration_floor: float | None = Field(None, ge=0.0, le=1.0)
 
     @field_validator("pairs")
     @classmethod
@@ -69,6 +73,8 @@ def _row_to_dict(ps: PipelineSettings) -> dict:
         "news_alerts_enabled": ps.news_alerts_enabled,
         "news_context_window": ps.news_context_window,
         "cooldown_max_candles": ps.cooldown_max_candles,
+        "calibration_window": ps.calibration_window,
+        "calibration_floor": ps.calibration_floor,
         "updated_at": ps.updated_at.isoformat() if ps.updated_at else None,
     }
 
@@ -126,6 +132,14 @@ async def update_pipeline_settings(
             for db_field, value in update_data.items():
                 settings_field = _DB_TO_SETTINGS.get(db_field, db_field)
                 object.__setattr__(settings, settings_field, value)
+
+            # sync calibration state if relevant fields changed
+            calibration = getattr(app.state, "llm_calibration", None)
+            if calibration is not None:
+                cal_window = update_data.get("calibration_window")
+                cal_floor = update_data.get("calibration_floor")
+                if cal_window is not None or cal_floor is not None:
+                    calibration.update_config(window=cal_window, floor=cal_floor)
 
             pairs_changed = update_data.get("pairs") is not None and ps.pairs != old_pairs
             tf_changed = update_data.get("timeframes") is not None and ps.timeframes != old_timeframes

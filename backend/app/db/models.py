@@ -278,12 +278,31 @@ class PipelineSettings(Base):
     drift_penalty_severe: Mapped[float | None] = mapped_column(Float, nullable=True)
     correlation_dampening_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     cooldown_max_candles: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    calibration_window: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    calibration_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     __table_args__ = (
         CheckConstraint("id = 1", name="ck_pipeline_settings_singleton"),
+    )
+
+
+class LLMFactorOutcome(Base):
+    __tablename__ = "llm_factor_outcome"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    signal_id: Mapped[int] = mapped_column(Integer, ForeignKey("signals.id"), nullable=False)
+    pair: Mapped[str] = mapped_column(String(32), nullable=False)
+    factor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    strength: Mapped[int] = mapped_column(Integer, nullable=False)
+    correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    resolved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_llm_factor_outcome_type_resolved", "factor_type", resolved_at.desc()),
     )
 
 

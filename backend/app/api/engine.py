@@ -107,6 +107,13 @@ async def get_parameters(request: Request, _key: str = require_auth()):
         "correlation_dampening_floor": _configurable(settings.engine_correlation_dampening_floor),
     }
 
+    calibration = getattr(request.app.state, "llm_calibration", None)
+    if calibration is not None:
+        cal_data = {"floor": calibration.floor, "window": calibration.window}
+        for p in settings.pairs:
+            cal_data[p] = calibration.get_multipliers(p)
+        params["calibration"] = cal_data
+
     params["optimizer"] = {
         "atr_optimizer_mode": _configurable(settings.atr_optimizer_mode),
         "ic_prune_threshold": _configurable(settings.ic_prune_threshold),
