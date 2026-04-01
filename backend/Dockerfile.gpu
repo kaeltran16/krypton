@@ -1,0 +1,22 @@
+# GPU-enabled dev image for local training
+FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    redis-tools \
+    libgomp1 \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+# Install everything except torch (already in base image)
+RUN grep -v -E "^(torch|--extra-index)" requirements.txt > /tmp/reqs.txt && \
+    pip install --no-cache-dir -r /tmp/reqs.txt
+
+COPY . .
+
+RUN chmod +x entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
