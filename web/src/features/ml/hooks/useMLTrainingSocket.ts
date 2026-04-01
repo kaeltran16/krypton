@@ -58,7 +58,7 @@ export function useMLTrainingSocket(jobId: string | null): UseMLTrainingSocketRe
             return changed ? next : prev;
           });
           if (job.status !== "running") {
-            setStatus(job.status);
+            setStatus(job.status as MLTrainJob["status"]);
             stopPolling();
           }
         } catch {
@@ -91,7 +91,7 @@ export function useMLTrainingSocket(jobId: string | null): UseMLTrainingSocketRe
           retriesRef.current = 0;
           if (data.progress) setProgress(data.progress as Record<string, MLTrainProgress>);
           if (data.loss_history) setLossHistory(data.loss_history);
-          setStatus(data.status || "running");
+          setStatus((data.status as MLTrainJob["status"]) || "running");
           break;
         case "epoch_update":
           if (data.pair) {
