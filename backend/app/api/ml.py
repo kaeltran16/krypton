@@ -89,6 +89,10 @@ async def start_training(body: TrainRequest, request: Request):
     job_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     train_jobs[job_id] = {"status": "running", "progress": {}}
 
+    # Initialize WS connection store for this job
+    ml_ws = getattr(request.app.state, "ml_ws_connections", {})
+    ml_ws[job_id] = {"clients": [], "loss_history": {}}
+
     params_dict = body.model_dump(exclude={"preset_label"})
     run = MLTrainingRun(
         job_id=job_id,
@@ -102,6 +106,8 @@ async def start_training(body: TrainRequest, request: Request):
 
     async def _run():
         start_time = time.time()
+        loop = asyncio.get_running_loop()
+        _app = request.app
 
         async def _update_run(**fields):
             fields.setdefault("duration_seconds", time.time() - start_time)
@@ -255,6 +261,24 @@ async def start_training(body: TrainRequest, request: Request):
 
                 def on_progress(info, _pair=pair):
                     train_jobs[job_id]["progress"][_pair] = info
+                    # Accumulate loss history for WS snapshot catch-up
+                    ws_data = ml_ws.get(job_id)
+                    if ws_data is not None:
+                        ws_data["loss_history"].setdefault(_pair, []).append({
+                            "epoch": info["epoch"],
+                            "train_loss": info["train_loss"],
+                            "val_loss": info["val_loss"],
+                        })
+                        if ws_data["clients"]:
+                            from app.api.ws_ml import broadcast_ml_event
+                            asyncio.run_coroutine_threadsafe(
+                                broadcast_ml_event(_app, job_id, {
+                                    "type": "epoch_update",
+                                    "pair": _pair,
+                                    **info,
+                                }),
+                                loop,
+                            )
 
                 from app.ml.features import get_feature_names
 
@@ -273,6 +297,12 @@ async def start_training(body: TrainRequest, request: Request):
                         pair, len(train_feature_names), actual_cols,
                     )
                     train_feature_names = [f"feature_{i}" for i in range(actual_cols)]
+
+                # Broadcast pair_started to WS clients
+                ws_data = ml_ws.get(job_id)
+                if ws_data and ws_data["clients"]:
+                    from app.api.ws_ml import broadcast_ml_event
+                    await broadcast_ml_event(_app, job_id, {"type": "pair_started", "pair": pair})
 
                 trainer = Trainer(train_config)
                 ensemble_result = await asyncio.to_thread(
@@ -332,6 +362,16 @@ async def start_training(body: TrainRequest, request: Request):
                     ],
                 }
 
+                # Broadcast pair_completed to WS clients
+                ws_data = ml_ws.get(job_id)
+                if ws_data and ws_data["clients"]:
+                    from app.api.ws_ml import broadcast_ml_event
+                    await broadcast_ml_event(_app, job_id, {
+                        "type": "pair_completed",
+                        "pair": pair,
+                        "result": pair_results[pair],
+                    })
+
             if not pair_results:
                 train_jobs[job_id] = {"status": "failed", "error": "No pair had enough data"}
                 await _update_run(
@@ -358,14 +398,28 @@ async def start_training(body: TrainRequest, request: Request):
             # Reload per-pair predictors if live
             _reload_predictors(request.app, settings)
 
+            # Broadcast job_completed and close WS connections
+            from app.api.ws_ml import broadcast_ml_event, close_ml_connections
+            await broadcast_ml_event(_app, job_id, {
+                "type": "job_completed",
+                "result": pair_results,
+            })
+            await close_ml_connections(_app, job_id)
+
         except asyncio.CancelledError:
             logger.info(f"Training job {job_id} cancelled")
             train_jobs[job_id] = {"status": "cancelled"}
             await _update_run(status="cancelled")
+            from app.api.ws_ml import broadcast_ml_event, close_ml_connections
+            await broadcast_ml_event(_app, job_id, {"type": "job_failed", "error": "Training cancelled"})
+            await close_ml_connections(_app, job_id)
         except Exception as e:
             logger.error(f"Training failed: {e}", exc_info=True)
             train_jobs[job_id] = {"status": "failed", "error": str(e)}
             await _update_run(status="failed", error=str(e))
+            from app.api.ws_ml import broadcast_ml_event, close_ml_connections
+            await broadcast_ml_event(_app, job_id, {"type": "job_failed", "error": str(e)})
+            await close_ml_connections(_app, job_id)
 
     task = asyncio.create_task(_run())
     train_jobs[job_id]["task"] = task

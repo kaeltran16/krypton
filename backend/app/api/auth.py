@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/auth")
 ALGORITHM = "HS256"
 _COOKIE_NAME = "krypton_token"
 _TOKEN_EXPIRY_DAYS = 30
+_WS_TOKEN_EXPIRY_MINUTES = 5
 
 
 class GoogleLoginRequest(BaseModel):
@@ -46,6 +47,24 @@ def _encode_jwt(user_id: str, email: str, secret: str, name: str = "", picture: 
         "exp": datetime.now(timezone.utc) + timedelta(days=_TOKEN_EXPIRY_DAYS),
     }
     return jwt.encode(payload, secret, algorithm=ALGORITHM)
+
+
+def create_ws_token(secret: str) -> str:
+    """Create a short-lived JWT for WebSocket authentication."""
+    payload = {
+        "purpose": "ws",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=_WS_TOKEN_EXPIRY_MINUTES),
+    }
+    return jwt.encode(payload, secret, algorithm=ALGORITHM)
+
+
+def verify_ws_token(token: str, secret: str) -> bool:
+    """Verify a WS token has valid signature, expiry, and purpose claim."""
+    try:
+        payload = jwt.decode(token, secret, algorithms=[ALGORITHM])
+        return payload.get("purpose") == "ws"
+    except jwt.InvalidTokenError:
+        return False
 
 
 def _set_cookie(response: Response, token: str):
@@ -130,3 +149,10 @@ async def me(request: Request, user: dict = require_auth()):
             id=user["sub"], email=user["email"], name=user.get("name", ""), picture=user.get("picture")
         ),
     }
+
+
+@router.post("/ws-token")
+async def get_ws_token(request: Request, _user: dict = require_auth()):
+    """Return a short-lived JWT for WebSocket authentication."""
+    secret = request.app.state.settings.jwt_secret
+    return {"token": create_ws_token(secret)}

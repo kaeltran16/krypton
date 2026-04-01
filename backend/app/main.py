@@ -1889,6 +1889,7 @@ async def lifespan(app: FastAPI):
     app.state.pattern_strength_overrides = None
     app.state.pattern_boost_overrides = None
     app.state.pipeline_settings_lock = asyncio.Lock()
+    app.state.ml_ws_connections = {}
 
     from app.engine.performance_tracker import PerformanceTracker
     app.state.tracker = PerformanceTracker(db.session_factory)
@@ -2304,6 +2305,9 @@ def create_app(lifespan_override=None) -> FastAPI:
 
     from app.api.ws import router as ws_router
     app.include_router(ws_router)
+
+    from app.api.ws_ml import router as ws_ml_router
+    app.include_router(ws_ml_router)
 
     from app.api.push import router as push_router
     app.include_router(push_router)
