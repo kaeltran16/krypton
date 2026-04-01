@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import func, select, cast, literal, update
+from sqlalchemy import func, select, cast, literal, tuple_, update
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.config import Settings
@@ -43,7 +43,14 @@ from app.engine.confluence import (
     CONFLUENCE_ONLY_TIMEFRAMES,
     TIMEFRAME_CACHE_TTL, TIMEFRAME_ANCESTORS, compute_confluence_score,
 )
-from app.engine.regime import blend_outer_weights, smooth_regime_mix
+from app.engine.regime import smooth_regime_mix
+from app.engine.regime_online import (
+    ONLINE_ELIGIBLE_OUTCOMES,
+    WINDOW_DAYS,
+    apply_resolved_signals_batch,
+    build_runtime_states_from_history,
+    resolve_effective_outer_weights,
+)
 from app.engine.structure import collect_structure_levels, snap_levels_to_structure
 from app.engine.optimizer import lookup_signal_threshold
 from app.engine.cooldown import check_cooldown, update_streak_on_sl, reset_streak
@@ -358,6 +365,70 @@ async def persist_pipeline_evaluation(db: Database, eval_data: dict):
             await session.commit()
     except Exception as e:
         logger.error(f"Failed to persist pipeline evaluation for {eval_data.get('pair')}:{eval_data.get('timeframe')}: {e}")
+
+
+def _active_regime_online_keys(settings) -> set[tuple[str, str]]:
+    return {
+        (pair, timeframe)
+        for pair in settings.pairs
+        for timeframe in settings.timeframes
+        if timeframe not in CONFLUENCE_ONLY_TIMEFRAMES
+    }
+
+
+async def rebuild_regime_online_state(app: FastAPI, *, now: datetime | None = None) -> None:
+    app.state.regime_weight_overlays = {}
+    app.state.regime_weight_signal_windows = {}
+
+    runtime_keys = _active_regime_online_keys(app.state.settings)
+    if not runtime_keys:
+        return
+
+    db = app.state.db
+    now = now or datetime.now(timezone.utc)
+    try:
+        started = time.perf_counter()
+        cutoff = now - timedelta(days=WINDOW_DAYS)
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(
+                    Signal.id,
+                    Signal.pair,
+                    Signal.timeframe,
+                    Signal.direction,
+                    Signal.outcome,
+                    Signal.outcome_at,
+                    Signal.raw_indicators,
+                    Signal.engine_snapshot,
+                )
+                .where(Signal.outcome.in_(tuple(ONLINE_ELIGIBLE_OUTCOMES)))
+                .where(Signal.outcome_at.isnot(None))
+                .where(Signal.outcome_at >= cutoff)
+                .where(tuple_(Signal.pair, Signal.timeframe).in_(sorted(runtime_keys)))
+                .order_by(Signal.pair, Signal.timeframe, Signal.outcome_at, Signal.id)
+            )
+            recent_resolved = [dict(row) for row in result.mappings().all()]
+
+        windows, overlays = build_runtime_states_from_history(
+            recent_resolved,
+            now=now,
+            allowed_keys=runtime_keys,
+            logger=logger,
+        )
+        app.state.regime_weight_signal_windows = windows
+        app.state.regime_weight_overlays = overlays
+
+        logger.info(
+            "Rebuilt regime weight overlays for %d/%d pair-timeframe combos from %d signals in %.1fms",
+            len(overlays),
+            len(runtime_keys),
+            len(recent_resolved),
+            (time.perf_counter() - started) * 1000,
+        )
+    except Exception as e:
+        logger.warning("Failed to rebuild regime weight overlays: %s", e)
+        app.state.regime_weight_signal_windows = {}
+        app.state.regime_weight_overlays = {}
 
 
 async def _compute_correlation_dampener(
@@ -833,7 +904,13 @@ async def run_pipeline(app: FastAPI, candle: dict):
     regime = tech_result.get("regime")
     if regime:
         regime = smooth_regime_mix(regime, app.state.smoothed_regime, pair, timeframe)
-    outer = blend_outer_weights(regime, regime_weights)
+
+    overlay_state = getattr(app.state, "regime_weight_overlays", {}).get(rw_key)
+    outer = resolve_effective_outer_weights(
+        regime,
+        regime_weights=regime_weights,
+        overlay_state=overlay_state,
+    )
 
     tech_w = outer["tech"]
     flow_w = outer["flow"]
@@ -1655,6 +1732,39 @@ async def check_pending_signals(app: FastAPI):
             except Exception as e:
                 logger.exception("Failed to update calibration state: %s", e)
 
+        try:
+            resolved_signals = [
+                {
+                    "id": signal.id,
+                    "pair": signal.pair,
+                    "timeframe": signal.timeframe,
+                    "direction": signal.direction,
+                    "outcome": signal.outcome,
+                    "outcome_at": signal.outcome_at,
+                    "raw_indicators": signal.raw_indicators,
+                    "engine_snapshot": signal.engine_snapshot,
+                }
+                for signal in pending
+                if signal.outcome != "PENDING" and signal.outcome_at is not None
+            ]
+            if resolved_signals:
+                current_windows = getattr(app.state, "regime_weight_signal_windows", {})
+                next_windows, next_overlays = apply_resolved_signals_batch(
+                    resolved_signals,
+                    current_windows,
+                    now=datetime.now(timezone.utc),
+                    allowed_keys=_active_regime_online_keys(settings),
+                    logger=logger,
+                )
+                app.state.regime_weight_signal_windows = next_windows
+                app.state.regime_weight_overlays = next_overlays
+                logger.info(
+                    "Updated regime weight overlays for %d pair/timeframe combos after resolution batch",
+                    len(next_overlays),
+                )
+        except Exception as e:
+            logger.exception("Failed to update regime weight overlays after outcome resolution: %s", e)
+
         # Notify optimizer of resolved signals
         optimizer = getattr(app.state, "optimizer", None)
         if optimizer is not None:
@@ -1804,6 +1914,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Failed to load regime weights: %s", e)
 
+    app.state.regime_weight_overlays = {}
+    app.state.regime_weight_signal_windows = {}
     app.state.smoothed_regime = {}
 
     # LLM factor calibration state
@@ -1881,6 +1993,8 @@ async def lifespan(app: FastAPI):
         app.state.scoring_params = None
         app.state.pattern_strength_overrides = None
         app.state.pattern_boost_overrides = None
+
+    await rebuild_regime_online_state(app)
 
     # Clean up stale backtest/ML runs orphaned by previous container restarts
     try:

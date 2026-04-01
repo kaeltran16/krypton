@@ -1,5 +1,7 @@
 """Market regime detection and adaptive weight blending."""
 
+import copy
+
 
 REGIMES = ["trending", "ranging", "volatile", "steady"]
 CAP_KEYS = ["trend_cap", "mean_rev_cap", "squeeze_cap", "volume_cap"]
@@ -138,7 +140,14 @@ def blend_caps(regime: dict, regime_weights=None) -> dict:
     return _blend(regime, caps, CAP_KEYS)
 
 
-def blend_outer_weights(regime: dict, regime_weights=None) -> dict:
+def get_outer_weight_table(regime_weights=None) -> dict:
+    """Return per-regime outer weights from a DB row or defaults."""
+    if regime_weights:
+        return _extract_regime_dict(regime_weights, OUTER_KEYS, "_weight")
+    return copy.deepcopy(DEFAULT_OUTER_WEIGHTS)
+
+
+def blend_outer_weights(regime: dict, regime_weights=None, outer_weights: dict | None = None) -> dict:
     """Blend effective outer blend weights from regime mix.
 
     Args:
@@ -148,5 +157,5 @@ def blend_outer_weights(regime: dict, regime_weights=None) -> dict:
     Returns:
         Dict with tech, flow, onchain, pattern weights summing to ~1.0.
     """
-    outer = _extract_regime_dict(regime_weights, OUTER_KEYS, "_weight") if regime_weights else DEFAULT_OUTER_WEIGHTS
+    outer = outer_weights if outer_weights is not None else get_outer_weight_table(regime_weights)
     return _blend(regime, outer, OUTER_KEYS)

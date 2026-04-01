@@ -13,6 +13,7 @@ from app.api.auth import require_auth
 from app.db.models import PipelineSettings, RegimeWeights, PerformanceTrackerRow
 from app.engine.constants import get_engine_constants, PARAMETER_DESCRIPTIONS
 from app.engine.regime import REGIMES
+from app.engine.regime_online import clear_runtime_state_for_key
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +268,8 @@ async def apply_parameters(body: ApplyRequest, request: Request, _key: str = req
             if not ps:
                 raise HTTPException(500, "Pipeline settings not initialized")
 
+            touched_regime_keys: set[tuple[str, str]] = set()
+
             for path, proposed in body.changes.items():
                 if path in _PIPELINE_SETTINGS_MAP:
                     settings_field, db_col = _PIPELINE_SETTINGS_MAP[path]
@@ -284,6 +287,7 @@ async def apply_parameters(body: ApplyRequest, request: Request, _key: str = req
                     parts = path.split(".", 3)
                     if len(parts) == 4:
                         _, pair, tf, col = parts
+                        touched_regime_keys.add((pair, tf))
                         rw_result = await session.execute(
                             select(RegimeWeights)
                             .where(RegimeWeights.pair == pair)
@@ -314,6 +318,17 @@ async def apply_parameters(body: ApplyRequest, request: Request, _key: str = req
             for rw in rw_result.scalars().all():
                 session.expunge(rw)
                 app.state.regime_weights[(rw.pair, rw.timeframe)] = rw
+
+            if touched_regime_keys:
+                overlays = getattr(app.state, "regime_weight_overlays", {})
+                windows = getattr(app.state, "regime_weight_signal_windows", {})
+                for key in touched_regime_keys:
+                    clear_runtime_state_for_key(windows, overlays, key)
+                    logger.info(
+                        "Cleared regime weight overlay after baseline refresh for %s:%s",
+                        key[0],
+                        key[1],
+                    )
 
         tracker = getattr(app.state, "tracker", None)
         if tracker:

@@ -62,6 +62,8 @@ async def _test_lifespan(app: FastAPI):
     mock_settings.engine_confluence_mr_penalty_factor = 0.50
     app.state.settings = mock_settings
     app.state.regime_weights = {}
+    app.state.regime_weight_overlays = {}
+    app.state.regime_weight_signal_windows = {}
     app.state.smoothed_regime = {}
     app.state.scoring_params = {
         "mean_rev_rsi_steepness": 0.25,

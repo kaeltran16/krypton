@@ -2,7 +2,7 @@
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -69,6 +69,8 @@ def _make_app(regime_weights=None):
 
     # Regime weights (the feature under test)
     app.state.regime_weights = regime_weights or {}
+    app.state.regime_weight_overlays = {}
+    app.state.regime_weight_signal_windows = {}
     app.state.smoothed_regime = {}
 
     # Pipeline task tracking
@@ -142,3 +144,59 @@ class TestPipelineWithRegimeWeights:
         }
         # Should not raise
         await run_pipeline(app, candle)
+
+
+class TestPipelineWithOnlineOverlay:
+    @pytest.mark.asyncio
+    async def test_routes_outer_weight_resolution_through_online_helper(self):
+        rw = MagicMock()
+        rw.adx_center = 20.0
+        for regime in ["trending", "ranging", "volatile", "steady"]:
+            for source in ["tech", "flow", "onchain", "pattern", "liquidation", "confluence", "news"]:
+                setattr(rw, f"{regime}_{source}_weight", 1.0 / 7.0)
+            setattr(rw, f"{regime}_trend_cap", 30.0)
+            setattr(rw, f"{regime}_mean_rev_cap", 25.0)
+            setattr(rw, f"{regime}_squeeze_cap", 20.0)
+            setattr(rw, f"{regime}_volume_cap", 25.0)
+
+        app, _ = _make_app(regime_weights={("BTC-USDT-SWAP", "1h"): rw})
+        app.state.regime_weight_overlays = {
+            ("BTC-USDT-SWAP", "1h"): {
+                "trending": {"tech": 0.01, "flow": 0.0, "onchain": 0.0, "pattern": 0.0, "liquidation": 0.0, "confluence": 0.0, "news": 0.0},
+                "ranging": {"tech": 0.0, "flow": 0.0, "onchain": 0.0, "pattern": 0.0, "liquidation": 0.0, "confluence": 0.0, "news": 0.0},
+                "volatile": {"tech": 0.0, "flow": 0.0, "onchain": 0.0, "pattern": 0.0, "liquidation": 0.0, "confluence": 0.0, "news": 0.0},
+                "steady": {"tech": 0.0, "flow": 0.0, "onchain": 0.0, "pattern": 0.0, "liquidation": 0.0, "confluence": 0.0, "news": 0.0},
+                "eligible_count": 20,
+                "window_oldest_outcome_at": "2026-03-20T00:00:00+00:00",
+                "window_newest_outcome_at": "2026-04-01T00:00:00+00:00",
+                "rebuilt_at": "2026-04-01T00:00:00+00:00",
+            }
+        }
+        app.state.regime_weight_signal_windows = {
+            ("BTC-USDT-SWAP", "1h"): [{"id": i} for i in range(20)]
+        }
+        app.state.redis.lrange = AsyncMock(return_value=_raw_candles())
+        app.state.redis.get = AsyncMock(return_value=None)
+
+        candle = {
+            "pair": "BTC-USDT-SWAP", "timeframe": "1h",
+            "timestamp": datetime(2026, 2, 1, tzinfo=timezone.utc),
+            "open": 67000, "high": 67100, "low": 66900, "close": 67050,
+            "volume": 100,
+        }
+
+        with patch("app.main.resolve_effective_outer_weights") as resolve_mock:
+            resolve_mock.return_value = {
+                "tech": 0.30,
+                "flow": 0.15,
+                "onchain": 0.15,
+                "pattern": 0.10,
+                "liquidation": 0.10,
+                "confluence": 0.10,
+                "news": 0.10,
+            }
+            await run_pipeline(app, candle)
+
+        resolve_mock.assert_called_once()
+        _, kwargs = resolve_mock.call_args
+        assert kwargs["overlay_state"]["eligible_count"] == 20
