@@ -78,6 +78,21 @@ export interface MLBackfillJob {
   error?: string;
 }
 
+export interface MLTrainingWSEvent {
+  type: "epoch_update" | "pair_started" | "pair_completed" | "job_completed" | "job_failed" | "snapshot";
+  pair?: string;
+  epoch?: number;
+  total_epochs?: number;
+  train_loss?: number;
+  val_loss?: number;
+  direction_acc?: number | null;
+  result?: Record<string, MLTrainResult>;
+  error?: string;
+  status?: string;
+  progress?: Record<string, MLTrainProgress>;
+  loss_history?: Record<string, Array<{ epoch: number; train_loss: number; val_loss: number | null }>>;
+}
+
 export const jsonHeaders: HeadersInit = {
   "Content-Type": "application/json",
 };
@@ -445,6 +460,9 @@ export const api = {
     request<{ deleted: string }>(`/api/ml/train/history/${jobId}`, {
       method: "DELETE",
     }),
+
+  getWSToken: () =>
+    request<{ token: string }>("/api/auth/ws-token", { method: "POST" }),
 
   // Pipeline settings
   getPipelineSettings: () =>

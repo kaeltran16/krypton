@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { api, type MLTrainRequest, type MLStatus, type MLTrainJob, type MLBackfillJob } from "../../../shared/lib/api";
+import { api, type MLTrainRequest, type MLTrainJob, type MLBackfillJob } from "../../../shared/lib/api";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { Button } from "../../../shared/components/Button";
-import { SettingsSection, ConfigField, Slider, TIMEFRAMES, formatPairSlug } from "./shared";
+import { SettingsSection, ConfigField, Slider, TIMEFRAMES } from "./shared";
 import { Card } from "../../../shared/components/Card";
 import { PRESETS, DEFAULT_CONFIG, CANDLES_PER_DAY, type PresetName } from "../presets";
 import type { DataReadinessMap } from "../types";
 
 interface SetupTabProps {
-  status: MLStatus | null;
   onStartTraining: (params: MLTrainRequest, presetLabel?: string | null) => void;
   trainingJob: MLTrainJob | null;
   initialConfig?: MLTrainRequest | null;
@@ -18,7 +17,6 @@ interface SetupTabProps {
 }
 
 export function SetupTab({
-  status,
   onStartTraining,
   trainingJob,
   initialConfig,
@@ -28,6 +26,8 @@ export function SetupTab({
 }: SetupTabProps) {
   const [config, setConfig] = useState<MLTrainRequest>({ ...DEFAULT_CONFIG });
   const [activePreset, setActivePreset] = useState<PresetName | null>("balanced");
+  const [modified, setModified] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [readiness, setReadiness] = useState<DataReadinessMap | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
@@ -63,19 +63,21 @@ export function SetupTab({
   function handlePresetChange(preset: PresetName) {
     const found = PRESETS.find((p) => p.name === preset);
     if (found) {
-      setConfig({ ...config, ...found.config });
+      setConfig({ ...DEFAULT_CONFIG, ...found.config });
       setActivePreset(preset);
+      setModified(false);
     }
   }
 
   function handleReset() {
     setConfig({ ...DEFAULT_CONFIG });
     setActivePreset("balanced");
+    setModified(false);
   }
 
   function updateConfig(patch: Partial<MLTrainRequest>) {
     setConfig({ ...config, ...patch });
-    setActivePreset(null); // Manual change clears preset
+    setModified(true);
   }
 
   const backfillRunning = backfillJob?.status === "running";
@@ -90,25 +92,13 @@ export function SetupTab({
 
   return (
     <div className="space-y-4">
-      {/* Model overwrite warning */}
-      {status && status.loaded_pairs.length > 0 && (
-        <div className="bg-error/10 border border-error/30 rounded-lg px-3 py-2 flex items-start gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-error mt-0.5 shrink-0">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div className="text-xs text-error">
-            <span className="font-medium">Training will overwrite existing models.</span>
-            <p className="mt-0.5 opacity-90">
-              Current models: {status.loaded_pairs.map(formatPairSlug).join(", ")}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Preset bar */}
       <div>
         <SegmentedControl
-          options={PRESETS.map((p) => ({ value: p.name, label: p.label }))}
+          options={PRESETS.map((p) => ({
+            value: p.name,
+            label: `${p.label}${modified && activePreset === p.name ? " (Modified)" : ""}`,
+          }))}
           value={activePreset ?? ""}
           onChange={(v) => handlePresetChange(v as PresetName)}
           fullWidth
@@ -119,6 +109,18 @@ export function SetupTab({
           </p>
         )}
       </div>
+
+      {/* Timeframe — always visible */}
+      <SettingsSection title="Timeframe">
+        <ConfigField label="Timeframe">
+          <SegmentedControl
+            options={TIMEFRAMES.map((t) => ({ label: t, value: t }))}
+            value={config.timeframe ?? "1h"}
+            onChange={(v) => updateConfig({ timeframe: v })}
+            compact
+          />
+        </ConfigField>
+      </SettingsSection>
 
       {/* Data readiness */}
       <SettingsSection title="Data Readiness">
@@ -173,51 +175,66 @@ export function SetupTab({
         ) : null}
       </SettingsSection>
 
-      {/* Data Parameters */}
-      <SettingsSection title="Data Parameters">
-        <ConfigField label="Timeframe">
-          <SegmentedControl
-            options={TIMEFRAMES.map((t) => ({ label: t, value: t }))}
-            value={config.timeframe ?? "1h"}
-            onChange={(v) => updateConfig({ timeframe: v })}
-            compact
-          />
-        </ConfigField>
-        <ConfigField label="Lookback Days" value={config.lookback_days}>
-          <Slider min={30} max={1825} value={config.lookback_days} onChange={(v) => updateConfig({ lookback_days: v })} />
-        </ConfigField>
-        <ConfigField label="Label Horizon (hours)" value={config.label_horizon}>
-          <Slider min={4} max={96} value={config.label_horizon} onChange={(v) => updateConfig({ label_horizon: v })} />
-        </ConfigField>
-        <ConfigField label="Label Threshold %" value={`${config.label_threshold_pct}%`}>
-          <Slider min={0.1} max={10} step={0.1} value={config.label_threshold_pct} onChange={(v) => updateConfig({ label_threshold_pct: v })} />
-        </ConfigField>
-      </SettingsSection>
+      {/* Advanced Settings toggle */}
+      <button
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="w-full flex items-center justify-between text-xs text-muted py-2"
+      >
+        <span>Advanced Settings</span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className={`transition-transform ${showAdvanced ? "rotate-180" : ""}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
 
-      {/* Model Parameters */}
-      <SettingsSection title="Model Parameters">
-        <ConfigField label="Epochs" value={config.epochs}>
-          <Slider min={1} max={500} value={config.epochs} onChange={(v) => updateConfig({ epochs: v })} />
-        </ConfigField>
-        <ConfigField label="Batch Size" value={config.batch_size}>
-          <Slider min={8} max={512} step={8} value={config.batch_size} onChange={(v) => updateConfig({ batch_size: v })} />
-        </ConfigField>
-        <ConfigField label="Hidden Size" value={config.hidden_size}>
-          <Slider min={32} max={512} step={32} value={config.hidden_size} onChange={(v) => updateConfig({ hidden_size: v })} />
-        </ConfigField>
-        <ConfigField label="Num Layers" value={config.num_layers}>
-          <Slider min={1} max={4} value={config.num_layers} onChange={(v) => updateConfig({ num_layers: v })} />
-        </ConfigField>
-        <ConfigField label="Sequence Length" value={config.seq_len}>
-          <Slider min={25} max={200} value={config.seq_len} onChange={(v) => updateConfig({ seq_len: v })} />
-        </ConfigField>
-        <ConfigField label="Dropout" value={config.dropout}>
-          <Slider min={0} max={0.7} step={0.05} value={config.dropout ?? 0.3} onChange={(v) => updateConfig({ dropout: v })} />
-        </ConfigField>
-        <ConfigField label="Learning Rate" value={config.lr}>
-          <Slider min={0.0001} max={0.01} step={0.0001} value={config.lr ?? 0.001} onChange={(v) => updateConfig({ lr: v })} format={(v) => v.toExponential(2)} />
-        </ConfigField>
-      </SettingsSection>
+      <div className={`grid transition-[grid-template-rows] duration-200 ${showAdvanced ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden space-y-4">
+          {/* Data Parameters */}
+          <SettingsSection title="Data Parameters">
+            <ConfigField label="Lookback Days" value={config.lookback_days}>
+              <Slider min={30} max={1825} value={config.lookback_days} onChange={(v) => updateConfig({ lookback_days: v })} />
+            </ConfigField>
+            <ConfigField label="Label Horizon (hours)" value={config.label_horizon}>
+              <Slider min={4} max={96} value={config.label_horizon} onChange={(v) => updateConfig({ label_horizon: v })} />
+            </ConfigField>
+            <ConfigField label="Label Threshold %" value={`${config.label_threshold_pct}%`}>
+              <Slider min={0.1} max={10} step={0.1} value={config.label_threshold_pct} onChange={(v) => updateConfig({ label_threshold_pct: v })} />
+            </ConfigField>
+          </SettingsSection>
+
+          {/* Model Parameters */}
+          <SettingsSection title="Model Parameters">
+            <ConfigField label="Epochs" value={config.epochs}>
+              <Slider min={1} max={500} value={config.epochs} onChange={(v) => updateConfig({ epochs: v })} />
+            </ConfigField>
+            <ConfigField label="Batch Size" value={config.batch_size}>
+              <Slider min={8} max={512} step={8} value={config.batch_size} onChange={(v) => updateConfig({ batch_size: v })} />
+            </ConfigField>
+            <ConfigField label="Hidden Size" value={config.hidden_size}>
+              <Slider min={32} max={512} step={32} value={config.hidden_size} onChange={(v) => updateConfig({ hidden_size: v })} />
+            </ConfigField>
+            <ConfigField label="Num Layers" value={config.num_layers}>
+              <Slider min={1} max={4} value={config.num_layers} onChange={(v) => updateConfig({ num_layers: v })} />
+            </ConfigField>
+            <ConfigField label="Sequence Length" value={config.seq_len}>
+              <Slider min={25} max={200} value={config.seq_len} onChange={(v) => updateConfig({ seq_len: v })} />
+            </ConfigField>
+            <ConfigField label="Dropout" value={config.dropout}>
+              <Slider min={0} max={0.7} step={0.05} value={config.dropout ?? 0.3} onChange={(v) => updateConfig({ dropout: v })} />
+            </ConfigField>
+            <ConfigField label="Learning Rate" value={config.lr}>
+              <Slider min={0.0001} max={0.01} step={0.0001} value={config.lr ?? 0.001} onChange={(v) => updateConfig({ lr: v })} format={(v) => v.toExponential(2)} />
+            </ConfigField>
+          </SettingsSection>
+        </div>
+      </div>
 
       {/* Inline Backfill */}
       <SettingsSection title="Backfill Data">

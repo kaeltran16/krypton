@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { api, type MLTrainRequest, type MLTrainJob, type MLStatus, type MLBackfillJob } from "../../../shared/lib/api";
+import { api, type MLTrainRequest, type MLTrainJob, type MLBackfillJob } from "../../../shared/lib/api";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
 import { SetupTab } from "./SetupTab";
 import { TrainingTab } from "./TrainingTab";
@@ -9,7 +9,6 @@ import type { MLTab } from "../types";
 
 export function MLTrainingView() {
   const [tab, setTab] = useState<MLTab>("setup");
-  const [status, setStatus] = useState<MLStatus | null>(null);
   const [trainingJob, setTrainingJob] = useState<MLTrainJob | null>(null);
   const [backfillJob, setBackfillJob] = useState<MLBackfillJob | null>(null);
   const [history, setHistory] = useState<MLTrainJob[]>([]);
@@ -35,6 +34,7 @@ export function MLTrainingView() {
         ...params,
         preset_label: presetLabel ?? undefined,
       });
+      localStorage.setItem("ml_training_job_id", response.job_id);
       setTrainingJob({ job_id: response.job_id, status: "running" as const });
       setTab("training");
     } catch (e) {
@@ -47,7 +47,9 @@ export function MLTrainingView() {
     try {
       setError(null);
       await api.cancelMLTraining(trainingJob.job_id);
-      setTrainingJob({ ...trainingJob, status: "cancelled" });
+      localStorage.removeItem("ml_training_job_id");
+      setTrainingJob(null);
+      setTab("setup");
     } catch (e) {
       setError(e instanceof Error ? e : new Error("Failed to cancel training"));
     }
@@ -70,15 +72,33 @@ export function MLTrainingView() {
   }
 
   const fetchHistory = useCallback(() => {
-    api.getMLTrainingHistory()
+    return api.getMLTrainingHistory()
       .then(setHistory)
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    api.getMLStatus().then(setStatus).catch(() => {});
     fetchHistory();
   }, [fetchHistory]);
+
+  // Recover running job from localStorage on mount
+  useEffect(() => {
+    const storedJobId = localStorage.getItem("ml_training_job_id");
+    if (!storedJobId) return;
+
+    api.getMLTrainingStatus(storedJobId)
+      .then((job) => {
+        if (job.status === "running") {
+          setTrainingJob(job as MLTrainJob);
+          setTab("training");
+        } else {
+          localStorage.removeItem("ml_training_job_id");
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem("ml_training_job_id");
+      });
+  }, []);
 
   // Poll for backfill progress
   useEffect(() => {
@@ -124,7 +144,6 @@ export function MLTrainingView() {
 
       {tab === "setup" && (
         <SetupTab
-          status={status}
           onStartTraining={handleStartTraining}
           trainingJob={trainingJob}
           initialConfig={restoredParams}
@@ -137,11 +156,20 @@ export function MLTrainingView() {
         <TrainingTab
           job={trainingJob}
           onCancel={handleCancelTraining}
-          onComplete={() => {
-            setTrainingJob(null);
-            fetchHistory();
+          onComplete={async (completedJob: MLTrainJob) => {
+            setTrainingJob(completedJob);
+            localStorage.removeItem("ml_training_job_id");
+            await fetchHistory().catch(() => {});
+            setTab("results");
           }}
-          onSwitchToSetup={() => setTab("setup")}
+          onSwitchToSetup={() => {
+            if (trainingJob?.params) {
+              setRestoredParams(trainingJob.params as MLTrainRequest);
+            }
+            localStorage.removeItem("ml_training_job_id");
+            setTrainingJob(null);
+            setTab("setup");
+          }}
           presetLabel={activePresetLabel}
           configSummary={configSummary}
         />
@@ -179,5 +207,4 @@ export function MLTrainingView() {
       )}
     </div>
   );
-
 }

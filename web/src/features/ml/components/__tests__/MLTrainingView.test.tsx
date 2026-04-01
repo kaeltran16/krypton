@@ -6,7 +6,6 @@ import { api } from "../../../../shared/lib/api";
 
 vi.mock("../../../../shared/lib/api", () => ({
   api: {
-    getMLStatus: vi.fn(),
     getMLDataReadiness: vi.fn(),
     startMLTraining: vi.fn(),
     getMLTrainingStatus: vi.fn(),
@@ -15,8 +14,27 @@ vi.mock("../../../../shared/lib/api", () => ({
     getMLBackfillStatus: vi.fn(),
     getMLTrainingHistory: vi.fn(),
     deleteMLTrainingRun: vi.fn(),
+    getWSToken: vi.fn().mockResolvedValue({ token: "mock-ws-token" }),
   },
 }));
+
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((e: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  sent: string[] = [];
+  constructor(_url: string) {
+    MockWebSocket.instances.push(this);
+    setTimeout(() => this.onopen?.(), 0);
+  }
+  send(data: string) { this.sent.push(data); }
+  close() { this.onclose?.(); }
+  simulateMessage(data: unknown) {
+    this.onmessage?.({ data: JSON.stringify(data) });
+  }
+}
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -35,7 +53,8 @@ describe("MLTrainingView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.clear();
-    vi.mocked(api.getMLStatus).mockResolvedValue({ ml_enabled: true, loaded_pairs: [] });
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
     vi.mocked(api.getMLTrainingHistory).mockResolvedValue([]);
     vi.mocked(api.getMLDataReadiness).mockResolvedValue({
       "BTC-USDT-SWAP": { count: 8760, oldest: "2025-03-22T00:00:00Z", sufficient: true },
@@ -65,11 +84,6 @@ describe("MLTrainingView", () => {
       expect(screen.getByText("History")).toBeInTheDocument();
     });
 
-    it("should load ML status on mount", async () => {
-      await renderAndSettle();
-      expect(api.getMLStatus).toHaveBeenCalledOnce();
-    });
-
     it("should fetch data readiness on mount", async () => {
       await renderAndSettle();
       expect(api.getMLDataReadiness).toHaveBeenCalledWith("1h");
@@ -85,12 +99,11 @@ describe("MLTrainingView", () => {
       expect(screen.getByText("Production")).toBeInTheDocument();
     });
 
-    it("should render config sliders", async () => {
+    it("should render timeframe and advanced settings toggle", async () => {
       await renderAndSettle();
 
-      expect(screen.getByText("Timeframe")).toBeInTheDocument();
-      expect(screen.getByText("Lookback Days")).toBeInTheDocument();
-      expect(screen.getByText("Epochs")).toBeInTheDocument();
+      expect(screen.getAllByText("Timeframe").length).toBeGreaterThan(0);
+      expect(screen.getByText("Advanced Settings")).toBeInTheDocument();
     });
 
     it("should show confirmation dialog when Start Training is clicked", async () => {
