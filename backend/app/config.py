@@ -158,6 +158,15 @@ class Settings(BaseSettings):
     engine_calibration_window: int = 30
     engine_calibration_floor: float = 0.5
 
+    # slippage modeling (replay-only)
+    # override via env var SLIPPAGE_BASE_BPS or top-level key in config.yaml
+    # (not nested under engine — YAML flattening does not handle dict values)
+    slippage_base_bps: dict[str, float] = Field(default_factory=lambda: {
+        "BTC-USDT-SWAP": 3,
+        "ETH-USDT-SWAP": 5,
+        "WIF-USDT-SWAP": 12,
+    })
+
     # push notifications
     vapid_private_key: str = ""
     vapid_claims_email: str = ""

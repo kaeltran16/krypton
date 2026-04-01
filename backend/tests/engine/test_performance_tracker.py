@@ -10,6 +10,7 @@ from app.engine.performance_tracker import (
     SL_RANGE, TP1_RANGE, TP2_RANGE,
     MAX_SL_ADJ, MAX_TP_ADJ,
     MIN_SIGNALS, TRIGGER_INTERVAL,
+    compute_slippage,
 )
 
 
@@ -102,6 +103,52 @@ def test_sortino_empty():
     assert PerformanceTracker.compute_sortino([]) is None
 
 
+# ── compute_slippage ──
+
+
+def test_compute_slippage_base_case():
+    """When atr == median_atr, vol_ratio=1.0, returns entry * base_bps / 10_000."""
+    result = compute_slippage(entry=50000.0, atr=500.0, median_atr=500.0, base_bps=5.0)
+    assert result == pytest.approx(50000.0 * 5.0 / 10_000)  # 25.0
+
+
+def test_compute_slippage_vol_scaling():
+    """When atr is 2x median, effective_bps doubles."""
+    result = compute_slippage(entry=50000.0, atr=1000.0, median_atr=500.0, base_bps=5.0)
+    assert result == pytest.approx(50000.0 * 10.0 / 10_000)  # 50.0
+
+
+def test_compute_slippage_clamp_floor():
+    """When vol_ratio < 0.5, clamp to 0.5x base_bps."""
+    result = compute_slippage(entry=50000.0, atr=50.0, median_atr=500.0, base_bps=10.0)
+    # vol_ratio=0.1, clamped to 0.5 -> effective_bps=5.0
+    assert result == pytest.approx(50000.0 * 5.0 / 10_000)  # 25.0
+
+
+def test_compute_slippage_clamp_ceiling():
+    """When vol_ratio > 3.0, clamp to 3.0x base_bps."""
+    result = compute_slippage(entry=50000.0, atr=5000.0, median_atr=500.0, base_bps=10.0)
+    # vol_ratio=10.0, clamped to 3.0 -> effective_bps=30.0
+    assert result == pytest.approx(50000.0 * 30.0 / 10_000)  # 150.0
+
+
+def test_compute_slippage_zero_entry():
+    """Entry <= 0 returns 0.0."""
+    assert compute_slippage(entry=0.0, atr=500.0, median_atr=500.0, base_bps=5.0) == 0.0
+    assert compute_slippage(entry=-1.0, atr=500.0, median_atr=500.0, base_bps=5.0) == 0.0
+
+
+def test_compute_slippage_zero_median_atr():
+    """median_atr <= 0 falls back to unscaled base_bps."""
+    result = compute_slippage(entry=50000.0, atr=500.0, median_atr=0.0, base_bps=5.0)
+    assert result == pytest.approx(50000.0 * 5.0 / 10_000)  # 25.0
+
+
+def test_compute_slippage_negative_base_bps():
+    """Negative base_bps returns 0.0 (config error guard)."""
+    assert compute_slippage(entry=50000.0, atr=500.0, median_atr=500.0, base_bps=-5.0) == 0.0
+
+
 # ── replay_signal ──
 
 
@@ -163,6 +210,78 @@ def test_replay_short_tp2_hit():
     )
     assert result is not None
     assert result["outcome"] == "TP2_HIT"
+
+
+def test_replay_long_slippage_shifts_levels_down():
+    """Slippage shifts LONG SL down — same outcome but worse fill price."""
+    slip = compute_slippage(entry=50000.0, atr=500.0, median_atr=500.0, base_bps=100.0)
+    assert slip == pytest.approx(500.0)  # 1% of entry
+
+    # Candle low=48700 is below both SL levels, guaranteeing SL_HIT in both cases
+    candles = [
+        {"high": 50100.0, "low": 48700.0, "timestamp": datetime(2025, 1, 1, 1, tzinfo=timezone.utc)},
+    ]
+    # Without slippage: SL=49250, exit at 49250, PnL = -1.5%
+    result_no_slip = PerformanceTracker.replay_signal(
+        direction="LONG", entry=50000.0, atr=500.0,
+        sl_atr=1.5, tp1_atr=2.0, tp2_atr=3.0,
+        candles=candles, created_at=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+    )
+    # With slippage: SL=48750, exit at 48750, PnL = -2.5%
+    result_slip = PerformanceTracker.replay_signal(
+        direction="LONG", entry=50000.0, atr=500.0,
+        sl_atr=1.5, tp1_atr=2.0, tp2_atr=3.0,
+        candles=candles, created_at=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+        slippage_bps=100.0, median_atr=500.0,
+    )
+    assert result_no_slip is not None
+    assert result_slip is not None
+    assert result_slip["outcome_pnl_pct"] <= result_no_slip["outcome_pnl_pct"]
+
+
+def test_replay_short_slippage_shifts_levels_up():
+    """Slippage shifts SHORT exit levels up (against the trade)."""
+    # Verify the slippage arithmetic directly first
+    slip = compute_slippage(entry=50000.0, atr=500.0, median_atr=500.0, base_bps=100.0)
+    assert slip == pytest.approx(500.0)  # 1% of entry
+
+    candles = [
+        {"high": 50100.0, "low": 48400.0, "timestamp": datetime(2025, 1, 1, 1, tzinfo=timezone.utc)},
+    ]
+    # Without slippage: SL=50750, TP1=49000, TP2=48500
+    result_no_slip = PerformanceTracker.replay_signal(
+        direction="SHORT", entry=50000.0, atr=500.0,
+        sl_atr=1.5, tp1_atr=2.0, tp2_atr=3.0,
+        candles=candles, created_at=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+    )
+    # With slippage (base_bps=100 = 1%):
+    # slip = 500, sign = -1
+    # SL = 50750 + 500 = 51250, TP1 = 49000 + 500 = 49500, TP2 = 48500 + 500 = 49000
+    result_slip = PerformanceTracker.replay_signal(
+        direction="SHORT", entry=50000.0, atr=500.0,
+        sl_atr=1.5, tp1_atr=2.0, tp2_atr=3.0,
+        candles=candles, created_at=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+        slippage_bps=100.0, median_atr=500.0,
+    )
+    assert result_no_slip is not None
+    if result_slip is not None:
+        assert result_slip["outcome_pnl_pct"] <= result_no_slip["outcome_pnl_pct"]
+
+
+def test_replay_zero_slippage_unchanged():
+    """slippage_bps=0 produces identical results to no slippage."""
+    candles = [
+        {"high": 51100.0, "low": 50500.0, "timestamp": datetime(2025, 1, 1, 1, tzinfo=timezone.utc)},
+        {"high": 51200.0, "low": 50400.0, "timestamp": datetime(2025, 1, 1, 2, tzinfo=timezone.utc)},
+    ]
+    args = dict(
+        direction="LONG", entry=50000.0, atr=500.0,
+        sl_atr=1.5, tp1_atr=2.0, tp2_atr=3.0,
+        candles=candles, created_at=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+    )
+    result_default = PerformanceTracker.replay_signal(**args)
+    result_explicit = PerformanceTracker.replay_signal(**args, slippage_bps=0.0, median_atr=500.0)
+    assert result_default == result_explicit
 
 
 # ── _apply_guardrails ──
@@ -551,3 +670,92 @@ def test_gp_optimize_returns_tuple_or_none():
         assert 0.8 <= sl <= 2.5
         assert 1.0 <= tp1 <= 4.0
         assert 2.0 <= tp2 <= 6.0
+
+
+# ── slippage integration ──
+
+
+def test_sweep_with_slippage_is_more_conservative():
+    """Sweep with slippage produces equal or lower Sortino than without."""
+    t0 = datetime(2025, 1, 1, 0, tzinfo=timezone.utc)
+    t1 = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+    t2 = datetime(2025, 1, 1, 2, tzinfo=timezone.utc)
+    t3 = datetime(2025, 1, 1, 4, tzinfo=timezone.utc)
+
+    signals = [
+        _make_signal_data(direction="LONG", entry=50000.0, atr=500.0, created_at=t0, outcome_at=t3, outcome="TP1_HIT"),
+        _make_signal_data(direction="LONG", entry=50000.0, atr=500.0, created_at=t0, outcome_at=t3, outcome="SL_HIT"),
+        _make_signal_data(direction="LONG", entry=50000.0, atr=600.0, created_at=t0, outcome_at=t3, outcome="TP1_HIT"),
+        _make_signal_data(direction="SHORT", entry=50000.0, atr=500.0, created_at=t0, outcome_at=t3, outcome="TP1_HIT"),
+    ]
+    candles_map = {
+        0: [
+            {"high": 51100.0, "low": 49900.0, "timestamp": t1},
+            {"high": 51200.0, "low": 50400.0, "timestamp": t2},
+        ],
+        1: [{"high": 50200.0, "low": 49100.0, "timestamp": t1}],
+        2: [
+            {"high": 51300.0, "low": 49800.0, "timestamp": t1},
+            {"high": 51400.0, "low": 50300.0, "timestamp": t2},
+        ],
+        3: [{"high": 50100.0, "low": 48400.0, "timestamp": t1}],
+    }
+    candidates = [1.0, 1.5, 2.0]
+    median_atr = statistics.median([s["atr"] for s in signals])
+
+    results_no_slip = PerformanceTracker._sweep_dimension(
+        signals, candles_map, "sl", candidates,
+    )
+    results_slip = PerformanceTracker._sweep_dimension(
+        signals, candles_map, "sl", candidates,
+        slippage_bps=12.0, median_atr=median_atr,
+    )
+
+    for candidate in candidates:
+        s_no = results_no_slip[candidate]
+        s_yes = results_slip[candidate]
+        # Both None: slippage too small to create downside — acceptable
+        if s_no is None and s_yes is None:
+            continue
+        # No-slip None but slip has value: slippage can't remove losses — fail
+        if s_no is not None and s_yes is None:
+            pytest.fail(f"Slippage removed all downside at candidate={candidate}")
+        # No-slip has value, slip None: slippage created losses — acceptable
+        if s_no is None and s_yes is not None:
+            continue
+        # Both finite: slippage Sortino <= no-slip Sortino
+        assert s_yes <= s_no, (
+            f"Slippage increased Sortino at candidate={candidate}: {s_yes} > {s_no}"
+        )
+
+
+def test_gp_objective_with_slippage_is_more_conservative():
+    """GP objective with slippage returns equal or worse (higher) value than without."""
+    t0 = datetime(2025, 1, 1, 0, tzinfo=timezone.utc)
+    t1 = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+    t2 = datetime(2025, 1, 1, 2, tzinfo=timezone.utc)
+    t3 = datetime(2025, 1, 1, 4, tzinfo=timezone.utc)
+
+    signals = [
+        _make_signal_data(direction="LONG", entry=50000.0, atr=500.0, created_at=t0, outcome_at=t3, outcome="TP1_HIT"),
+        _make_signal_data(direction="LONG", entry=50000.0, atr=500.0, created_at=t0, outcome_at=t3, outcome="SL_HIT"),
+        _make_signal_data(direction="SHORT", entry=50000.0, atr=500.0, created_at=t0, outcome_at=t3, outcome="TP1_HIT"),
+    ]
+    candles_map = {
+        0: [
+            {"high": 51100.0, "low": 49900.0, "timestamp": t1},
+            {"high": 51200.0, "low": 50400.0, "timestamp": t2},
+        ],
+        1: [{"high": 50200.0, "low": 49100.0, "timestamp": t1}],
+        2: [{"high": 50100.0, "low": 48400.0, "timestamp": t1}],
+    }
+    median_atr = statistics.median([s["atr"] for s in signals])
+    params = [1.5, 2.0, 3.0]  # sl_atr, tp1_atr, tp2_atr
+
+    tracker = PerformanceTracker.__new__(PerformanceTracker)
+    obj_no_slip = tracker._gp_objective(params, signals, candles_map)
+    obj_slip = tracker._gp_objective(params, signals, candles_map, slippage_bps=12.0, median_atr=median_atr)
+
+    # _gp_objective returns negated Sortino (lower = better).
+    # Slippage should produce equal or worse (higher/less negative) value.
+    assert obj_slip >= obj_no_slip

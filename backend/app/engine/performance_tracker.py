@@ -32,6 +32,21 @@ MAX_SL_ADJ = _guard["max_sl_adj"]
 MAX_TP_ADJ = _guard["max_tp_adj"]
 
 
+def compute_slippage(entry: float, atr: float, median_atr: float, base_bps: float) -> float:
+    """Compute slippage in price terms, scaled by ATR-relative volatility.
+
+    Used in replay path only — live outcome resolution is unaffected.
+    """
+    if entry <= 0 or base_bps <= 0:
+        return 0.0
+    if median_atr <= 0:
+        logger.warning("median_atr <= 0, skipping volatility scaling")
+        return entry * base_bps / 10_000
+    vol_ratio = atr / median_atr
+    effective_bps = base_bps * max(0.5, min(3.0, vol_ratio))
+    return entry * effective_bps / 10_000
+
+
 class PerformanceTracker:
     def __init__(self, session_factory):
         self.session_factory = session_factory
@@ -98,20 +113,33 @@ class PerformanceTracker:
         tp2_atr: float,
         candles: list[dict],
         created_at: datetime,
+        slippage_bps: float = 0.0,
+        median_atr: float = 0.0,
     ) -> dict | None:
         """Replay a signal with given ATR multipliers against candle data.
 
-        Constructs price levels from multipliers, then delegates to
+        Constructs price levels from multipliers, optionally applies slippage
+        (shifts exits against the trade), then delegates to
         resolve_signal_outcome for deterministic replay.
         Returns outcome dict or None if no level hit (expired).
         """
         sign = 1 if direction == "LONG" else -1
+        stop_loss = entry - sign * sl_atr * atr
+        take_profit_1 = entry + sign * tp1_atr * atr
+        take_profit_2 = entry + sign * tp2_atr * atr
+
+        if slippage_bps > 0:
+            slip = compute_slippage(entry, atr, median_atr, slippage_bps)
+            stop_loss -= sign * slip
+            take_profit_1 -= sign * slip
+            take_profit_2 -= sign * slip
+
         signal_dict = {
             "direction": direction,
             "entry": entry,
-            "stop_loss": entry - sign * sl_atr * atr,
-            "take_profit_1": entry + sign * tp1_atr * atr,
-            "take_profit_2": entry + sign * tp2_atr * atr,
+            "stop_loss": stop_loss,
+            "take_profit_1": take_profit_1,
+            "take_profit_2": take_profit_2,
             "created_at": created_at,
         }
         return resolve_signal_outcome(signal_dict, candles, atr=atr)
@@ -131,6 +159,8 @@ class PerformanceTracker:
         candles_map: dict[int, list[dict]],
         dimension: str,
         candidates: list[float],
+        slippage_bps: float = 0.0,
+        median_atr: float = 0.0,
     ) -> dict[float, float | None]:
         """Sweep one dimension across candidates, return {candidate: sortino}.
 
@@ -170,6 +200,8 @@ class PerformanceTracker:
                     sl_atr=sl, tp1_atr=tp1, tp2_atr=tp2,
                     candles=candles,
                     created_at=sig["created_at"],
+                    slippage_bps=slippage_bps,
+                    median_atr=median_atr,
                 )
                 if result is None:
                     continue  # no level hit (expired) — exclude from Sortino
@@ -179,7 +211,7 @@ class PerformanceTracker:
 
         return results
 
-    def _gp_objective(self, params, signals, candles_map):
+    def _gp_objective(self, params, signals, candles_map, slippage_bps=0.0, median_atr=0.0):
         """Objective function for GP optimizer. Returns value to minimize.
 
         signals: list of signal dicts (same schema as signals_data in optimize())
@@ -208,6 +240,8 @@ class PerformanceTracker:
                 tp2_atr=tp2,
                 candles=candles,
                 created_at=sig["created_at"],
+                slippage_bps=slippage_bps,
+                median_atr=median_atr,
             )
             if result is not None:
                 pnls.append(result["outcome_pnl_pct"])
@@ -219,7 +253,7 @@ class PerformanceTracker:
             return -999.0
         return -sortino
 
-    def _gp_optimize(self, signals, candles_map, current_sl, current_tp1, current_tp2):
+    def _gp_optimize(self, signals, candles_map, current_sl, current_tp1, current_tp2, slippage_bps=0.0, median_atr=0.0):
         """Run GP-based 3D joint optimization of SL/TP1/TP2 ATR multipliers.
 
         signals: list of signal dicts (same schema as signals_data in optimize())
@@ -240,7 +274,7 @@ class PerformanceTracker:
         ]
 
         def objective(params):
-            return self._gp_objective(params, signals, candles_map)
+            return self._gp_objective(params, signals, candles_map, slippage_bps, median_atr)
 
         try:
             result = gp_minimize(
@@ -403,6 +437,11 @@ class PerformanceTracker:
                 )
                 return
 
+            # Compute slippage parameters for replay
+            all_atrs = [s["atr"] for s in signals_data]
+            median_atr = statistics.median(all_atrs) if all_atrs else 0.0
+            base_bps = float(settings.slippage_base_bps.get(pair, 5)) if settings else 0.0
+
             # Sweep each dimension independently
             # Include current value in candidates so sweep can select "keep current"
             sl_candidates = [round(x * 0.1, 1) for x in range(8, 26, 2)] + [2.5]  # 0.8 to 2.5
@@ -420,6 +459,7 @@ class PerformanceTracker:
                 gp_result = await loop.run_in_executor(
                     None, self._gp_optimize,
                     signals_data, candles_map, current_sl, current_tp1, current_tp2,
+                    base_bps, median_atr,
                 )
 
             if gp_result is not None:
@@ -451,6 +491,7 @@ class PerformanceTracker:
 
                     sweep_results = self._sweep_dimension(
                         signals_data, candles_map, dim, candidates,
+                        slippage_bps=base_bps, median_atr=median_atr,
                     )
                     # Find best candidate
                     scored = [(v, s) for v, s in sweep_results.items() if s is not None]
@@ -510,6 +551,7 @@ class PerformanceTracker:
                         sl_atr=sig["effective_sl_atr"], tp1_atr=sig["effective_tp1_atr"],
                         tp2_atr=sig["effective_tp2_atr"], candles=sig_candles,
                         created_at=sig["created_at"],
+                        slippage_bps=base_bps, median_atr=median_atr,
                     )
                     if result:
                         current_pnls.append(result["outcome_pnl_pct"])
