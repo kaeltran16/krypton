@@ -75,6 +75,8 @@ class EnsemblePredictor:
 
         self._feature_map = None
         self._available_features = None
+        self._n_missing_features = 0
+        self._n_expected_features = 0
         self._out_idx = None
         self._in_idx = None
 
@@ -126,10 +128,15 @@ class EnsemblePredictor:
 
     def set_available_features(self, names: list[str]):
         """Set feature names available at inference time."""
+        if names == self._available_features:
+            return  # mapping unchanged
+
         self._available_features = names
         expected = self._expected_features
         if not expected:
             self._feature_map = None
+            self._n_missing_features = 0
+            self._n_expected_features = 0
             return
 
         available_idx = {name: i for i, name in enumerate(names)}
@@ -140,6 +147,9 @@ class EnsemblePredictor:
             raw_map.append(idx)
             if idx == -1:
                 missing.append(name)
+
+        self._n_missing_features = len(missing)
+        self._n_expected_features = len(expected)
 
         if missing:
             logger.warning("Missing features for ensemble (filled with 0): %s", missing)
@@ -199,6 +209,12 @@ class EnsemblePredictor:
         direction_idx = int(np.argmax(mean_probs))
         raw_confidence = float(mean_probs[direction_idx])
 
+        # 1. Missing feature penalty (data quality discount, applied first)
+        if self._n_missing_features > 0 and self._n_expected_features > 0:
+            missing_ratio = self._n_missing_features / self._n_expected_features
+            raw_confidence *= 1.0 - (missing_ratio * 0.5)
+
+        # 2. Ensemble disagreement penalty
         uncertainty_penalty = min(1.0, disagreement * self._disagreement_scale)
         confidence = raw_confidence * (1.0 - uncertainty_penalty)
 

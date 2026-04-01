@@ -61,6 +61,8 @@ class Predictor:
             self._expected_features = self._expected_features[:self.input_size]
         self._feature_map = None
         self._available_features = None
+        self._n_missing_features = 0
+        self._n_expected_features = 0
         self._drift_stats = config.get("drift_stats")
 
         # Check checkpoint age
@@ -90,10 +92,15 @@ class Predictor:
 
         Builds a mapping from available feature columns to the model's expected layout.
         """
+        if names == self._available_features:
+            return  # mapping unchanged
+
         self._available_features = names
         expected = self._expected_features
         if not expected:
             self._feature_map = None
+            self._n_missing_features = 0
+            self._n_expected_features = 0
             return
 
         available_idx = {name: i for i, name in enumerate(names)}
@@ -104,6 +111,9 @@ class Predictor:
             raw_map.append(idx)
             if idx == -1:
                 missing.append(name)
+
+        self._n_missing_features = len(missing)
+        self._n_expected_features = len(expected)
 
         if missing:
             logger.warning("Missing features for model (filled with 0): %s", missing)
@@ -175,7 +185,12 @@ class Predictor:
         direction_idx = int(np.argmax(mean_probs))
         raw_confidence = float(mean_probs[direction_idx])
 
-        # Reduce confidence proportionally to uncertainty
+        # 1. Missing feature penalty (data quality discount, applied first)
+        if self._n_missing_features > 0 and self._n_expected_features > 0:
+            missing_ratio = self._n_missing_features / self._n_expected_features
+            raw_confidence *= 1.0 - (missing_ratio * 0.5)
+
+        # 2. Reduce confidence proportionally to uncertainty
         uncertainty_penalty = min(1.0, prob_variance * 10)
         confidence = raw_confidence * (1.0 - uncertainty_penalty)
 

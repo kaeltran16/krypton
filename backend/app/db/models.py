@@ -322,6 +322,7 @@ class OrderFlowSnapshot(Base):
 
     __table_args__ = (
         Index("ix_oflow_pair_ts", "pair", "timestamp"),
+        UniqueConstraint("pair", "timestamp", name="uq_oflow_pair_ts"),
     )
 
 

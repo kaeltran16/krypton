@@ -1011,7 +1011,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     if ml_predictor is not None:
         try:
-            from app.ml.features import build_feature_matrix
+            from app.ml.features import build_feature_matrix, get_feature_names
             from app.ml.utils import bucket_timestamp, compute_per_candle_regime
 
             # Compute per-candle regime if model needs it
@@ -1116,6 +1116,15 @@ async def run_pipeline(app: FastAPI, candle: dict):
                 trend_conviction=ml_conviction,
                 btc_candles=ml_btc_df,
             )
+
+            # Update predictor with actual runtime feature availability
+            actual_names = get_feature_names(
+                flow_used=flow_for_features is not None,
+                regime_used=ml_regime is not None,
+                btc_used=ml_btc_df is not None,
+            )
+            ml_predictor.set_available_features(actual_names)
+
             ml_prediction = ml_predictor.predict(feature_matrix)
 
             ml_direction = ml_prediction["direction"]
