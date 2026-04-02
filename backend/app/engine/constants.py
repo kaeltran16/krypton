@@ -214,10 +214,15 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "pipeline_stage": "Combiner -> ML Gate",
         "range": "0.50-0.85 — higher = only very confident ML predictions influence signals",
     },
-    "ml_blend_weight": {
-        "description": "How much weight the ML model's prediction gets when blended with the traditional score",
+    "ml_weight_min": {
+        "description": "Minimum ML weight at the confidence threshold — floor of the adaptive ramp",
         "pipeline_stage": "Combiner -> ML Blending",
-        "range": "0.0-1.0 — 0 = ignore ML, 1 = fully trust ML",
+        "range": "0.0-0.15 — higher = more ML influence even at low confidence",
+    },
+    "ml_weight_max": {
+        "description": "Maximum ML weight at full confidence — ceiling of the adaptive ramp",
+        "pipeline_stage": "Combiner -> ML Blending",
+        "range": "0.15-0.40 — higher = more ML influence at high confidence",
     },
     # ── Technical Indicators ──
     "adx_period": {

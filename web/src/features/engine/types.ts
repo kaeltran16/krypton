@@ -70,7 +70,10 @@ export interface EngineParameters {
   onchain: Record<string, Record<string, ParameterValue | Record<string, ParameterValue>>>;
   blending: {
     source_weights: Record<string, ParameterValue>;
-    ml_blend_weight: ParameterValue;
+    ml: {
+      weight_min: ParameterValue;
+      weight_max: ParameterValue;
+    };
     thresholds: Record<string, ParameterValue>;
     llm_factor_weights: Record<string, ParameterValue>;
     llm_factor_cap: ParameterValue;

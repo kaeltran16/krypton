@@ -12,7 +12,8 @@ def test_build_engine_snapshot_keys():
         engine_flow_weight = 0.22
         engine_onchain_weight = 0.23
         engine_pattern_weight = 0.15
-        engine_ml_weight = 0.25
+        engine_ml_weight_min = 0.05
+        engine_ml_weight_max = 0.30
         engine_signal_threshold = 40
         engine_llm_threshold = 40
         ml_confidence_threshold = 0.65

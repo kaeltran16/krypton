@@ -47,7 +47,10 @@ async def get_parameters(request: Request, _key: str = require_auth()):
             "onchain": _configurable(settings.engine_onchain_weight),
             "pattern": _configurable(settings.engine_pattern_weight),
         },
-        "ml_blend_weight": _configurable(settings.engine_ml_weight),
+        "ml": {
+            "weight_min": _configurable(settings.engine_ml_weight_min),
+            "weight_max": _configurable(settings.engine_ml_weight_max),
+        },
         "thresholds": {
             "signal": _configurable(settings.engine_signal_threshold),
             "llm": _configurable(settings.engine_llm_threshold),
@@ -164,7 +167,8 @@ _PIPELINE_SETTINGS_MAP = {
     "blending.source_weights.flow": ("engine_flow_weight", "flow_weight"),
     "blending.source_weights.onchain": ("engine_onchain_weight", "onchain_weight"),
     "blending.source_weights.pattern": ("engine_pattern_weight", "pattern_weight"),
-    "blending.ml_blend_weight": ("engine_ml_weight", "ml_blend_weight"),
+    "blending.ml.weight_min": ("engine_ml_weight_min", "ml_weight_min"),
+    "blending.ml.weight_max": ("engine_ml_weight_max", "ml_weight_max"),
     "blending.thresholds.signal": ("engine_signal_threshold", "signal_threshold"),
     "blending.thresholds.llm": ("engine_llm_threshold", "llm_threshold"),
     "blending.thresholds.ml_confidence": ("ml_confidence_threshold", "ml_confidence_threshold"),

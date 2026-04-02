@@ -241,7 +241,6 @@ class PipelineSettings(Base):
     flow_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     onchain_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     pattern_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml_blend_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml_weight_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml_weight_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml_confidence_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)

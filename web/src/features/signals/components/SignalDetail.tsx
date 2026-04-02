@@ -211,6 +211,7 @@ function SnapshotContent({ snapshot }: { snapshot: Record<string, unknown> }) {
   const meanRev = snapshot.mean_reversion as Record<string, unknown> | undefined;
   const llmWeights = snapshot.llm_factor_weights as Record<string, number> | undefined;
   const confluence = snapshot.confluence as Record<string, number> | undefined;
+  const mlRamp = snapshot.ml_weight_ramp as Record<string, number> | undefined;
 
   return (
         <div className="px-5 pb-5 space-y-4">
@@ -221,8 +222,11 @@ function SnapshotContent({ snapshot }: { snapshot: Record<string, unknown> }) {
                 {Object.entries(weights).map(([k, v]) => (
                   <SnapPill key={k} label={k} value={fmtPct(v)} />
                 ))}
-                {snapshot.ml_blend_weight != null && (
-                  <SnapPill label="ml" value={fmtPct(snapshot.ml_blend_weight as number)} />
+                {mlRamp != null && (
+                  <>
+                    <SnapPill label="ml_min" value={fmtPct(mlRamp.min)} />
+                    <SnapPill label="ml_max" value={fmtPct(mlRamp.max)} />
+                  </>
                 )}
               </div>
             </SnapGroup>

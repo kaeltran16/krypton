@@ -126,8 +126,7 @@ class Settings(BaseSettings):
     ml_confidence_threshold: float = 0.65
     ml_checkpoint_dir: str = "models"
 
-    # unified ML blending
-    engine_ml_weight: float = 0.25
+    # unified ML blending (adaptive weight ramp)
     engine_ml_weight_min: float = 0.05
     engine_ml_weight_max: float = 0.30
     ensemble_disagreement_scale: float = 8.0

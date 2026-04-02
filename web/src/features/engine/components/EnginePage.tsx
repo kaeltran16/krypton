@@ -217,10 +217,11 @@ export default function EnginePage() {
         )}
       </div>
       <SectionLabel as="h3" color="primary" className="-mb-1">Scoring Thresholds</SectionLabel>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <MetricCard label="Signal" value={formatThreshold(params.blending.thresholds.signal_threshold?.value)} />
         <MetricCard label="LLM" value={formatThreshold(params.blending.thresholds.llm_threshold?.value)} />
-        <MetricCard label="ML Blend" value={formatThreshold(params.blending.ml_blend_weight?.value)} />
+        <MetricCard label="ML Min" value={formatThreshold(params.blending.ml?.weight_min?.value)} />
+        <MetricCard label="ML Max" value={formatThreshold(params.blending.ml?.weight_max?.value)} />
       </div>
 
       <SectionLabel as="h3" color="primary" className="-mb-1">Source Weights</SectionLabel>
@@ -231,7 +232,8 @@ export default function EnginePage() {
       <SectionLabel as="h3" color="primary" className="-mb-1">Parameters</SectionLabel>
 
       <ParameterCategory title="Blending" variant="hero" defaultOpen descriptions={descriptions} onEdit={handleEdit}>
-        <ParameterRow name="ml_blend_weight" value={params.blending.ml_blend_weight.value} source={params.blending.ml_blend_weight.source} descriptions={descriptions} dotPath="blending.ml_blend_weight" onEdit={handleEdit} />
+        <ParameterRow name="ml_weight_min" value={params.blending.ml.weight_min.value} source={params.blending.ml.weight_min.source} descriptions={descriptions} dotPath="blending.ml.weight_min" onEdit={handleEdit} />
+        <ParameterRow name="ml_weight_max" value={params.blending.ml.weight_max.value} source={params.blending.ml.weight_max.source} descriptions={descriptions} dotPath="blending.ml.weight_max" onEdit={handleEdit} />
         {Object.entries(params.blending.thresholds).map(([k, v], i, arr) => (
           <ParameterRow key={k} name={k} value={v.value} source={v.source} descriptions={descriptions} dotPath={`blending.thresholds.${k}`} onEdit={handleEdit} last={i === arr.length - 1} />
         ))}
