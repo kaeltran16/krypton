@@ -666,6 +666,7 @@ async def start_backfill(body: BackfillRequest, request: Request):
 
     job_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backfill_jobs[job_id] = {"status": "running", "progress": {}}
+    manager = request.app.state.manager
 
     async def _run():
         try:
@@ -738,14 +739,31 @@ async def start_backfill(body: BackfillRequest, request: Request):
                         # Rate limit: OKX allows 20 req/2s on this endpoint
                         await asyncio.sleep(0.15)
 
+                        if total % 5000 == 0 or total == batch_count:
+                            await manager.broadcast_event({
+                                "type": "backfill_update",
+                                "job_id": job_id,
+                                **backfill_jobs[job_id],
+                            })
+
                     pair_results[pair] = total
                     backfill_jobs[job_id]["progress"][pair] = total
                     logger.info(f"Backfilled {total} candles for {pair}:{body.timeframe}")
 
             backfill_jobs[job_id] = {"status": "completed", "result": pair_results}
+            await manager.broadcast_event({
+                "type": "backfill_update",
+                "job_id": job_id,
+                **backfill_jobs[job_id],
+            })
         except Exception as e:
             logger.error(f"Backfill failed: {e}", exc_info=True)
             backfill_jobs[job_id] = {"status": "failed", "error": str(e)}
+            await manager.broadcast_event({
+                "type": "backfill_update",
+                "job_id": job_id,
+                **backfill_jobs[job_id],
+            })
 
     asyncio.create_task(_run())
     return {"job_id": job_id, "status": "running"}

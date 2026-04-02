@@ -45,6 +45,7 @@ class OptimizerState:
         self.active_shadow_proposal_id: int | None = None
         self.last_optimized: dict[str, int] = {}  # group -> resolved_count at last optimization
         self._pf_at_promotion: dict[int, float] = {}  # proposal_id -> PF when promoted
+        self.last_checked_count: int = 0
 
     def record_resolution(self, pnl_pct: float) -> None:
         self.resolved_count += 1
@@ -735,173 +736,177 @@ def sweep_threshold_1d(
     return best_threshold, best_fitness
 
 
-async def run_optimizer_loop(app) -> None:
-    """Background loop that monitors parameter fitness and manages optimization."""
-    import asyncio
+async def run_optimizer_check(app) -> None:
+    """Execute one cycle of optimizer evaluation. Safe to call from any context."""
+    try:
+        state: OptimizerState = app.state.optimizer
+        db = app.state.db
+        manager = app.state.manager
 
-    state: OptimizerState = app.state.optimizer
-    db = app.state.db
-    manager = app.state.manager
-    last_checked_count = 0
+        if state.resolved_count <= state.last_checked_count:
+            return
+        state.last_checked_count = state.resolved_count
+
+        # 1. Check rollback on recently promoted proposals
+        async with db.session_factory() as session:
+            result = await session.execute(
+                select(ParameterProposal)
+                .where(ParameterProposal.status == "promoted")
+                .order_by(ParameterProposal.promoted_at.desc())
+                .limit(3)
+            )
+            for proposal in result.scalars().all():
+                if state.check_rollback_needed(proposal.id):
+                    await rollback_proposal(session, proposal.id)
+                    await session.commit()
+                    logger.warning(
+                        "Auto-rolling back proposal %d (%s) — PF dropped",
+                        proposal.id, proposal.parameter_group,
+                    )
+                    await manager.broadcast_event({
+                        "type": "optimizer_update",
+                        "event": "proposal_rolled_back",
+                        "proposal_id": proposal.id,
+                        "reason": "auto_rollback_pf_drop",
+                    })
+
+        # 2. Check shadow completion
+        if state.active_shadow_proposal_id:
+            async with db.session_factory() as session:
+                progress = await get_shadow_progress(
+                    session, state.active_shadow_proposal_id
+                )
+                if progress["complete"]:
+                    shadow_results = await session.execute(
+                        select(ShadowResult)
+                        .where(ShadowResult.proposal_id == state.active_shadow_proposal_id)
+                        .where(ShadowResult.shadow_outcome.is_not(None))
+                    )
+                    shadows = shadow_results.scalars().all()
+
+                    signal_ids = [sr.signal_id for sr in shadows]
+                    if signal_ids:
+                        real_signals = await session.execute(
+                            select(Signal)
+                            .where(Signal.id.in_(signal_ids))
+                        )
+                        real_pnl_map = {
+                            s.id: s.outcome_pnl_pct or 0
+                            for s in real_signals.scalars().all()
+                        }
+
+                        current_pnls = [real_pnl_map.get(sr.signal_id, 0) for sr in shadows]
+                        shadow_pnls = []
+                        for sr in shadows:
+                            if sr.shadow_outcome in ("tp1_hit", "tp2_hit"):
+                                shadow_pnls.append(abs(sr.shadow_tp1 - sr.shadow_entry) / sr.shadow_entry * 100)
+                            elif sr.shadow_outcome == "sl_hit":
+                                shadow_pnls.append(-abs(sr.shadow_sl - sr.shadow_entry) / sr.shadow_entry * 100)
+                            else:
+                                shadow_pnls.append(0)
+
+                        decision = evaluate_shadow_results(current_pnls, shadow_pnls)
+
+                        proposal_id = state.active_shadow_proposal_id
+                        shadow_metrics = {
+                            "current_pf": _compute_pf(current_pnls),
+                            "shadow_pf": _compute_pf(shadow_pnls),
+                            "decision": decision,
+                            "signals_evaluated": len(shadows),
+                        }
+
+                        if decision == "promote":
+                            await promote_proposal(session, proposal_id, shadow_metrics)
+                            state.active_shadow_proposal_id = None
+                            pf = state.profit_factor()
+                            if pf is not None:
+                                state._pf_at_promotion[proposal_id] = pf
+                            logger.info("Auto-promoted proposal %d", proposal_id)
+                        elif decision == "reject":
+                            await reject_proposal(
+                                session, proposal_id,
+                                reason="shadow_underperformed",
+                                shadow_metrics=shadow_metrics,
+                            )
+                            state.active_shadow_proposal_id = None
+                            logger.info("Auto-rejected proposal %d", proposal_id)
+
+                        await session.commit()
+                        await manager.broadcast_event({
+                            "type": "optimizer_update",
+                            "event": f"shadow_{decision}",
+                            "proposal_id": proposal_id,
+                            "shadow_metrics": shadow_metrics,
+                        })
+
+            return  # shadow check done, skip group eval this cycle
+
+        # 3. Find groups needing evaluation (respect priority)
+        for layer in PRIORITY_LAYERS:
+            for group_name in sorted(layer):
+                if not state.needs_eval(group_name):
+                    continue
+                if not state.can_propose(group_name):
+                    continue
+
+                logger.info("Running counterfactual eval for group: %s", group_name)
+                result = await run_counterfactual_eval(app, group_name)
+
+                if result:
+                    candidate = result["candidate"]
+                    metrics = result["metrics"]
+                    current_pf = state.profit_factor() or 0
+                    proposed_pf = metrics.get("profit_factor", 0)
+
+                    if current_pf > 0:
+                        improvement = (proposed_pf - current_pf) / current_pf
+                    else:
+                        improvement = 1.0 if proposed_pf > 0 else 0
+
+                    if improvement >= OPTIMIZER_CONFIG["improvement_threshold"]:
+                        changes = {}
+                        for param_key, proposed_val in candidate.items():
+                            changes[param_key] = {
+                                "current": None,
+                                "proposed": proposed_val,
+                            }
+
+                        async with db.session_factory() as session:
+                            proposal = await create_proposal(
+                                session, group_name, changes, metrics
+                            )
+                            await session.commit()
+                            logger.info(
+                                "Created proposal %d for %s (PF improvement: %.1f%%)",
+                                proposal.id, group_name, improvement * 100,
+                            )
+                            await manager.broadcast_event({
+                                "type": "optimizer_update",
+                                "event": "proposal_created",
+                                "proposal_id": proposal.id,
+                                "group": group_name,
+                            })
+
+                state.last_optimized[group_name] = state.resolved_count
+                break  # only evaluate one group per cycle
+            else:
+                continue
+            break
+
+    except Exception:
+        logger.exception("Optimizer check error")
+
+
+async def run_optimizer_loop(app) -> None:
+    """Fallback loop — calls run_optimizer_check every 300s as safety net."""
+    import asyncio
 
     while True:
         try:
-            await asyncio.sleep(60)
-
-            if state.resolved_count <= last_checked_count:
-                continue
-            last_checked_count = state.resolved_count
-
-            # 1. Check rollback on recently promoted proposals
-            async with db.session_factory() as session:
-                result = await session.execute(
-                    select(ParameterProposal)
-                    .where(ParameterProposal.status == "promoted")
-                    .order_by(ParameterProposal.promoted_at.desc())
-                    .limit(3)
-                )
-                for proposal in result.scalars().all():
-                    if state.check_rollback_needed(proposal.id):
-                        await rollback_proposal(session, proposal.id)
-                        await session.commit()
-                        logger.warning(
-                            "Auto-rolling back proposal %d (%s) — PF dropped",
-                            proposal.id, proposal.parameter_group,
-                        )
-                        await manager.broadcast_event({
-                            "type": "optimizer_update",
-                            "event": "proposal_rolled_back",
-                            "proposal_id": proposal.id,
-                            "reason": "auto_rollback_pf_drop",
-                        })
-
-            # 2. Check shadow completion
-            if state.active_shadow_proposal_id:
-                async with db.session_factory() as session:
-                    progress = await get_shadow_progress(
-                        session, state.active_shadow_proposal_id
-                    )
-                    if progress["complete"]:
-                        shadow_results = await session.execute(
-                            select(ShadowResult)
-                            .where(ShadowResult.proposal_id == state.active_shadow_proposal_id)
-                            .where(ShadowResult.shadow_outcome.is_not(None))
-                        )
-                        shadows = shadow_results.scalars().all()
-
-                        signal_ids = [sr.signal_id for sr in shadows]
-                        if signal_ids:
-                            real_signals = await session.execute(
-                                select(Signal)
-                                .where(Signal.id.in_(signal_ids))
-                            )
-                            real_pnl_map = {
-                                s.id: s.outcome_pnl_pct or 0
-                                for s in real_signals.scalars().all()
-                            }
-
-                            current_pnls = [real_pnl_map.get(sr.signal_id, 0) for sr in shadows]
-                            shadow_pnls = []
-                            for sr in shadows:
-                                if sr.shadow_outcome in ("tp1_hit", "tp2_hit"):
-                                    shadow_pnls.append(abs(sr.shadow_tp1 - sr.shadow_entry) / sr.shadow_entry * 100)
-                                elif sr.shadow_outcome == "sl_hit":
-                                    shadow_pnls.append(-abs(sr.shadow_sl - sr.shadow_entry) / sr.shadow_entry * 100)
-                                else:
-                                    shadow_pnls.append(0)
-
-                            decision = evaluate_shadow_results(current_pnls, shadow_pnls)
-
-                            proposal_id = state.active_shadow_proposal_id
-                            shadow_metrics = {
-                                "current_pf": _compute_pf(current_pnls),
-                                "shadow_pf": _compute_pf(shadow_pnls),
-                                "decision": decision,
-                                "signals_evaluated": len(shadows),
-                            }
-
-                            if decision == "promote":
-                                await promote_proposal(session, proposal_id, shadow_metrics)
-                                state.active_shadow_proposal_id = None
-                                pf = state.profit_factor()
-                                if pf is not None:
-                                    state._pf_at_promotion[proposal_id] = pf
-                                logger.info("Auto-promoted proposal %d", proposal_id)
-                            elif decision == "reject":
-                                await reject_proposal(
-                                    session, proposal_id,
-                                    reason="shadow_underperformed",
-                                    shadow_metrics=shadow_metrics,
-                                )
-                                state.active_shadow_proposal_id = None
-                                logger.info("Auto-rejected proposal %d", proposal_id)
-
-                            await session.commit()
-                            await manager.broadcast_event({
-                                "type": "optimizer_update",
-                                "event": f"shadow_{decision}",
-                                "proposal_id": proposal_id,
-                                "shadow_metrics": shadow_metrics,
-                            })
-
-                continue
-
-            # 3. Find groups needing evaluation (respect priority)
-            for layer in PRIORITY_LAYERS:
-                for group_name in sorted(layer):
-                    if not state.needs_eval(group_name):
-                        continue
-                    if not state.can_propose(group_name):
-                        continue
-
-                    logger.info("Running counterfactual eval for group: %s", group_name)
-                    result = await run_counterfactual_eval(app, group_name)
-
-                    if result:
-                        candidate = result["candidate"]
-                        metrics = result["metrics"]
-                        current_pf = state.profit_factor() or 0
-                        proposed_pf = metrics.get("profit_factor", 0)
-
-                        if current_pf > 0:
-                            improvement = (proposed_pf - current_pf) / current_pf
-                        else:
-                            improvement = 1.0 if proposed_pf > 0 else 0
-
-                        if improvement >= OPTIMIZER_CONFIG["improvement_threshold"]:
-                            group = get_group(group_name)
-                            changes = {}
-                            for param_key, proposed_val in candidate.items():
-                                changes[param_key] = {
-                                    "current": None,
-                                    "proposed": proposed_val,
-                                }
-
-                            async with db.session_factory() as session:
-                                proposal = await create_proposal(
-                                    session, group_name, changes, metrics
-                                )
-                                await session.commit()
-                                logger.info(
-                                    "Created proposal %d for %s (PF improvement: %.1f%%)",
-                                    proposal.id, group_name, improvement * 100,
-                                )
-                                await manager.broadcast_event({
-                                    "type": "optimizer_update",
-                                    "event": "proposal_created",
-                                    "proposal_id": proposal.id,
-                                    "group": group_name,
-                                })
-
-                    state.last_optimized[group_name] = state.resolved_count
-                    break  # Only evaluate one group per cycle
-                else:
-                    continue
-                break
-
+            await asyncio.sleep(300)
+            await run_optimizer_check(app)
         except asyncio.CancelledError:
             logger.info("Optimizer loop cancelled")
             break
         except Exception:
-            logger.exception("Optimizer loop error")
-            await asyncio.sleep(300)
+            logger.exception("Optimizer fallback loop error")

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, type MLTrainRequest, type MLTrainJob, type MLBackfillJob } from "../../../shared/lib/api";
 import { SegmentedControl } from "../../../shared/components/SegmentedControl";
+import { useMLStore } from "../store";
 import { SetupTab } from "./SetupTab";
 import { TrainingTab } from "./TrainingTab";
 import { ResultsTab } from "./ResultsTab";
@@ -100,17 +101,14 @@ export function MLTrainingView() {
       });
   }, []);
 
-  // Poll for backfill progress
+  // subscribe to backfill updates from WS via Zustand store
+  const wsBackfillStatus = useMLStore((s) => s.wsBackfillStatus);
   useEffect(() => {
-    if (!backfillJob || backfillJob.status !== "running") return;
-    const interval = setInterval(async () => {
-      try {
-        const updated = await api.getMLBackfillStatus(backfillJob.job_id);
-        setBackfillJob(updated as MLBackfillJob);
-      } catch { /* ignore */ }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [backfillJob?.job_id, backfillJob?.status]);
+    if (!wsBackfillStatus || !backfillJob) return;
+    if (wsBackfillStatus.job_id === backfillJob.job_id) {
+      setBackfillJob(wsBackfillStatus as MLBackfillJob);
+    }
+  }, [wsBackfillStatus, backfillJob?.job_id]);
 
   return (
     <div className="p-3 space-y-4">

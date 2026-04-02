@@ -37,6 +37,8 @@ def bt_app():
     mock_settings.jwt_secret = "test-jwt-secret"
     app.state.settings = mock_settings
     app.state.db = _mock_db()
+    app.state.manager = MagicMock()
+    app.state.manager.broadcast_event = AsyncMock()
     app.state.import_jobs = {}
     app.state.backtest_cancel_flags = {}
     app.include_router(backtest_router)

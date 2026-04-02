@@ -68,3 +68,31 @@ class AccountPoller:
                 )
             except Exception as e:
                 logger.debug(f"Portfolio alert evaluation error: {e}")
+
+        # broadcast portfolio update to WS clients
+        try:
+            equity = balance["total_equity"]
+            available = 0.0
+            for c in balance.get("currencies", []):
+                if c["currency"] == "USDT":
+                    available = c["available"]
+                    break
+            used_margin = sum(p.get("margin", 0) for p in (positions or []))
+            total_exposure = sum(
+                abs(p.get("size", 0) * p.get("mark_price", 0))
+                for p in (positions or [])
+            )
+            margin_utilization = (used_margin / equity * 100) if equity > 0 else 0
+
+            await self.manager.broadcast_event({
+                "type": "account_update",
+                "total_equity": equity,
+                "unrealized_pnl": balance["unrealized_pnl"],
+                "available_balance": round(available, 2),
+                "used_margin": round(used_margin, 2),
+                "total_exposure": round(total_exposure, 2),
+                "margin_utilization": round(margin_utilization, 1),
+                "positions": positions or [],
+            })
+        except Exception as e:
+            logger.debug(f"Portfolio broadcast failed: {e}")

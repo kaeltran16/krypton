@@ -270,3 +270,33 @@ def test_should_reenable_still_negative():
     history = [-0.2, -0.15, -0.1, -0.12, -0.08]
     assert compute_ew_ic(history) < IC_REENABLE_THRESHOLD
     assert should_reenable_source(history) is False
+
+
+@pytest.mark.asyncio
+async def test_run_optimizer_check_skips_when_no_new_resolutions(app):
+    """Optimizer check returns immediately if no signals resolved since last check."""
+    from app.engine.optimizer import run_optimizer_check
+
+    app.state.optimizer.resolved_count = 5
+    app.state.optimizer.last_checked_count = 5
+
+    await run_optimizer_check(app)
+
+    assert app.state.optimizer.last_checked_count == 5
+
+
+@pytest.mark.asyncio
+async def test_run_optimizer_check_updates_last_checked(app):
+    """Optimizer check updates last_checked_count when new resolutions exist."""
+    from app.engine.optimizer import run_optimizer_check
+
+    app.state.optimizer.resolved_count = 10
+    app.state.optimizer.last_checked_count = 5
+
+    # will fail on DB access (expected), but last_checked_count should update first
+    try:
+        await run_optimizer_check(app)
+    except Exception:
+        pass
+
+    assert app.state.optimizer.last_checked_count == 10

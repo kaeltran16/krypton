@@ -45,6 +45,8 @@ interface BacktestState {
   importLoading: boolean;
   startImport: (lookbackDays: number) => Promise<void>;
   pollImport: (jobId: string) => void;
+  onBacktestUpdate: (run: BacktestRun) => void;
+  onImportUpdate: (status: { job_id: string; status: string; total_imported: number }) => void;
 }
 
 const defaultConfig: BacktestConfig = {
@@ -63,9 +65,6 @@ const defaultConfig: BacktestConfig = {
   ml_enabled: false,
   ml_confidence_threshold: 65,
 };
-
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-let importPollTimer: ReturnType<typeof setInterval> | null = null;
 
 export const useBacktestStore = create<BacktestState>((set, get) => ({
   tab: "setup",
@@ -108,29 +107,29 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
   },
 
   pollRun: (runId) => {
-    get().stopPolling();
-    const poll = async () => {
-      try {
-        const run = await api.getBacktestRun(runId);
-        set({ activeRun: run });
-        if (run.status !== "running") {
-          get().stopPolling();
-          set({ runLoading: false, tab: "results" });
-          get().fetchRuns();
-        }
-      } catch (e: any) {
-        get().stopPolling();
-        set({ runLoading: false, runError: e.message });
+    // initial fetch only — real-time updates come via WS
+    api.getBacktestRun(runId).then((run) => {
+      set({ activeRun: run });
+      if (run.status !== "running") {
+        set({ runLoading: false, tab: "results" });
+        get().fetchRuns();
       }
-    };
-    poll();
-    pollTimer = setInterval(poll, 2000);
+    }).catch((e: any) => {
+      set({ runLoading: false, runError: e.message });
+    });
   },
 
   stopPolling: () => {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
+    // no-op — polling removed
+  },
+
+  onBacktestUpdate: (run) => {
+    const { activeRun } = get();
+    if (!activeRun || String(activeRun.id) !== String(run.id)) return;
+    set({ activeRun: run as BacktestRun });
+    if (run.status !== "running") {
+      set({ runLoading: false, tab: "results" });
+      get().fetchRuns();
     }
   },
 
@@ -216,23 +215,21 @@ export const useBacktestStore = create<BacktestState>((set, get) => ({
   },
 
   pollImport: (jobId) => {
-    if (importPollTimer) clearInterval(importPollTimer);
-    const poll = async () => {
-      try {
-        const status = await api.getImportStatus(jobId);
-        set({ importStatus: status });
-        if (status.status !== "running") {
-          if (importPollTimer) clearInterval(importPollTimer);
-          importPollTimer = null;
-          set({ importLoading: false });
-        }
-      } catch {
-        if (importPollTimer) clearInterval(importPollTimer);
-        importPollTimer = null;
+    // initial fetch only — real-time updates come via WS
+    api.getImportStatus(jobId).then((status) => {
+      set({ importStatus: status });
+      if (status.status !== "running") {
         set({ importLoading: false });
       }
-    };
-    poll();
-    importPollTimer = setInterval(poll, 2000);
+    }).catch(() => {
+      set({ importLoading: false });
+    });
+  },
+
+  onImportUpdate: (status) => {
+    set({ importStatus: status });
+    if (status.status !== "running") {
+      set({ importLoading: false });
+    }
   },
 }));

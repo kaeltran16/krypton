@@ -1,12 +1,15 @@
 import { useEffect, useRef } from "react";
 import { WebSocketManager } from "../../../shared/lib/websocket";
 import { WS_BASE_URL } from "../../../shared/lib/constants";
-import { getWsToken } from "../../auth/hooks/useAuth";
 import { useSignalStore } from "../store";
 import { useSettingsStore } from "../../settings/store";
 import { useNewsStore } from "../../news/store";
 import { useAlertStore } from "../../alerts/store";
 import { useEngineStore } from "../../engine/store";
+import { useBacktestStore } from "../../backtest/store";
+import { useDashboardStore } from "../../dashboard/store";
+import { useHomeStore } from "../../home/store";
+import { useMLStore } from "../../ml/store";
 import { api } from "../../../shared/lib/api";
 import { hapticPulse } from "../../../shared/lib/haptics";
 
@@ -25,24 +28,23 @@ export function useSignalWebSocket() {
     const currentPairs = JSON.parse(pairsKey);
     const currentTimeframes = JSON.parse(timeframesKey);
 
-    // load existing signals from the database
     api.getSignals({ limit: 50 }).then((signals) => {
       useSignalStore.getState().setSignals(signals);
     }).catch(() => {});
 
-    const token = getWsToken();
-    const params = new URLSearchParams();
-    if (token) params.set("token", token);
-    const qs = params.toString();
-
-    const ws = new WebSocketManager(
-      `${WS_BASE_URL}/ws/signals${qs ? `?${qs}` : ""}`,
-    );
+    const ws = new WebSocketManager(`${WS_BASE_URL}/ws/signals`);
     wsRef.current = ws;
 
-    ws.onConnected = () => {
-      useSignalStore.getState().setConnected(true);
+    ws.onConnected = async () => {
+      try {
+        const { token } = await api.getWSToken();
+        ws.send(JSON.stringify({ type: "auth", token }));
+      } catch {
+        // auth failed — WS will be closed by server after timeout
+        return;
+      }
       ws.send(JSON.stringify({ type: "subscribe", pairs: currentPairs, timeframes: currentTimeframes }));
+      useSignalStore.getState().setConnected(true);
     };
 
     ws.onDisconnected = () => useSignalStore.getState().setConnected(false);
@@ -62,6 +64,21 @@ export function useSignalWebSocket() {
         useAlertStore.getState().addTriggeredAlert(data);
       } else if (data.type === "pipeline_scores" && data.scores) {
         useEngineStore.getState().pushScores(data.scores);
+      } else if (data.type === "backtest_update") {
+        const { type, ...run } = data;
+        useBacktestStore.getState().onBacktestUpdate(run);
+      } else if (data.type === "import_update") {
+        const { type, ...status } = data;
+        useBacktestStore.getState().onImportUpdate(status);
+      } else if (data.type === "account_update") {
+        const { type, ...portfolio } = data;
+        useDashboardStore.getState().onAccountUpdate(portfolio);
+      } else if (data.type === "stats_update") {
+        const { type, ...stats } = data;
+        useHomeStore.getState().onStatsUpdate(stats);
+      } else if (data.type === "backfill_update") {
+        const { type, ...status } = data;
+        useMLStore.getState().onBackfillUpdate(status);
       }
     };
 

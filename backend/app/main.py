@@ -31,7 +31,7 @@ from app.collector.ws_client import OKXWebSocketClient
 from app.collector.rest_poller import OKXRestPoller
 from app.api.routes import create_router
 from app.api.connections import ConnectionManager
-from app.api.ws import manager as ws_manager
+ws_manager = ConnectionManager()
 from app.engine.traditional import compute_technical_score, compute_order_flow_score
 from app.engine.constants import ORDER_FLOW_ASSET_SCALES
 from app.engine.combiner import compute_preliminary_score, compute_confidence_tier, compute_llm_contribution, compute_final_score, aggregate_dual_pass, calculate_levels, blend_with_ml, compute_agreement, apply_agreement_factor, scale_atr_multipliers
@@ -1527,6 +1527,21 @@ async def handle_candle(app: FastAPI, candle: dict):
         lambda t: _pipeline_done_callback(t, app.state.pipeline_tasks)
     )
 
+    # trigger outcome check on confirmed candle (throttled)
+    now = time.monotonic()
+    last = getattr(app.state, '_last_outcome_check', 0.0)
+    if now - last > 60:
+        app.state._last_outcome_check = now
+        asyncio.create_task(_guarded_outcome_check(app))
+
+
+async def _guarded_outcome_check(app: FastAPI):
+    """Run check_pending_signals as a background task with error isolation."""
+    try:
+        await check_pending_signals(app)
+    except Exception as e:
+        logger.error(f"Background outcome check failed: {e}")
+
 
 async def handle_candle_tick(app: FastAPI, candle: dict):
     """Handle all candle ticks (confirmed and unconfirmed)."""
@@ -1793,6 +1808,27 @@ async def check_pending_signals(app: FastAPI):
                 await tracker.check_optimization_triggers(
                     trigger_session, resolved_pairs_timeframes, settings=settings
                 )
+
+        # trigger optimizer check after resolution batch
+        if resolved_pairs_timeframes:
+            try:
+                from app.engine.optimizer import run_optimizer_check
+                await run_optimizer_check(app)
+            except Exception as e:
+                logger.debug(f"Optimizer check after resolution failed: {e}")
+
+        # broadcast stats update to WS clients
+        if resolved_pairs_timeframes:
+            try:
+                manager = app.state.manager
+                redis = app.state.redis
+                from app.api.routes import compute_signal_stats
+                async with db.session_factory() as stats_session:
+                    stats = await compute_signal_stats(stats_session)
+                await manager.broadcast_event({"type": "stats_update", **stats})
+                await redis.delete("signal_stats:7d")
+            except Exception as e:
+                logger.debug(f"Stats broadcast failed: {e}")
 
         # ── IC pruning: daily computation ──
         last_ic = getattr(app.state, "last_ic_computed_at", None)
@@ -2079,15 +2115,17 @@ async def lifespan(app: FastAPI):
     app.state.ws_task = ws_task
     poller_task = asyncio.create_task(rest_poller.run())
 
-    async def outcome_loop():
+    async def outcome_fallback_loop():
+        """Safety-net loop for outcome checks when no candles arrive."""
         while True:
+            await asyncio.sleep(300)
             try:
+                app.state._last_outcome_check = time.monotonic()
                 await check_pending_signals(app)
             except Exception as e:
-                logger.error(f"Outcome check failed: {e}")
-            await asyncio.sleep(60)
+                logger.error(f"Outcome fallback check failed: {e}")
 
-    outcome_task = asyncio.create_task(outcome_loop())
+    outcome_fallback_task = asyncio.create_task(outcome_fallback_loop())
 
     # On-chain collector
     onchain_task = None
@@ -2262,7 +2300,7 @@ async def lifespan(app: FastAPI):
     rest_poller.stop()
     ws_task.cancel()
     poller_task.cancel()
-    outcome_task.cancel()
+    outcome_fallback_task.cancel()
     optimizer_task.cancel()
     news_collector.stop()
     news_task.cancel()

@@ -11,6 +11,10 @@ class ConnectionManager:
 
     async def connect(self, ws: WebSocket, pairs: list[str], timeframes: list[str]):
         await ws.accept()
+        self.connect_existing(ws, pairs, timeframes)
+
+    def connect_existing(self, ws: WebSocket, pairs: list[str], timeframes: list[str]):
+        """Register an already-accepted WebSocket connection."""
         self.connections[ws] = {"pairs": pairs, "timeframes": timeframes}
         logger.info(f"Client connected. Total: {len(self.connections)}")
 

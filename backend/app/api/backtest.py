@@ -108,6 +108,7 @@ async def trigger_import(body: ImportRequest, request: Request):
     """Trigger historical candle import from OKX."""
     db = request.app.state.db
     import_jobs = _get_import_jobs(request.app)
+    manager = request.app.state.manager
 
     job_id = str(uuid4())
     import_jobs[job_id] = {"status": "running", "total_imported": 0, "errors": []}
@@ -132,8 +133,18 @@ async def trigger_import(body: ImportRequest, request: Request):
                 "total_imported": result["total_imported"],
                 "errors": result["errors"],
             }
+            await manager.broadcast_event({
+                "type": "import_update",
+                "job_id": job_id,
+                **import_jobs[job_id],
+            })
         except Exception as e:
             import_jobs[job_id] = {"status": "failed", "error": str(e)}
+            await manager.broadcast_event({
+                "type": "import_update",
+                "job_id": job_id,
+                **import_jobs[job_id],
+            })
 
     asyncio.create_task(_run())
     return {"job_id": job_id, "status": "running"}
@@ -156,6 +167,7 @@ async def start_backtest(body: RunRequest, request: Request):
     """Start a backtest run."""
     db = request.app.state.db
     cancel_flags = _get_cancel_flags(request.app)
+    manager = request.app.state.manager
 
     # Check concurrent run limit
     async with db.session_factory() as session:
@@ -291,6 +303,10 @@ async def start_backtest(body: RunRequest, request: Request):
                 run_row.status = final_status
                 run_row.results = {"stats": merged, "trades": all_trades}
                 await session.commit()
+                await session.refresh(run_row)
+                await manager.broadcast_event({
+                    "type": "backtest_update", **_run_to_dict(run_row),
+                })
 
         except Exception as e:
             logger.error(f"Backtest run {run_id} failed: {e}")
@@ -303,6 +319,10 @@ async def start_backtest(body: RunRequest, request: Request):
                     run_row.status = "failed"
                     run_row.results = {"error": str(e)}
                     await session.commit()
+                    await session.refresh(run_row)
+                    await manager.broadcast_event({
+                        "type": "backtest_update", **_run_to_dict(run_row),
+                    })
             except Exception:
                 pass
         finally:

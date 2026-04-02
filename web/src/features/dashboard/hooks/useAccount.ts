@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, type Portfolio } from "../../../shared/lib/api";
+import { useDashboardStore } from "../store";
 
-export function useAccount(pollInterval = 10000) {
+export function useAccount() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,11 +21,18 @@ export function useAccount(pollInterval = 10000) {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, pollInterval);
-    return () => clearInterval(id);
-  }, [refresh, pollInterval]);
+  }, [refresh]);
 
-  // Backward-compatible fields
+  const wsPortfolio = useDashboardStore((s) => s.wsPortfolio);
+  useEffect(() => {
+    if (wsPortfolio) {
+      setPortfolio(wsPortfolio);
+      setError(null);
+      setLoading(false);
+    }
+  }, [wsPortfolio]);
+
+  // backward-compatible fields
   const balance = portfolio
     ? {
         total_equity: portfolio.total_equity,

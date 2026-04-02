@@ -273,6 +273,102 @@ class JournalPatch(BaseModel):
     note: str | None = Field(None, max_length=500)
 
 
+async def compute_signal_stats(session, days: int = 7) -> dict:
+    """Compute signal stats from DB. Shared by REST endpoint and WS broadcast."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await session.execute(
+        select(Signal)
+        .where(Signal.created_at >= cutoff)
+        .where(Signal.outcome != "PENDING")
+    )
+    resolved = result.scalars().all()
+
+    if not resolved:
+        return {
+            "win_rate": 0, "avg_rr": 0, "total_resolved": 0,
+            "total_wins": 0, "total_losses": 0, "total_expired": 0,
+            "by_pair": {}, "by_timeframe": {}, "by_direction": {},
+            "equity_curve": [], "hourly_performance": _compute_hourly_performance([]),
+            "streaks": {"current": 0, "best_win": 0, "worst_loss": 0},
+            "performance": _compute_performance_metrics([]),
+            "drawdown_series": [],
+            "pnl_distribution": [],
+        }
+
+    wins = [s for s in resolved if s.outcome in WIN_OUTCOMES]
+    losses = [s for s in resolved if s.outcome == "SL_HIT"]
+    expired = [s for s in resolved if s.outcome == "EXPIRED"]
+
+    total = len(resolved)
+    win_count = len(wins)
+    win_rate = round(win_count / total * 100, 1) if total > 0 else 0
+
+    avg_win = sum(float(s.outcome_pnl_pct or 0) for s in wins) / max(len(wins), 1)
+    avg_loss = abs(sum(float(s.outcome_pnl_pct or 0) for s in losses) / max(len(losses), 1))
+    avg_rr = round(avg_win / max(avg_loss, 0.01), 2)
+
+    by_pair: dict[str, dict] = {}
+    for s in resolved:
+        p = by_pair.setdefault(s.pair, {"wins": 0, "losses": 0, "total": 0, "pnl_sum": 0.0})
+        p["total"] += 1
+        pnl = float(s.outcome_pnl_pct or 0)
+        p["pnl_sum"] += pnl
+        if s.outcome in WIN_OUTCOMES:
+            p["wins"] += 1
+        elif s.outcome == "SL_HIT":
+            p["losses"] += 1
+    for p in by_pair.values():
+        p["win_rate"] = round(p["wins"] / p["total"] * 100, 1)
+        p["avg_pnl"] = round(p["pnl_sum"] / p["total"], 4)
+        del p["pnl_sum"]
+
+    by_timeframe: dict[str, dict] = {}
+    for s in resolved:
+        t = by_timeframe.setdefault(s.timeframe, {"wins": 0, "total": 0})
+        t["total"] += 1
+        if s.outcome in WIN_OUTCOMES:
+            t["wins"] += 1
+    for t in by_timeframe.values():
+        t["win_rate"] = round(t["wins"] / t["total"] * 100, 1)
+
+    by_direction: dict[str, dict] = {}
+    for s in resolved:
+        d = by_direction.setdefault(s.direction, {"wins": 0, "losses": 0, "total": 0, "pnl_sum": 0.0})
+        d["total"] += 1
+        pnl = float(s.outcome_pnl_pct or 0)
+        d["pnl_sum"] += pnl
+        if s.outcome in WIN_OUTCOMES:
+            d["wins"] += 1
+        elif s.outcome == "SL_HIT":
+            d["losses"] += 1
+    for d in by_direction.values():
+        if d["total"] > 0:
+            d["win_rate"] = round(d["wins"] / d["total"] * 100, 1)
+            d["avg_pnl"] = round(d["pnl_sum"] / d["total"], 4)
+        else:
+            d["win_rate"] = 0.0
+            d["avg_pnl"] = 0.0
+        del d["pnl_sum"]
+
+    return {
+        "win_rate": win_rate,
+        "avg_rr": avg_rr,
+        "total_resolved": total,
+        "total_wins": win_count,
+        "total_losses": len(losses),
+        "total_expired": len(expired),
+        "by_pair": by_pair,
+        "by_timeframe": by_timeframe,
+        "by_direction": by_direction,
+        "equity_curve": _compute_equity_curve(resolved, downsample=days > 90),
+        "hourly_performance": _compute_hourly_performance(resolved),
+        "streaks": _compute_streaks(resolved),
+        "performance": _compute_performance_metrics(resolved),
+        "drawdown_series": _compute_drawdown_series(resolved),
+        "pnl_distribution": _compute_pnl_distribution(resolved),
+    }
+
+
 def create_router() -> APIRouter:
     router = APIRouter(prefix="/api")
     auth = require_auth()
@@ -345,101 +441,10 @@ def create_router() -> APIRouter:
 
         db = request.app.state.db
         async with db.session_factory() as session:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-            result = await session.execute(
-                select(Signal)
-                .where(Signal.created_at >= cutoff)
-                .where(Signal.outcome != "PENDING")
-            )
-            resolved = result.scalars().all()
+            stats = await compute_signal_stats(session, days)
 
-            if not resolved:
-                stats = {
-                    "win_rate": 0, "avg_rr": 0, "total_resolved": 0,
-                    "total_wins": 0, "total_losses": 0, "total_expired": 0,
-                    "by_pair": {}, "by_timeframe": {}, "by_direction": {},
-                    "equity_curve": [], "hourly_performance": _compute_hourly_performance([]),
-                    "streaks": {"current": 0, "best_win": 0, "worst_loss": 0},
-                    "performance": _compute_performance_metrics([]),
-                    "drawdown_series": [],
-                    "pnl_distribution": [],
-                }
-            else:
-                wins = [s for s in resolved if s.outcome in WIN_OUTCOMES]
-                losses = [s for s in resolved if s.outcome == "SL_HIT"]
-                expired = [s for s in resolved if s.outcome == "EXPIRED"]
-
-                total = len(resolved)
-                win_count = len(wins)
-                win_rate = round(win_count / total * 100, 1) if total > 0 else 0
-
-                avg_win = sum(float(s.outcome_pnl_pct or 0) for s in wins) / max(len(wins), 1)
-                avg_loss = abs(sum(float(s.outcome_pnl_pct or 0) for s in losses) / max(len(losses), 1))
-                avg_rr = round(avg_win / max(avg_loss, 0.01), 2)
-
-                by_pair: dict[str, dict] = {}
-                for s in resolved:
-                    p = by_pair.setdefault(s.pair, {"wins": 0, "losses": 0, "total": 0, "pnl_sum": 0.0})
-                    p["total"] += 1
-                    pnl = float(s.outcome_pnl_pct or 0)
-                    p["pnl_sum"] += pnl
-                    if s.outcome in WIN_OUTCOMES:
-                        p["wins"] += 1
-                    elif s.outcome == "SL_HIT":
-                        p["losses"] += 1
-                for p in by_pair.values():
-                    p["win_rate"] = round(p["wins"] / p["total"] * 100, 1)
-                    p["avg_pnl"] = round(p["pnl_sum"] / p["total"], 4)
-                    del p["pnl_sum"]
-
-                by_timeframe: dict[str, dict] = {}
-                for s in resolved:
-                    t = by_timeframe.setdefault(s.timeframe, {"wins": 0, "total": 0})
-                    t["total"] += 1
-                    if s.outcome in WIN_OUTCOMES:
-                        t["wins"] += 1
-                for t in by_timeframe.values():
-                    t["win_rate"] = round(t["wins"] / t["total"] * 100, 1)
-
-                by_direction: dict[str, dict] = {}
-                for s in resolved:
-                    d = by_direction.setdefault(s.direction, {"wins": 0, "losses": 0, "total": 0, "pnl_sum": 0.0})
-                    d["total"] += 1
-                    pnl = float(s.outcome_pnl_pct or 0)
-                    d["pnl_sum"] += pnl
-                    if s.outcome in WIN_OUTCOMES:
-                        d["wins"] += 1
-                    elif s.outcome == "SL_HIT":
-                        d["losses"] += 1
-                for d in by_direction.values():
-                    if d["total"] > 0:
-                        d["win_rate"] = round(d["wins"] / d["total"] * 100, 1)
-                        d["avg_pnl"] = round(d["pnl_sum"] / d["total"], 4)
-                    else:
-                        d["win_rate"] = 0.0
-                        d["avg_pnl"] = 0.0
-                    del d["pnl_sum"]
-
-                stats = {
-                    "win_rate": win_rate,
-                    "avg_rr": avg_rr,
-                    "total_resolved": total,
-                    "total_wins": win_count,
-                    "total_losses": len(losses),
-                    "total_expired": len(expired),
-                    "by_pair": by_pair,
-                    "by_timeframe": by_timeframe,
-                    "by_direction": by_direction,
-                    "equity_curve": _compute_equity_curve(resolved, downsample=days > 90),
-                    "hourly_performance": _compute_hourly_performance(resolved),
-                    "streaks": _compute_streaks(resolved),
-                    "performance": _compute_performance_metrics(resolved),
-                    "drawdown_series": _compute_drawdown_series(resolved),
-                    "pnl_distribution": _compute_pnl_distribution(resolved),
-                }
-
-            await redis.set(cache_key, json.dumps(stats), ex=300)
-            return stats
+        await redis.set(cache_key, json.dumps(stats), ex=300)
+        return stats
 
     @router.get("/signals/by-date")
     async def get_signals_by_date(

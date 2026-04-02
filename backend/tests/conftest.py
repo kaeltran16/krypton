@@ -78,6 +78,9 @@ async def _test_lifespan(app: FastAPI):
     app.state.active_signal_optimization = None
     app.state.manager = MagicMock()
     app.state.manager.broadcast = AsyncMock()
+    app.state.manager.broadcast_event = AsyncMock()
+    app.state.manager.connect_existing = MagicMock()
+    app.state._last_outcome_check = 0.0
     app.state.start_time = 1000000.0
     app.state.last_pipeline_cycle = 1000000.0
     app.state.order_book = {}

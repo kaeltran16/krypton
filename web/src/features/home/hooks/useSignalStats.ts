@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../shared/lib/api";
 import type { SignalStats } from "../../signals/types";
+import { useHomeStore } from "../store";
 
 export function useSignalStats(days: number | null = 7) {
   const [stats, setStats] = useState<SignalStats | null>(null);
@@ -13,20 +14,24 @@ export function useSignalStats(days: number | null = 7) {
     }
     setLoading(true);
     let cancelled = false;
-    async function fetch() {
-      try {
-        const data = await api.getSignalStats(days!);
-        if (!cancelled) setStats(data);
-      } catch {
-        // silently fail
-      } finally {
-        if (!cancelled) setLoading(false);
+    api.getSignalStats(days).then((data) => {
+      if (!cancelled) {
+        setStats(data);
+        setLoading(false);
       }
-    }
-    fetch();
-    const id = setInterval(fetch, 60000); // refresh every minute
-    return () => { cancelled = true; clearInterval(id); };
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [days]);
+
+  const wsStats = useHomeStore((s) => s.wsStats);
+  useEffect(() => {
+    if (wsStats) {
+      setStats(wsStats);
+      setLoading(false);
+    }
+  }, [wsStats]);
 
   return { stats, loading };
 }
