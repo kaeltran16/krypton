@@ -55,6 +55,9 @@ class ConnectionManager:
         for ws in dead:
             self.disconnect(ws)
 
+    async def broadcast_event(self, payload: dict):
+        await self._broadcast_to_all(payload)
+
     async def broadcast_news(self, alert: dict):
         """Broadcast a news_alert to all connected clients."""
         await self._broadcast_to_all(alert)

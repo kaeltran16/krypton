@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { api } from "../../shared/lib/api";
 import type { OptimizerStatus, Proposal } from "./types";
 
+const wait = (ms: number) => new Promise<void>((resolve) => {
+  setTimeout(resolve, ms);
+});
+
 interface OptimizerStore {
   status: OptimizerStatus | null;
   proposals: Proposal[];
@@ -89,8 +93,17 @@ export const useOptimizerStore = create<OptimizerStore>((set, get) => ({
   optimizeFromSignals: async (pair) => {
     set({ signalOptLoading: true, error: null });
     try {
+      const previousTopProposalId = get().proposals[0]?.id ?? null;
       await api.optimizeFromSignals({ pair });
       await Promise.all([get().fetchStatus(), get().fetchProposals()]);
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const latestTopProposalId = get().proposals[0]?.id ?? null;
+        if (latestTopProposalId !== previousTopProposalId) {
+          break;
+        }
+        await wait(1500);
+        await get().fetchProposals();
+      }
     } catch (e) {
       set({ error: (e as Error).message });
     } finally {

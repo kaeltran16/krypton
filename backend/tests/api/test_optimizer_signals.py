@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
+import asyncio
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -46,6 +47,7 @@ def _mock_db(scalars_all=None):
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = scalars_all or []
     mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.add = MagicMock()
 
     mock_db = MagicMock()
 
@@ -67,6 +69,7 @@ def optimizer_app():
     app.state.db = _mock_db()
     app.state.manager = MagicMock()
     app.state.manager.broadcast = AsyncMock()
+    app.state.manager.broadcast_event = AsyncMock()
     app.state.active_signal_optimization = None
     app.include_router(optimizer_router)
     return app
@@ -123,3 +126,65 @@ async def test_legacy_signals_backfilled(optimizer_app):
     data = resp.json()
     assert data["status"] == "started"
     assert data["signals_queued"] == 25
+
+
+@pytest.mark.asyncio
+async def test_optimize_from_signals_uses_broadcast_event(optimizer_app, monkeypatch):
+    """Optimizer events must not go through the signal-only broadcaster."""
+    legacy_sigs = [_mock_signal(has_new_keys=False) for _ in range(25)]
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = legacy_sigs
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.add = MagicMock()
+
+    async def _refresh(proposal):
+        proposal.id = 123
+
+    mock_session.refresh = AsyncMock(side_effect=_refresh)
+
+    mock_db = MagicMock()
+
+    @asynccontextmanager
+    async def fake_session():
+        yield mock_session
+
+    mock_db.session_factory = fake_session
+    optimizer_app.state.db = mock_db
+    optimizer_app.state.manager.broadcast = AsyncMock(
+        side_effect=AssertionError("optimizer events should not use signal broadcast")
+    )
+    optimizer_app.state.manager.broadcast_event = AsyncMock()
+
+    def _fake_optimize_from_signals(*args, **kwargs):
+        weights = {
+            regime: {
+                "tech": 0.2,
+                "flow": 0.2,
+                "onchain": 0.2,
+                "pattern": 0.1,
+                "liquidation": 0.1,
+                "confluence": 0.2,
+            }
+            for regime in ("trending", "ranging", "volatile", "steady")
+        }
+        return {"weights": weights, "fitness": 0.42, "evaluations": 12}
+
+    monkeypatch.setattr(
+        "app.engine.regime_optimizer.optimize_from_signals",
+        _fake_optimize_from_signals,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=optimizer_app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/optimizer/optimize-from-signals",
+            json={"pair": "BTC-USDT-SWAP", "min_signals": 20},
+            cookies={"krypton_token": make_test_jwt()},
+        )
+
+    assert resp.status_code == 200
+    await asyncio.sleep(0.05)
+    assert optimizer_app.state.manager.broadcast_event.await_count >= 2

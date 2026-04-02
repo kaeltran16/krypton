@@ -768,7 +768,7 @@ async def run_optimizer_loop(app) -> None:
                             "Auto-rolling back proposal %d (%s) — PF dropped",
                             proposal.id, proposal.parameter_group,
                         )
-                        await manager.broadcast({
+                        await manager.broadcast_event({
                             "type": "optimizer_update",
                             "event": "proposal_rolled_back",
                             "proposal_id": proposal.id,
@@ -837,7 +837,7 @@ async def run_optimizer_loop(app) -> None:
                                 logger.info("Auto-rejected proposal %d", proposal_id)
 
                             await session.commit()
-                            await manager.broadcast({
+                            await manager.broadcast_event({
                                 "type": "optimizer_update",
                                 "event": f"shadow_{decision}",
                                 "proposal_id": proposal_id,
@@ -886,7 +886,7 @@ async def run_optimizer_loop(app) -> None:
                                     "Created proposal %d for %s (PF improvement: %.1f%%)",
                                     proposal.id, group_name, improvement * 100,
                                 )
-                                await manager.broadcast({
+                                await manager.broadcast_event({
                                     "type": "optimizer_update",
                                     "event": "proposal_created",
                                     "proposal_id": proposal.id,

@@ -136,7 +136,7 @@ async def approve_proposal(
         optimizer.active_shadow_proposal_id = proposal_id
 
     manager = request.app.state.manager
-    await manager.broadcast({
+    await manager.broadcast_event({
         "type": "optimizer_update",
         "event": "shadow_started",
         "proposal_id": proposal_id,
@@ -168,7 +168,7 @@ async def reject_proposal_endpoint(
             optimizer.active_shadow_proposal_id = None
 
     manager = request.app.state.manager
-    await manager.broadcast({
+    await manager.broadcast_event({
         "type": "optimizer_update",
         "event": "proposal_rejected",
         "proposal_id": proposal_id,
@@ -204,7 +204,7 @@ async def promote_proposal_endpoint(
                 optimizer._pf_at_promotion[proposal_id] = pf
 
     manager = request.app.state.manager
-    await manager.broadcast({
+    await manager.broadcast_event({
         "type": "optimizer_update",
         "event": "proposal_promoted",
         "proposal_id": proposal_id,
@@ -231,7 +231,7 @@ async def rollback_proposal_endpoint(
         await session.commit()
 
     manager = request.app.state.manager
-    await manager.broadcast({
+    await manager.broadcast_event({
         "type": "optimizer_update",
         "event": "proposal_rolled_back",
         "proposal_id": proposal_id,
@@ -319,7 +319,7 @@ async def optimize_from_signals_endpoint(
     app.state.active_signal_optimization = {"pair": body.pair, "cancel_flag": cancel_flag}
 
     manager = app.state.manager
-    await manager.broadcast({
+    await manager.broadcast_event({
         "type": "optimizer_update",
         "event": "optimization_started",
         "pair": body.pair,
@@ -362,7 +362,7 @@ async def optimize_from_signals_endpoint(
                 await session.refresh(proposal)
                 proposal_id = proposal.id
 
-            await manager.broadcast({
+            await manager.broadcast_event({
                 "type": "optimizer_update",
                 "event": "optimization_completed",
                 "proposal_id": proposal_id,
@@ -370,7 +370,7 @@ async def optimize_from_signals_endpoint(
             })
         except Exception as e:
             logger.exception("Signal optimization failed: %s", e)
-            await manager.broadcast({
+            await manager.broadcast_event({
                 "type": "optimizer_update",
                 "event": "optimization_failed",
                 "pair": body.pair,
