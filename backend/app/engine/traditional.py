@@ -316,10 +316,15 @@ def compute_technical_score(candles: pd.DataFrame, regime_weights=None, scoring_
     # 1. Trend
     trend_score = di_direction * sigmoid_scale(adx_val, center=15, steepness=sp.get("trend_score_steepness", 0.30)) * caps["trend_cap"]
 
-    # 2. Unified mean reversion (RSI + BB position)
-    rsi_raw = sigmoid_score(50 - rsi_val, center=0, steepness=mr_rsi_steep)
-    bb_pos_raw = sigmoid_score(0.5 - bb_pos, center=0, steepness=mr_bb_steep)
-    mean_rev_score = (blend_ratio * rsi_raw + (1 - blend_ratio) * bb_pos_raw) * caps["mean_rev_cap"]
+    # 2. Unified mean reversion (RSI + BB position) — only at extremes
+    if mr_pressure_val > 0:
+        rsi_raw = sigmoid_score(50 - rsi_val, center=0, steepness=mr_rsi_steep)
+        bb_pos_raw = sigmoid_score(0.5 - bb_pos, center=0, steepness=mr_bb_steep)
+        mean_rev_score = (blend_ratio * rsi_raw + (1 - blend_ratio) * bb_pos_raw) * caps["mean_rev_cap"]
+    else:
+        rsi_raw = 0.0
+        bb_pos_raw = 0.0
+        mean_rev_score = 0.0
 
     # 3. Squeeze / expansion
     directional_sum = trend_score + mean_rev_score

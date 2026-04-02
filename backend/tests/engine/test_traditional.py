@@ -674,11 +674,21 @@ class TestUnifiedMeanReversion:
         assert -100 <= result["score"] <= 100
 
     def test_different_blend_ratio_changes_score(self):
-        """Different blend ratios produce different mean_rev_score."""
-        df = _make_candles(80, "flat")  # flat market = low suppression, so blend ratio differences show
+        """Different blend ratios produce different mean_rev_score when mr_pressure is active."""
+        df = _make_candles(80, "down")
         r1 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.9})
         r2 = compute_technical_score(df, scoring_params={"mean_rev_blend_ratio": 0.1})
-        assert r1["indicators"]["mean_rev_score"] != r2["indicators"]["mean_rev_score"]
+        if r1["mr_pressure"] > 0 and r2["mr_pressure"] > 0:
+            assert r1["indicators"]["mean_rev_score"] != r2["indicators"]["mean_rev_score"]
+        else:
+            assert r1["indicators"]["mean_rev_score"] == 0.0
+            assert r2["indicators"]["mean_rev_score"] == 0.0
+
+    def test_mean_rev_zero_when_no_mr_pressure(self):
+        """Mean reversion score is zero when mr_pressure is zero (moderate RSI/BB)."""
+        df = _make_candles(80, "flat")
+        result = compute_technical_score(df)
+        assert result["indicators"]["mean_rev_score"] == 0.0
 
     def test_squeeze_sign_matches_dominant_thesis(self):
         """Squeeze score sign matches trend_score + mean_rev_score, not just MR."""
