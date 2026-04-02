@@ -421,6 +421,8 @@ async def run_counterfactual_eval(
                                     if k in candidate
                                 },
                             }
+                        elif group_name == "conviction":
+                            config.conviction_floor = candidate["floor"]
                         loop = asyncio.get_event_loop()
                         results = await loop.run_in_executor(
                             None,

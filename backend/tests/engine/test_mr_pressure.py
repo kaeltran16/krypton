@@ -5,15 +5,16 @@ from app.engine.traditional import compute_mr_pressure, compute_technical_score
 
 
 class TestComputeMrPressure:
-    def test_neutral_rsi_returns_zero(self):
-        """RSI near 50 should produce 0 regardless of BB position."""
-        assert compute_mr_pressure(50, 0.95) == 0.0
-        assert compute_mr_pressure(55, 0.95) == 0.0
+    def test_neutral_rsi_reduces_pressure(self):
+        """RSI near 50 should reduce but not eliminate pressure from BB extremity."""
+        assert compute_mr_pressure(50, 0.95) > 0.0
+        assert compute_mr_pressure(50, 0.95) < compute_mr_pressure(85, 0.95)
+        assert compute_mr_pressure(55, 0.95) > 0.0
 
-    def test_neutral_bb_returns_zero(self):
-        """BB position near 0.5 should produce 0 regardless of RSI."""
-        assert compute_mr_pressure(85, 0.5) == 0.0
-        assert compute_mr_pressure(85, 0.55) == 0.0
+    def test_neutral_bb_reduces_pressure(self):
+        """BB position near 0.5 should reduce but not eliminate pressure from RSI extremity."""
+        assert compute_mr_pressure(85, 0.5) > 0.0
+        assert compute_mr_pressure(85, 0.5) < compute_mr_pressure(85, 0.95)
 
     def test_both_extreme_overbought(self):
         """Both RSI and BB extreme overbought should produce high pressure."""
@@ -26,14 +27,14 @@ class TestComputeMrPressure:
         oversold = compute_mr_pressure(15, 0.05)
         assert abs(overbought - oversold) < 0.05  # nearly symmetric
 
-    def test_multiplicative_gate(self):
-        """Only RSI extreme (BB neutral) = 0. Requires both."""
-        assert compute_mr_pressure(90, 0.5) == 0.0
+    def test_single_extreme_contributes(self):
+        """Only RSI extreme (BB neutral) still contributes via additive blend."""
+        assert compute_mr_pressure(90, 0.5) > 0.0
 
     def test_moderate_values(self):
-        """RSI=78, BB=0.90 -> moderate pressure ~0.40."""
+        """RSI=78, BB=0.90 -> moderate pressure ~0.63 (additive)."""
         pressure = compute_mr_pressure(78, 0.90)
-        assert 0.2 < pressure < 0.6
+        assert 0.4 < pressure < 0.8
 
     def test_output_bounded(self):
         """Output is always in [0, 1]."""
@@ -43,13 +44,13 @@ class TestComputeMrPressure:
                 assert 0.0 <= p <= 1.0, f"Out of bounds: rsi={rsi}, bb={bb}, p={p}"
 
     def test_reference_values(self):
-        """Verify spec reference table values (approximate)."""
+        """Verify spec reference table values (approximate, additive blend)."""
         assert compute_mr_pressure(55, 0.55) == 0.0
-        assert compute_mr_pressure(65, 0.70) == 0.0
-        assert 0.10 <= compute_mr_pressure(72, 0.82) <= 0.25
-        assert 0.30 <= compute_mr_pressure(78, 0.90) <= 0.50
-        assert 0.55 <= compute_mr_pressure(85, 0.95) <= 0.80
-        assert 0.25 <= compute_mr_pressure(25, 0.08) <= 0.50
+        assert 0.0 < compute_mr_pressure(65, 0.70) <= 0.15
+        assert 0.20 <= compute_mr_pressure(72, 0.82) <= 0.50
+        assert 0.40 <= compute_mr_pressure(78, 0.90) <= 0.75
+        assert 0.60 <= compute_mr_pressure(85, 0.95) <= 1.0
+        assert 0.40 <= compute_mr_pressure(25, 0.08) <= 0.75
 
 
 def _make_candles(n=80, trend="up", seed=42):
@@ -73,7 +74,8 @@ def _make_candles(n=80, trend="up", seed=42):
         h = max(o, c) + rng.uniform(0.05, 0.3)
         l = min(o, c) - rng.uniform(0.05, 0.3)
         v = rng.uniform(100, 200)
-        rows.append({"open": o, "high": h, "low": l, "close": c, "volume": v})
+        rows.append({"open": o, "high": h, "low": l, "close": c, "volume": v,
+                     "timestamp": f"2024-01-01T{i:02d}:00:00Z"})
         prev_c = c
     return pd.DataFrame(rows)
 

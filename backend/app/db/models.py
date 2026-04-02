@@ -276,6 +276,7 @@ class PipelineSettings(Base):
     drift_penalty_moderate: Mapped[float | None] = mapped_column(Float, nullable=True)
     drift_penalty_severe: Mapped[float | None] = mapped_column(Float, nullable=True)
     correlation_dampening_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    conviction_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     cooldown_max_candles: Mapped[int | None] = mapped_column(Integer, nullable=True)
     calibration_window: Mapped[int | None] = mapped_column(Integer, nullable=True)
     calibration_floor: Mapped[float | None] = mapped_column(Float, nullable=True)

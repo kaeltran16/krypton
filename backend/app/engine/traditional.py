@@ -13,13 +13,13 @@ _HTF_TIMEFRAMES = {"4h", "1D"}
 def compute_mr_pressure(rsi: float, bb_pos: float, config: dict | None = None) -> float:
     """Measure mean-reversion indicator extremity (0.0-1.0).
 
-    Multiplicative gate: BOTH RSI and BB position must be extreme.
+    Additive blend: either RSI or BB extremity alone contributes.
     Symmetric for overbought and oversold.
     """
     cfg = config or MR_PRESSURE
     rsi_extremity = max(0, abs(rsi - 50) - cfg["rsi_offset"]) / cfg["rsi_range"]
     bb_extremity = max(0, abs(bb_pos - 0.5) - cfg["bb_offset"]) / cfg["bb_range"]
-    return min(1.0, rsi_extremity * bb_extremity)
+    return min(1.0, (rsi_extremity + bb_extremity) / 2.0)
 
 
 def compute_trend_conviction(

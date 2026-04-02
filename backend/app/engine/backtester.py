@@ -17,7 +17,7 @@ from app.engine.traditional import compute_technical_score, score_order_flow
 from app.engine.patterns import detect_candlestick_patterns, compute_pattern_score
 from app.engine.combiner import compute_preliminary_score, blend_with_ml, calculate_levels, scale_atr_multipliers, apply_agreement_factor
 from app.engine.confluence import compute_confluence_score, TIMEFRAME_ANCESTORS
-from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS, ORDER_FLOW, ORDER_FLOW_ASSET_SCALES
+from app.engine.constants import PATTERN_STRENGTHS, PATTERN_BOOST_DEFAULTS, ORDER_FLOW, ORDER_FLOW_ASSET_SCALES, CONVICTION_FLOOR
 from app.engine.regime import blend_outer_weights
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,7 @@ class BacktestConfig:
     risk_per_trade_pct: float = 1.0
     max_concurrent_positions: int = 3
     ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
+    conviction_floor: float | None = None
     param_overrides: dict = field(default_factory=dict)
     flow_snapshots: list[dict] | None = None
 
@@ -329,6 +330,7 @@ def run_backtest(
             confluence_weight=bt_conf_w,
             confluence_availability=confluence_result.get("availability", conf_confidence),
             confluence_conviction=confluence_result.get("conviction", 1.0),
+            conviction_floor=config.conviction_floor if config.conviction_floor is not None else CONVICTION_FLOOR,
         )["score"]
 
         bt_scores = [tech_result["score"], 0, 0, pat_score, 0, conf_score]

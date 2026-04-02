@@ -989,6 +989,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
         news_weight=news_w,
         news_availability=news_avail,
         news_conviction=news_conv,
+        conviction_floor=settings.engine_conviction_floor,
     )
     indicator_preliminary = prelim_result["score"]
     confidence_tier = compute_confidence_tier(prelim_result["avg_confidence"])

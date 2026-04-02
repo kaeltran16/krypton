@@ -180,6 +180,7 @@ _PIPELINE_SETTINGS_MAP = {
     "blending.confluence.adx_strength_center": ("engine_confluence_adx_strength_center", "confluence_adx_strength_center"),
     "blending.confluence.adx_conviction_ratio": ("engine_confluence_adx_conviction_ratio", "confluence_adx_conviction_ratio"),
     "blending.confluence.mr_penalty_factor": ("engine_confluence_mr_penalty_factor", "confluence_mr_penalty_factor"),
+    "blending.conviction.floor": ("engine_conviction_floor", "conviction_floor"),
     "risk.correlation_dampening_floor": ("engine_correlation_dampening_floor", "correlation_dampening_floor"),
     "optimizer.atr_optimizer_mode": ("atr_optimizer_mode", "atr_optimizer_mode"),
     "optimizer.ic_prune_threshold": ("ic_prune_threshold", "ic_prune_threshold"),

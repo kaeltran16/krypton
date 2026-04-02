@@ -126,6 +126,9 @@ class Settings(BaseSettings):
     ml_confidence_threshold: float = 0.65
     ml_checkpoint_dir: str = "models"
 
+    # conviction floor (min scale applied to low-conviction sources)
+    engine_conviction_floor: float = 0.3
+
     # unified ML blending (adaptive weight ramp)
     engine_ml_weight_min: float = 0.05
     engine_ml_weight_max: float = 0.30
