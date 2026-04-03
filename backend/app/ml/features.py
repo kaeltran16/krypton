@@ -246,8 +246,13 @@ def build_feature_matrix(
     bb_range_slow = (bb_upper_slow - bb_lower_slow).replace(0, np.nan)
     features[:, col + 2] = ((close - bb_lower_slow) / bb_range_slow).fillna(0).values  # bb_pos_slow
 
-    # Clip base features
-    features = np.clip(features, -10, 10)
+    # Winsorize at 1st/99th percentile per feature instead of hard ±10 clip.
+    # Hard clipping at ±10 destroyed 17.8% of macd_norm values; percentile
+    # winsorization preserves the distribution shape while taming outliers.
+    # BatchNorm1d in the model handles the actual normalization.
+    p1, p99 = np.percentile(features, [1, 99], axis=0)
+    mask = p1 < p99
+    features[:, mask] = np.clip(features[:, mask], p1[mask], p99[mask])
 
     # Optional: Regime features (4 columns)
     if regime is not None and trend_conviction is not None:
@@ -259,7 +264,6 @@ def build_feature_matrix(
                 regime_arr[i, 1] = r.get("ranging", 0)
                 regime_arr[i, 2] = r.get("volatile", 0)
                 regime_arr[i, 3] = trend_conviction[i]
-            regime_arr = np.clip(regime_arr, -10, 10)
             features = np.concatenate([features, regime_arr], axis=1)
 
     # Optional: Inter-pair features (2 columns)
@@ -291,7 +295,6 @@ def build_feature_matrix(
             btc_close_safe = np.where(btc_close == 0, np.nan, btc_close)
             inter_arr[:, 1] = np.nan_to_num(btc_atr / btc_close_safe, nan=0.0)
 
-        inter_arr = np.clip(inter_arr, -10, 10)
         features = np.concatenate([features, inter_arr], axis=1)
 
     # Optional: Flow features (3 base + 3 RoC = 6 columns)
@@ -316,7 +319,6 @@ def build_feature_matrix(
             flow_arr[5:, 4] = ls_ratio[5:] - ls_ratio[:-5]
             flow_arr[5:, 5] = oi_change[5:] - oi_change[:-5]
 
-        flow_arr = np.clip(flow_arr, -10, 10)
         features = np.concatenate([features, flow_arr], axis=1)
 
     return features

@@ -149,6 +149,36 @@ class TestTrainer:
                 assert 0.0 <= result["recall_per_class"][cls] <= 1.0
 
 
+def test_class_weights_prevalence_gated():
+    """Prevalence-gated weighting: rare classes (<5%) get capped boost, common classes get equal weight.
+
+    Without gating, ETH's 6.6% NEUTRAL gets a 2x boost inflating its loss
+    share to 13%, causing member 1 to collapse to all-NEUTRAL predictions.
+    With gating, only classes below 5% prevalence receive a boost.
+    """
+    from app.ml.trainer import compute_class_weights
+
+    # WIF-like: 1% NEUTRAL (below 5% threshold → gets boost, capped at 2x)
+    wif_labels = np.concatenate([
+        np.full(470, 1, dtype=np.int64),
+        np.full(520, 2, dtype=np.int64),
+        np.full(10, 0, dtype=np.int64),
+    ])
+    w = compute_class_weights(wif_labels)
+    # NEUTRAL should get a boost but capped — max ratio ≤ 2.1x
+    assert w[0] / np.median(w) < 2.1, f"Rare class weight ratio too high: {w}"
+
+    # ETH-like: 7% NEUTRAL (above 5% threshold → no boost, equal weight)
+    eth_labels = np.concatenate([
+        np.full(465, 1, dtype=np.int64),
+        np.full(465, 2, dtype=np.int64),
+        np.full(70, 0, dtype=np.int64),
+    ])
+    w = compute_class_weights(eth_labels)
+    # All weights should be near 1.0 (equal) — max ratio ≤ 1.1x
+    assert max(w) / min(w) < 1.1, f"Common-class weights not equal: {w}"
+
+
 def test_train_stores_drift_stats(tmp_path):
     """Training should write drift_stats to model_config.json."""
     import json

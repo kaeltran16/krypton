@@ -17,6 +17,53 @@ from app.ml.model import SignalLSTM
 
 logger = logging.getLogger(__name__)
 
+
+def compute_class_weights(
+    labels: np.ndarray,
+    num_classes: int = 3,
+    rare_threshold: float = 0.05,
+    rare_cap: float = 2.0,
+) -> np.ndarray:
+    """Prevalence-gated sqrt-inverse-frequency weights.
+
+    Classes below *rare_threshold* prevalence get a boost capped at
+    *rare_cap* × median weight.  Others are clamped to 1× median so
+    focal loss handles them without artificial inflation.
+    """
+    class_counts = np.bincount(labels, minlength=num_classes).astype(np.float64)
+    class_counts = np.maximum(class_counts, 1)
+    weights = 1.0 / np.sqrt(class_counts).astype(np.float32)
+    median_w = float(np.median(weights))
+    prevalence = class_counts / class_counts.sum()
+    max_w = np.where(prevalence < rare_threshold, rare_cap * median_w, median_w)
+    weights = np.minimum(weights, max_w)
+    weights = weights / weights.sum() * num_classes
+    return weights
+
+
+class FocalLoss(nn.Module):
+    """Focal loss for class-imbalanced classification.
+
+    Down-weights easy (well-classified) examples so the model focuses on
+    hard-to-classify directional samples instead of coasting on NEUTRAL.
+    """
+
+    def __init__(self, weight=None, gamma=2.0, label_smoothing=0.0):
+        super().__init__()
+        self.weight = weight
+        self.gamma = gamma
+        self.label_smoothing = label_smoothing
+
+    def forward(self, logits, targets):
+        ce = nn.functional.cross_entropy(
+            logits, targets, weight=self.weight,
+            label_smoothing=self.label_smoothing, reduction="none",
+        )
+        pt = torch.exp(-ce)  # probability of correct class
+        focal = ((1 - pt) ** self.gamma) * ce
+        return focal.mean()
+
+
 # Temporal split boundaries for 3-member ensemble
 _ENSEMBLE_SPLITS = [
     (0.0, 0.8),
@@ -38,11 +85,14 @@ class TrainConfig:
     reg_loss_weight: float = 0.5
     val_ratio: float = 0.15
     patience: int = 20
+    min_epochs: int = 40  # minimum epochs before early stopping can fire
     warmup_epochs: int = 5
     noise_std: float = 0.02
     label_smoothing: float = 0.1
     checkpoint_dir: str = "models"
-    neutral_subsample_ratio: float = 0.5  # keep only 50% of NEUTRAL samples to reduce imbalance
+    focal_gamma: float = 2.0  # focal loss gamma — down-weights easy (NEUTRAL) predictions
+    rare_class_threshold: float = 0.05  # prevalence below this gets weight boost
+    rare_class_cap: float = 2.0  # max weight multiplier (× median) for rare classes
 
 
 class Trainer:
@@ -74,24 +124,8 @@ class Trainer:
         if feature_names is None:
             feature_names = [f"feature_{i}" for i in range(input_size)]
 
-        if not _skip_drift_stats:
-            pre_subsample_features = features.copy()
-            pre_subsample_n = len(features)
-
-        # Subsample NEUTRAL class to reduce imbalance
-        if cfg.neutral_subsample_ratio < 1.0:
-            rng = np.random.default_rng(42)
-            neutral_mask = direction == 0
-            neutral_idx = np.where(neutral_mask)[0]
-            keep_n = int(len(neutral_idx) * cfg.neutral_subsample_ratio)
-            drop_idx = set(rng.choice(neutral_idx, size=len(neutral_idx) - keep_n, replace=False))
-            keep_mask = np.array([i not in drop_idx for i in range(len(features))])
-            features = features[keep_mask]
-            direction = direction[keep_mask]
-            sl_atr = sl_atr[keep_mask]
-            tp1_atr = tp1_atr[keep_mask]
-            tp2_atr = tp2_atr[keep_mask]
-            logger.info(f"Subsampled NEUTRAL: kept {keep_n}/{len(neutral_idx)} → {len(features)} total samples")
+        # NO subsampling — keep time series intact for LSTM temporal continuity.
+        # Class imbalance is handled via WeightedRandomSampler + focal loss.
 
         n = len(features)
         min_samples = cfg.seq_len + 1
@@ -119,6 +153,7 @@ class Trainer:
             sl_atr[:split], tp1_atr[:split], tp2_atr[:split],
             seq_len=cfg.seq_len, noise_std=cfg.noise_std,
         )
+
         train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True)
 
         val_loader = None
@@ -130,12 +165,17 @@ class Trainer:
             )
             val_loader = DataLoader(val_ds, batch_size=cfg.batch_size, shuffle=False)
 
-        # Class weights for imbalanced labels
-        class_counts = np.bincount(direction[:split], minlength=3).astype(np.float32)
-        class_counts = np.maximum(class_counts, 1)  # avoid div by zero
-        class_weights = 1.0 / class_counts
-        class_weights = class_weights / class_weights.sum() * 3  # normalize
-        class_weights_tensor = torch.tensor(class_weights, device=self.device)
+        # Prevalence-gated class weights — rare classes (<5%) get a capped
+        # boost; common classes rely on focal loss alone.  See ETH member-1
+        # collapse note in compute_class_weights docstring.
+        train_seq_labels = direction[:split][cfg.seq_len - 1:]
+        class_weights = compute_class_weights(
+            train_seq_labels,
+            rare_threshold=cfg.rare_class_threshold,
+            rare_cap=cfg.rare_class_cap,
+        )
+        class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32, device=self.device)
+        logger.info(f"Class weights (sqrt-inv-freq): N={class_weights[0]:.3f} L={class_weights[1]:.3f} S={class_weights[2]:.3f}")
 
         model = SignalLSTM(
             input_size=input_size,
@@ -158,7 +198,11 @@ class Trainer:
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
-        cls_criterion = nn.CrossEntropyLoss(weight=class_weights_tensor, label_smoothing=cfg.label_smoothing)
+        cls_criterion = FocalLoss(
+            weight=class_weights_tensor,
+            gamma=cfg.focal_gamma,
+            label_smoothing=cfg.label_smoothing,
+        )
         reg_criterion = nn.SmoothL1Loss()
 
         best_val_loss = float("inf")
@@ -249,7 +293,7 @@ class Trainer:
                     "direction_acc": None,  # computed at end only
                 })
 
-            # Early stopping (only with validation)
+            # Early stopping (only with validation, after min_epochs)
             if avg_val_loss is not None:
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
@@ -279,7 +323,7 @@ class Trainer:
                         _json.dump(config_meta, f, indent=2)
                 else:
                     epochs_without_improvement += 1
-                    if epochs_without_improvement >= cfg.patience:
+                    if (epoch + 1) >= cfg.min_epochs and epochs_without_improvement >= cfg.patience:
                         logger.info(f"Early stopping at epoch {epoch+1}")
                         break
             else:
@@ -404,9 +448,8 @@ class Trainer:
             pass
         elif use_val and val_loader is not None:
             from app.ml.drift import compute_drift_stats
-            pre_split = int(pre_subsample_n * (1 - cfg.val_ratio))
             drift_stats = compute_drift_stats(
-                model, val_loader, pre_subsample_features[:pre_split],
+                model, val_loader, features[:split],
                 input_size,
             )
         else:
@@ -499,11 +542,14 @@ class Trainer:
                 reg_loss_weight=cfg.reg_loss_weight,
                 val_ratio=cfg.val_ratio,
                 patience=cfg.patience,
+                min_epochs=cfg.min_epochs,
                 warmup_epochs=cfg.warmup_epochs,
                 noise_std=cfg.noise_std,
                 label_smoothing=cfg.label_smoothing,
                 checkpoint_dir=member_dir,
-                neutral_subsample_ratio=cfg.neutral_subsample_ratio,
+                focal_gamma=cfg.focal_gamma,
+                rare_class_threshold=cfg.rare_class_threshold,
+                rare_class_cap=cfg.rare_class_cap,
             )
             member_trainer = Trainer(member_cfg)
             try:

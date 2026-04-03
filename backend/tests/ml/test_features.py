@@ -116,7 +116,7 @@ class TestDataQuality:
         assert not np.any(np.isnan(features[50:]))
 
     def test_feature_ranges(self):
-        """All values within [-10, 10] after clipping."""
+        """Values are finite after winsorization."""
         df = _make_candles(200)
         features = build_feature_matrix(
             df,
@@ -125,9 +125,7 @@ class TestDataQuality:
             trend_conviction=_make_conviction(200),
             btc_candles=_make_candles(200, base=60000),
         )
-        # All values should be within clipping range
-        assert features.max() <= 10.0
-        assert features.min() >= -10.0
+        assert np.all(np.isfinite(features))
 
     def test_nan_in_btc_data(self):
         """BTC candles with NaN values must produce valid output."""
