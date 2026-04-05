@@ -17,7 +17,7 @@ from app.db.models import Candle, OrderFlowSnapshot, MLTrainingRun
 from app.ml.data_loader import prepare_training_data
 from app.ml.labels import LabelConfig
 from app.ml.trainer import Trainer, TrainConfig
-from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime
+from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime, geometric_balanced_accuracy
 
 logger = logging.getLogger(__name__)
 
@@ -313,13 +313,17 @@ async def start_training(body: TrainRequest, request: Request):
                 if ensemble_result.get("fallback"):
                     pair_result = ensemble_result["fallback"]
                 else:
-                    # Use best member's metrics as the pair-level summary
-                    best_member = min(ensemble_result["members"], key=lambda m: m["val_loss"])
+                    # Use most-balanced member (geometric mean of recalls) for DB summary
+                    best_member = max(
+                        ensemble_result["members"],
+                        key=lambda m: geometric_balanced_accuracy(m.get("recall_per_class") or {}),
+                    )
                     pair_result = {
                         "best_val_loss": best_member["val_loss"],
-                        "best_epoch": 0,
+                        "best_epoch": best_member.get("best_epoch", 0),
                         "train_loss": [],
                         "val_loss": [],
+                        "total_epochs": best_member.get("total_epochs", 0),
                         "version": "",
                         "direction_accuracy": best_member.get("direction_accuracy", 0.0),
                         "precision_per_class": best_member.get("precision_per_class"),
@@ -345,13 +349,14 @@ async def start_training(body: TrainRequest, request: Request):
                 pair_results[pair] = {
                     "best_epoch": pair_result["best_epoch"],
                     "best_val_loss": pair_result["best_val_loss"],
-                    "total_epochs": len(pair_result["train_loss"]),
+                    "total_epochs": pair_result.get("total_epochs") or len(pair_result["train_loss"]),
                     "total_samples": len(features),
                     "flow_data_used": flow_used,
                     "version": pair_result.get("version"),
                     "direction_accuracy": pair_result.get("direction_accuracy"),
                     "precision_per_class": pair_result.get("precision_per_class"),
                     "recall_per_class": pair_result.get("recall_per_class"),
+                    "ensemble_members": pair_result.get("ensemble_members"),
                     "loss_history": [
                         {
                             "epoch": i + 1,

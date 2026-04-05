@@ -1,5 +1,6 @@
 """Shared ML utilities used by both training (api/ml.py) and inference (main.py)."""
 
+import math
 from datetime import datetime
 
 import numpy as np
@@ -10,6 +11,19 @@ from app.engine.regime import compute_regime_mix
 from app.engine.traditional import compute_trend_conviction
 
 TF_MINUTES = {"15m": 15, "1h": 60, "4h": 240, "1D": 1440}
+
+
+def geometric_balanced_accuracy(recalls: dict | list, epsilon: float = 1e-6) -> float:
+    """Geometric mean of per-class recalls.
+
+    Exponentially penalises near-zero recall on any class, preventing
+    degenerate single-class-collapse models that arithmetic mean misses.
+    """
+    vals = list(recalls.values()) if isinstance(recalls, dict) else list(recalls)
+    if not vals:
+        return 0.0
+    log_vals = [math.log(max(v, epsilon)) for v in vals]
+    return math.exp(sum(log_vals) / len(log_vals))
 
 
 def bucket_timestamp(ts: datetime, timeframe: str) -> datetime:

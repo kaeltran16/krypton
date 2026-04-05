@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 
 from app.ml.dataset import CandleDataset
 from app.ml.model import SignalLSTM
+from app.ml.utils import geometric_balanced_accuracy
 
 logger = logging.getLogger(__name__)
 
@@ -22,21 +23,23 @@ def compute_class_weights(
     labels: np.ndarray,
     num_classes: int = 3,
     rare_threshold: float = 0.05,
-    rare_cap: float = 2.0,
+    rare_cap: float = 3.0,
 ) -> np.ndarray:
-    """Prevalence-gated sqrt-inverse-frequency weights.
+    """Sqrt-inverse-frequency class weights with rare-class cap.
 
-    Classes below *rare_threshold* prevalence get a boost capped at
-    *rare_cap* × median weight.  Others are clamped to 1× median so
-    focal loss handles them without artificial inflation.
+    Only classes below *rare_threshold* prevalence are capped (at
+    *rare_cap* × median) to prevent extreme weights.  All other classes
+    keep their natural sqrt-inverse-frequency weight so the loss
+    properly compensates for imbalance.
     """
     class_counts = np.bincount(labels, minlength=num_classes).astype(np.float64)
     class_counts = np.maximum(class_counts, 1)
     weights = 1.0 / np.sqrt(class_counts).astype(np.float32)
     median_w = float(np.median(weights))
     prevalence = class_counts / class_counts.sum()
-    max_w = np.where(prevalence < rare_threshold, rare_cap * median_w, median_w)
-    weights = np.minimum(weights, max_w)
+    # Only cap truly rare classes to prevent runaway weights
+    cap = rare_cap * median_w
+    weights = np.where(prevalence < rare_threshold, np.minimum(weights, cap), weights)
     weights = weights / weights.sum() * num_classes
     return weights
 
@@ -59,7 +62,13 @@ class FocalLoss(nn.Module):
             logits, targets, weight=self.weight,
             label_smoothing=self.label_smoothing, reduction="none",
         )
-        pt = torch.exp(-ce)  # probability of correct class
+        # Compute pt from raw softmax — NOT from exp(-ce).
+        # When label_smoothing > 0, exp(-ce) ≠ p(correct class), which
+        # collapses the easy/hard ratio from ~3600x to ~36x, defeating
+        # the entire focal mechanism and causing single-class collapse.
+        pt = torch.softmax(logits.detach(), dim=1).gather(
+            1, targets.unsqueeze(1),
+        ).squeeze(1)
         focal = ((1 - pt) ** self.gamma) * ce
         return focal.mean()
 
@@ -92,7 +101,7 @@ class TrainConfig:
     checkpoint_dir: str = "models"
     focal_gamma: float = 2.0  # focal loss gamma — down-weights easy (NEUTRAL) predictions
     rare_class_threshold: float = 0.05  # prevalence below this gets weight boost
-    rare_class_cap: float = 2.0  # max weight multiplier (× median) for rare classes
+    rare_class_cap: float = 3.0  # max weight multiplier (× median) for rare classes
 
 
 class Trainer:
@@ -206,6 +215,7 @@ class Trainer:
         reg_criterion = nn.SmoothL1Loss()
 
         best_val_loss = float("inf")
+        best_val_bal_acc = -1.0
         best_epoch = 0
         epochs_without_improvement = 0
         train_losses = []
@@ -248,12 +258,15 @@ class Trainer:
             avg_train_loss = epoch_loss / max(n_batches, 1)
             train_losses.append(avg_train_loss)
 
-            # Validate
+            # Validate — compute loss AND balanced accuracy for early stopping
             avg_val_loss = None
+            val_bal_acc = None
             if val_loader is not None:
                 model.eval()
                 val_loss = 0.0
                 val_batches = 0
+                val_preds_list = []
+                val_labels_list = []
                 with torch.no_grad():
                     for x, y_dir, y_reg in val_loader:
                         x = x.to(self.device)
@@ -271,9 +284,24 @@ class Trainer:
 
                         val_loss += (cls_loss + cfg.reg_loss_weight * reg_loss).item()
                         val_batches += 1
+                        val_preds_list.append(dir_logits.argmax(dim=1).cpu())
+                        val_labels_list.append(y_dir.cpu())
 
                 avg_val_loss = val_loss / max(val_batches, 1)
                 val_losses.append(avg_val_loss)
+
+                # Balanced accuracy: geometric mean of per-class recalls.
+                # Arithmetic mean can't distinguish degenerate models from balanced
+                # ones (e.g. recalls [0.01, 0.43, 0.76] avg ≈ [0.49, 0.45, 0.27]).
+                # Geometric mean penalizes near-zero recall exponentially.
+                vp = torch.cat(val_preds_list).numpy()
+                vl = torch.cat(val_labels_list).numpy()
+                class_recalls = []
+                for c in range(3):
+                    mask = vl == c
+                    if mask.sum() > 0:
+                        class_recalls.append(float((vp[mask] == c).mean()))
+                val_bal_acc = geometric_balanced_accuracy(class_recalls) if class_recalls else 0.0
 
             # Step cosine scheduler and track LR
             scheduler.step()
@@ -281,7 +309,7 @@ class Trainer:
 
             log_msg = f"Epoch {epoch+1}/{cfg.epochs} — train_loss={avg_train_loss:.4f}"
             if avg_val_loss is not None:
-                log_msg += f" val_loss={avg_val_loss:.4f}"
+                log_msg += f" val_loss={avg_val_loss:.4f} geo_bal={val_bal_acc:.3f}"
             logger.info(log_msg)
 
             if progress_callback:
@@ -290,12 +318,16 @@ class Trainer:
                     "total_epochs": cfg.epochs,
                     "train_loss": avg_train_loss,
                     "val_loss": avg_val_loss,
-                    "direction_acc": None,  # computed at end only
+                    "direction_acc": val_bal_acc,
                 })
 
-            # Early stopping (only with validation, after min_epochs)
-            if avg_val_loss is not None:
-                if avg_val_loss < best_val_loss:
+            # Early stopping on geometric balanced accuracy (only with validation,
+            # after min_epochs).  Geometric mean makes near-zero recall on any
+            # class mathematically devastating to the score, preventing collapse.
+            if val_bal_acc is not None:
+                improved = val_bal_acc > best_val_bal_acc
+                if improved:
+                    best_val_bal_acc = val_bal_acc
                     best_val_loss = avg_val_loss
                     best_epoch = epoch + 1
                     epochs_without_improvement = 0
@@ -572,6 +604,8 @@ class Trainer:
                 "index": idx,
                 "trained_at": _dt.now(_tz.utc).isoformat(),
                 "val_loss": result["best_val_loss"],
+                "best_epoch": result.get("best_epoch", 0),
+                "total_epochs": len(result.get("train_loss", [])),
                 "temperature": saved_config.get("temperature", 1.0),
                 "data_range": [start_frac, end_frac],
                 "direction_accuracy": result.get("direction_accuracy", 0.0),

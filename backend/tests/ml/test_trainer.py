@@ -150,33 +150,37 @@ class TestTrainer:
 
 
 def test_class_weights_prevalence_gated():
-    """Prevalence-gated weighting: rare classes (<5%) get capped boost, common classes get equal weight.
+    """Sqrt-inverse-frequency with rare-class cap.
 
-    Without gating, ETH's 6.6% NEUTRAL gets a 2x boost inflating its loss
-    share to 13%, causing member 1 to collapse to all-NEUTRAL predictions.
-    With gating, only classes below 5% prevalence receive a boost.
+    Rare classes (<5%) are capped to prevent runaway weights.
+    Common classes keep natural sqrt-inverse-frequency weights so the
+    loss properly compensates for imbalance.
     """
     from app.ml.trainer import compute_class_weights
 
-    # WIF-like: 1% NEUTRAL (below 5% threshold → gets boost, capped at 2x)
+    # WIF-like: 1% NEUTRAL (below 5% threshold �� gets boost, capped at 3x median)
     wif_labels = np.concatenate([
         np.full(470, 1, dtype=np.int64),
         np.full(520, 2, dtype=np.int64),
         np.full(10, 0, dtype=np.int64),
     ])
     w = compute_class_weights(wif_labels)
-    # NEUTRAL should get a boost but capped — max ratio ≤ 2.1x
-    assert w[0] / np.median(w) < 2.1, f"Rare class weight ratio too high: {w}"
+    # NEUTRAL should get a boost but capped at rare_cap (3x median)
+    assert w[0] / np.median(w) < 3.2, f"Rare class weight ratio too high: {w}"
+    assert w[0] > w[1], "Rare NEUTRAL should have higher weight than common LONG"
 
-    # ETH-like: 7% NEUTRAL (above 5% threshold → no boost, equal weight)
+    # ETH-like: 7% NEUTRAL (above threshold → uncapped sqrt-inv-freq)
     eth_labels = np.concatenate([
         np.full(465, 1, dtype=np.int64),
         np.full(465, 2, dtype=np.int64),
         np.full(70, 0, dtype=np.int64),
     ])
     w = compute_class_weights(eth_labels)
-    # All weights should be near 1.0 (equal) — max ratio ≤ 1.1x
-    assert max(w) / min(w) < 1.1, f"Common-class weights not equal: {w}"
+    # NEUTRAL (7%) should get higher weight than LONG/SHORT (46.5% each)
+    assert w[0] > w[1], f"Minority NEUTRAL should outweigh common LONG: {w}"
+    assert abs(w[1] - w[2]) < 0.01, f"Equal-count classes should have equal weight: {w}"
+    # Weights should sum to num_classes
+    assert abs(sum(w) - 3.0) < 0.01, f"Weights should sum to 3: {w}"
 
 
 def test_train_stores_drift_stats(tmp_path):
