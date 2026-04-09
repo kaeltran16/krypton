@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect, type ReactNode } from "react";
-import { Home, BarChart3, Zap, Layers, MoreHorizontal } from "lucide-react";
+import { Home, BrainCircuit, Zap, Layers, MoreHorizontal } from "lucide-react";
 import { TickerBar } from "./TickerBar";
 import { hapticTap } from "../lib/haptics";
 import { useNavigationStore, type Tab } from "../stores/navigation";
@@ -7,7 +7,7 @@ import { useAccount } from "../../features/dashboard/hooks/useAccount";
 
 interface LayoutProps {
   home: ReactNode;
-  chart: ReactNode;
+  agent: ReactNode;
   signals: ReactNode;
   positions: ReactNode;
   more: ReactNode;
@@ -19,7 +19,7 @@ interface LayoutProps {
 
 const TAB_ICONS = {
   home: Home,
-  chart: BarChart3,
+  agent: BrainCircuit,
   signals: Zap,
   positions: Layers,
   more: MoreHorizontal,
@@ -27,16 +27,16 @@ const TAB_ICONS = {
 
 const TAB_LABELS: Record<Tab, string> = {
   home: "Home",
-  chart: "Chart",
+  agent: "Agent",
   signals: "Signals",
   positions: "Positions",
   more: "More",
 };
 
-const TABS: Tab[] = ["home", "chart", "signals", "positions", "more"];
+const TABS: Tab[] = ["home", "agent", "signals", "positions", "more"];
 
 export function Layout({
-  home, chart, signals, positions, more,
+  home, agent, signals, positions, more,
   price, change24h, selectedPair, onPairChange,
 }: LayoutProps) {
   const tab = useNavigationStore((s) => s.tab);
@@ -45,7 +45,7 @@ export function Layout({
   const { portfolio } = useAccount();
   const totalPnl = tab === "positions" ? (portfolio?.unrealized_pnl ?? null) : null;
 
-  const views = { home, chart, signals, positions, more } as const;
+  const views = { home, agent, signals, positions, more } as const;
 
   const switchTab = useCallback((t: Tab) => {
     hapticTap();

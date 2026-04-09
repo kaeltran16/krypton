@@ -12,6 +12,7 @@ import { useHomeStore } from "../../home/store";
 import { useMLStore } from "../../ml/store";
 import { api } from "../../../shared/lib/api";
 import { hapticPulse } from "../../../shared/lib/haptics";
+import { useAgentStore } from "../../agent/store";
 
 export function useSignalWebSocket() {
   const pairs = useSettingsStore((s) => s.pairs);
@@ -79,6 +80,8 @@ export function useSignalWebSocket() {
       } else if (data.type === "backfill_update") {
         const { type, ...status } = data;
         useMLStore.getState().onBackfillUpdate(status);
+      } else if (data.type === "agent_analysis" && data.data) {
+        useAgentStore.getState().addAnalysis(data.data);
       }
     };
 

@@ -31,6 +31,7 @@ async def _test_lifespan(app: FastAPI):
     mock_settings.jwt_secret = _TEST_JWT_SECRET
     mock_settings.google_client_id = "test-client-id"
     mock_settings.allowed_emails = "test@example.com"
+    mock_settings.agent_api_key = "test-agent-key"
     mock_settings.pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     mock_settings.engine_traditional_weight = 0.40
     mock_settings.engine_flow_weight = 0.22
@@ -40,6 +41,7 @@ async def _test_lifespan(app: FastAPI):
     mock_settings.engine_ml_weight_max = 0.30
     mock_settings.engine_signal_threshold = 40
     mock_settings.engine_llm_threshold = 40
+    mock_settings.engine_mr_llm_trigger = 0.30
     mock_settings.ml_confidence_threshold = 0.65
     mock_settings.llm_factor_weights = {
         "support_proximity": 6.0, "resistance_proximity": 6.0,

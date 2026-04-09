@@ -37,6 +37,7 @@ def _make_app(regime_weights=None):
     app.state.settings.engine_signal_threshold = 40
     app.state.settings.engine_llm_threshold = 40
     app.state.settings.engine_mr_llm_trigger = 0.30
+    app.state.settings.engine_conviction_floor = 0.30
     app.state.settings.engine_ml_weight_min = 0.05
     app.state.settings.engine_ml_weight_max = 0.30
     app.state.settings.ml_confidence_threshold = 0.65

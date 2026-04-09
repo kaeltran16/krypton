@@ -616,3 +616,22 @@ class ErrorLog(Base):
     __table_args__ = (
         Index("ix_error_log_timestamp", "timestamp"),
     )
+
+
+class AgentAnalysis(Base):
+    __tablename__ = "agent_analyses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    pair: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    narrative: Mapped[str] = mapped_column(Text, nullable=False)
+    annotations: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        Index("ix_agent_analysis_created", "created_at"),
+        Index("ix_agent_analysis_pair_type", "pair", "type"),
+    )

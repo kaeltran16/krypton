@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Tab = "home" | "chart" | "signals" | "positions" | "more";
+export type Tab = "home" | "agent" | "signals" | "positions" | "more";
 
 interface PositionTarget {
   pair: string;

@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     openrouter_model: str = "anthropic/claude-3.5-sonnet"
     database_url: str = "postgresql+asyncpg://krypton:krypton@localhost:5432/krypton"
     redis_url: str = "redis://localhost:6379/0"
+    agent_api_key: str = ""
 
     # okx private api
     okx_api_key: str = ""

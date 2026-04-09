@@ -7,6 +7,7 @@ import type { Alert, AlertCreateRequest, AlertUpdateRequest, AlertHistoryEntry, 
 import type { EngineParameters, ParameterDiff, AtrOptimizationResult } from "../../features/engine/types";
 import type { SystemHealthResponse } from "../../features/system/types";
 import type { OptimizerStatus, Proposal } from "../../features/optimizer/types";
+import type { AgentAnalysis } from "../../features/agent/types";
 
 // ML Training Types
 export interface MLTrainRequest {
@@ -320,6 +321,15 @@ export const api = {
   getCandles: (pair: string, timeframe: string, limit = 200) => {
     const query = new URLSearchParams({ pair, timeframe, limit: String(limit) });
     return request<CandleData[]>(`/api/candles?${query}`);
+  },
+
+  getAgentAnalyses: (params?: { type?: string; pair?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.set("type", params.type);
+    if (params?.pair) query.set("pair", params.pair);
+    if (params?.limit) query.set("limit", String(params.limit));
+    const qs = query.toString();
+    return request<AgentAnalysis[]>(`/api/agent/analysis${qs ? `?${qs}` : ""}`);
   },
 
   getSignalStats: (days = 7) =>

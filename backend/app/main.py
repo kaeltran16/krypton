@@ -2400,6 +2400,9 @@ def create_app(lifespan_override=None) -> FastAPI:
     from app.api.monitor import router as monitor_router
     app.include_router(monitor_router)
 
+    from app.api.agent import router as agent_router
+    app.include_router(agent_router)
+
     return app
 
 

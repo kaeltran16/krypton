@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Layout } from "./shared/components/Layout";
 import { HomeView } from "./features/home/components/HomeView";
-import { ChartView } from "./features/chart/components/ChartView";
+import { AgentView } from "./features/agent/components/AgentView";
 import { SignalsView } from "./features/signals/components/SignalsView";
 import { PositionsView } from "./features/positions/components/PositionsView";
 import { NewsAlertToast } from "./features/news/components/NewsAlertToast";
@@ -57,7 +57,7 @@ function AuthenticatedApp() {
       {showUpdateModal && <UpdateModal onUpdate={applyUpdate} onDismiss={dismiss} />}
       <Layout
         home={<HomeView />}
-        chart={<ChartView pair={selectedPair} />}
+        agent={<AgentView pair={selectedPair} />}
         signals={<SignalsView />}
         positions={<PositionsView />}
         more={<MorePage />}

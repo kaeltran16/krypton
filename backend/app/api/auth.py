@@ -90,6 +90,19 @@ def require_auth():
     return Depends(_get_current_user)
 
 
+async def _verify_agent_key(request: Request) -> dict:
+    key = request.headers.get("X-Agent-Key")
+    if not key:
+        raise HTTPException(401, "Agent key required")
+    if key != request.app.state.settings.agent_api_key:
+        raise HTTPException(403, "Invalid agent key")
+    return {"agent": True}
+
+
+def require_agent_key():
+    return Depends(_verify_agent_key)
+
+
 @router.post("/google")
 async def google_login(body: GoogleLoginRequest, request: Request, response: Response):
     settings = request.app.state.settings

@@ -157,6 +157,22 @@ export const theme = {
     obv: "#818CF8",
     curveColors: ["#0EB5E5", "#2DD4A0", "#FB7185", "#8B9AFF"],
   },
+
+  annotations: {
+    level: "#2DD4A0",
+    zone: "#F0B90B",
+    signal_long: "#2DD4A0",
+    signal_short: "#FB7185",
+    regime_trending: "#2DD4A0",
+    regime_ranging: "#F0B90B",
+    regime_volatile: "#FB7185",
+    regime_steady: "#8B9AFF",
+    trendline: "#8E9AAD",
+    position_long: "#2DD4A0",
+    position_short: "#FB7185",
+    sl: "#FB7185",
+    tp: "#2DD4A0",
+  },
 } as const;
 
 export function hexToRgba(hex: string, alpha: number): string {
