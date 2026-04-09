@@ -10,37 +10,31 @@ import torch.nn as nn
 
 from app.ml.drift import DriftConfig, feature_drift_penalty
 from app.ml.model import SignalLSTM
+from app.ml.utils import (
+    NEUTRAL_RESULT, FeatureMapper,
+    regression_result, sigmoid_confidence,
+)
 
 logger = logging.getLogger(__name__)
-
-DIRECTION_MAP = {0: "NEUTRAL", 1: "LONG", 2: "SHORT"}
-
-_NEUTRAL_RESULT = {
-    "direction": "NEUTRAL",
-    "confidence": 0.0,
-    "sl_atr": 0.0,
-    "tp1_atr": 0.0,
-    "tp2_atr": 0.0,
-    "mc_variance": 0.0,
-}
 
 MC_DROPOUT_PASSES = 5
 
 
 class Predictor:
-    """Loads a trained model checkpoint and runs inference."""
+    """Inference wrapper for SignalLSTM regression model."""
 
     def __init__(
         self,
         checkpoint_path: str,
         max_age_days: int = 14,
         drift_config: DriftConfig | None = None,
+        standardization_stats: dict | None = None,
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._max_confidence = 1.0
         self._drift_config = drift_config or DriftConfig()
+        self._std_stats = standardization_stats
 
-        # Load config from JSON sidecar (avoids weights_only restrictions)
         config_path = os.path.join(os.path.dirname(checkpoint_path), "model_config.json")
         with open(config_path) as f:
             config = json.load(f)
@@ -50,30 +44,13 @@ class Predictor:
         self.flow_used = config.get("flow_used", False)
         self.regime_used = config.get("regime_used", False)
         self.btc_used = config.get("btc_used", False)
-        self._temperature = config.get("temperature", 1.0)
-        self._expected_features = config.get("feature_names", [])
-        if self._expected_features and len(self._expected_features) != self.input_size:
-            logger.warning(
-                "Config inconsistency in %s: input_size=%d but feature_names has %d entries — truncating",
-                os.path.basename(os.path.dirname(checkpoint_path)),
-                self.input_size, len(self._expected_features),
-            )
-            self._expected_features = self._expected_features[:self.input_size]
-        self._feature_map = None
-        self._available_features = None
-        self._n_missing_features = 0
-        self._n_expected_features = 0
         self._drift_stats = config.get("drift_stats")
 
-        # Check checkpoint age
+        self._mapper = FeatureMapper(self.input_size, config.get("feature_names", []))
+
         import time as _time
         file_age_days = (_time.time() - os.path.getmtime(checkpoint_path)) / 86400
         if file_age_days > max_age_days:
-            logger.warning(
-                "Model %s is %.1f days old (max %d), confidence capped at 0.3",
-                os.path.basename(os.path.dirname(checkpoint_path)),
-                file_age_days, max_age_days,
-            )
             self._max_confidence = 0.3
 
         self.model = SignalLSTM(
@@ -87,127 +64,64 @@ class Predictor:
         self.model.load_state_dict(state_dict)
         self.model.eval()
 
+    @property
+    def _feature_map(self):
+        return self._mapper._feature_map
+
+    @property
+    def _n_missing_features(self):
+        return self._mapper._n_missing_features
+
+    @property
+    def _n_expected_features(self):
+        return self._mapper._n_expected_features
+
     def set_available_features(self, names: list[str]):
-        """Set the feature names available at inference time.
-
-        Builds a mapping from available feature columns to the model's expected layout.
-        """
-        if names == self._available_features:
-            return  # mapping unchanged
-
-        self._available_features = names
-        expected = self._expected_features
-        if not expected:
-            self._feature_map = None
-            self._n_missing_features = 0
-            self._n_expected_features = 0
-            return
-
-        available_idx = {name: i for i, name in enumerate(names)}
-        raw_map = []
-        missing = []
-        for name in expected:
-            idx = available_idx.get(name, -1)
-            raw_map.append(idx)
-            if idx == -1:
-                missing.append(name)
-
-        self._n_missing_features = len(missing)
-        self._n_expected_features = len(expected)
-
-        if missing:
-            logger.warning("Missing features for model (filled with 0): %s", missing)
-
-        # Precompute numpy index arrays for vectorized gather in _map_features
-        out_idx = np.array([i for i, c in enumerate(raw_map) if c >= 0], dtype=np.intp)
-        in_idx = np.array([c for c in raw_map if c >= 0], dtype=np.intp)
-        valid = out_idx < self.input_size
-        self._out_idx = out_idx[valid]
-        self._in_idx = in_idx[valid]
-        self._feature_map = raw_map
+        self._mapper.set_available_features(names)
 
     def _map_features(self, features: np.ndarray) -> np.ndarray:
-        """Remap feature columns to match model's expected layout."""
-        if self._feature_map is None:
-            if features.shape[1] > self.input_size:
-                return features[:, :self.input_size]
-            return features
-
-        n_rows = features.shape[0]
-        mapped = np.zeros((n_rows, self.input_size), dtype=np.float32)
-        mapped[:, self._out_idx] = features[:, self._in_idx]
-        return mapped
+        return self._mapper.map_features(features)
 
     def predict(self, features: np.ndarray) -> dict:
-        """Run inference on a feature matrix.
-
-        Args:
-            features: (n_candles, n_features) array. Uses last seq_len rows.
-
-        Returns:
-            dict with direction, confidence, sl_atr, tp1_atr, tp2_atr, mc_variance.
-        """
         if len(features) < self.seq_len:
-            return dict(_NEUTRAL_RESULT)
+            return dict(NEUTRAL_RESULT, mc_variance=0.0)
 
-        # Feature mapping by name (if available)
-        features = self._map_features(features)
-
-        # Take last seq_len candles
+        features = self._mapper.map_features(features)
         window = features[-self.seq_len:]
         x = torch.tensor(window, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        temperature = self._temperature
-
-        # Only enable Dropout layers, NOT BatchNorm
+        # MC Dropout: enable only Dropout layers, not BatchNorm
         self.model.eval()
         for m in self.model.modules():
             if isinstance(m, nn.Dropout):
                 m.train()
 
-        all_probs = []
+        all_returns = []
         all_regs = []
         for _ in range(MC_DROPOUT_PASSES):
             with torch.no_grad():
-                dir_logits, reg_out = self.model(x)
-                probs = torch.softmax(dir_logits / temperature, dim=1).squeeze(0).cpu().numpy()
-                all_probs.append(probs)
+                return_pred, reg_out = self.model(x)
+                all_returns.append(return_pred.squeeze().cpu().item())
                 all_regs.append(reg_out.squeeze(0).cpu().numpy())
 
-        self.model.eval()  # restore all layers to eval
+        self.model.eval()
 
-        mean_probs = np.mean(all_probs, axis=0)
+        mean_return = float(np.mean(all_returns))
         mean_reg = np.mean(all_regs, axis=0)
+        mc_variance = float(np.var(all_returns))
 
-        # Epistemic uncertainty: variance across passes
-        prob_variance = float(np.mean(np.var(all_probs, axis=0)))
+        result = regression_result(mean_return, mean_reg)
 
-        direction_idx = int(np.argmax(mean_probs))
-        raw_confidence = float(mean_probs[direction_idx])
-
-        # 1. Missing feature penalty (data quality discount, applied first)
-        if self._n_missing_features > 0 and self._n_expected_features > 0:
-            missing_ratio = self._n_missing_features / self._n_expected_features
-            raw_confidence *= 1.0 - (missing_ratio * 0.5)
-
-        # 2. Reduce confidence proportionally to uncertainty
-        uncertainty_penalty = min(1.0, prob_variance * 10)
-        confidence = raw_confidence * (1.0 - uncertainty_penalty)
+        uncertainty = np.sqrt(mc_variance)
+        raw_confidence = sigmoid_confidence(mean_return, uncertainty)
 
         drift_pen = feature_drift_penalty(
             window, self._drift_stats, top_k=3, config=self._drift_config,
         )
-        confidence *= (1.0 - drift_pen)
-
-        # Cap confidence for stale models
+        confidence = raw_confidence * (1.0 - drift_pen)
         confidence = min(confidence, self._max_confidence)
 
-        return {
-            "direction": DIRECTION_MAP[direction_idx],
-            "confidence": confidence,
-            "sl_atr": float(mean_reg[0]),
-            "tp1_atr": float(mean_reg[1]),
-            "tp2_atr": float(mean_reg[2]),
-            "mc_variance": prob_variance,
-            "drift_penalty": drift_pen,
-        }
+        result["confidence"] = confidence
+        result["mc_variance"] = mc_variance
+        result["drift_penalty"] = drift_pen
+        return result

@@ -2,62 +2,64 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.ml.labels import generate_labels, LabelConfig
+from app.ml.labels import generate_targets, TargetConfig
 
 
-def _make_candles_with_known_move(n=100, base=67000):
-    """First 80 candles flat, then sharp up move."""
+def _make_candles_df(n=500, base=67000):
+    """Candles with a mix of flat and trending periods."""
     from datetime import datetime, timedelta, timezone
     rng = np.random.default_rng(42)
     data = []
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     for i in range(n):
-        if i < 80:
-            c = base + rng.uniform(-10, 10)
-        else:
-            c = base + (i - 80) * 200  # sharp up
+        noise = rng.uniform(-50, 50)
+        trend = 20 * np.sin(2 * np.pi * i / 100)
+        c = base + trend + noise
         data.append({
             "timestamp": (start + timedelta(hours=i)).isoformat(),
-            "open": c - 5, "high": c + 20, "low": c - 20, "close": c, "volume": 100,
+            "open": c - 5, "high": c + 30, "low": c - 30, "close": c, "volume": 100,
         })
     return pd.DataFrame(data)
 
 
-class TestGenerateLabels:
+class TestGenerateTargets:
 
-    def test_output_shape(self):
-        df = _make_candles_with_known_move()
-        config = LabelConfig(horizon=10, threshold_pct=1.0)
-        direction, sl_atr, tp1_atr, tp2_atr = generate_labels(df, config)
-        assert len(direction) == len(df)
-        assert len(sl_atr) == len(df)
+    def test_output_shapes(self):
+        df = _make_candles_df(500)
+        cfg = TargetConfig(horizon=48)
+        fwd, sl, tp1, tp2, valid = generate_targets(df, cfg)
+        assert fwd.shape == (500,)
+        assert sl.shape == (500,)
+        assert valid.shape == (500,)
 
-    def test_labels_are_valid_classes(self):
-        df = _make_candles_with_known_move()
-        config = LabelConfig(horizon=10, threshold_pct=1.0)
-        direction, _, _, _ = generate_labels(df, config)
-        # 0=NEUTRAL, 1=LONG, 2=SHORT
-        assert set(np.unique(direction)).issubset({0, 1, 2})
+    def test_last_horizon_candles_invalid(self):
+        df = _make_candles_df(200)
+        cfg = TargetConfig(horizon=48)
+        _, _, _, _, valid = generate_targets(df, cfg)
+        assert not valid[-48:].any()
+        assert valid[:100].any()
 
-    def test_last_horizon_candles_are_neutral(self):
-        df = _make_candles_with_known_move(100)
-        config = LabelConfig(horizon=10, threshold_pct=1.0)
-        direction, _, _, _ = generate_labels(df, config)
-        # Last 10 candles can't look forward far enough — should be NEUTRAL
-        assert all(direction[-10:] == 0)
+    def test_atr_normalization(self):
+        df = _make_candles_df(500)
+        cfg = TargetConfig(horizon=48)
+        fwd, _, _, _, valid = generate_targets(df, cfg)
+        valid_fwd = fwd[valid]
+        assert valid_fwd.std() > 0.1
+        assert valid_fwd.std() < 20
 
-    def test_regression_targets_positive(self):
-        df = _make_candles_with_known_move()
-        config = LabelConfig(horizon=10, threshold_pct=1.0)
-        _, sl_atr, tp1_atr, tp2_atr = generate_labels(df, config)
-        # SL/TP distances should be non-negative where defined
-        valid = sl_atr[sl_atr > 0]
-        assert (valid >= 0).all()
+    def test_zero_atr_skipped(self):
+        df = _make_candles_df(200)
+        for col in ["open", "high", "low", "close"]:
+            df.loc[:13, col] = 67000.0
+        cfg = TargetConfig(horizon=48)
+        _, _, _, _, valid = generate_targets(df, cfg)
+        assert not valid[:14].any()
 
-    def test_high_threshold_mostly_neutral(self):
-        df = _make_candles_with_known_move()
-        config = LabelConfig(horizon=10, threshold_pct=50.0)  # 50% move required
-        direction, _, _, _ = generate_labels(df, config)
-        # Almost all should be NEUTRAL with such high threshold
-        neutral_pct = (direction == 0).sum() / len(direction)
-        assert neutral_pct > 0.9
+    def test_sltp_only_for_significant_moves(self):
+        df = _make_candles_df(500)
+        cfg = TargetConfig(horizon=48, noise_floor=0.3)
+        fwd, sl, tp1, tp2, valid = generate_targets(df, cfg)
+        small_moves = valid & (np.abs(fwd) < 0.3)
+        if small_moves.any():
+            assert (sl[small_moves] == 0).all()
+            assert (tp1[small_moves] == 0).all()

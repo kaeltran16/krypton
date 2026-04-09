@@ -1,6 +1,6 @@
 """Shared ML utilities used by both training (api/ml.py) and inference (main.py)."""
 
-import math
+import logging
 from datetime import datetime
 
 import numpy as np
@@ -10,20 +10,105 @@ from app.engine.scoring import sigmoid_scale
 from app.engine.regime import compute_regime_mix
 from app.engine.traditional import compute_trend_conviction
 
+logger = logging.getLogger(__name__)
+
 TF_MINUTES = {"15m": 15, "1h": 60, "4h": 240, "1D": 1440}
 
+SCORE_SCALE = 40  # ±2.5 ATR saturates at ±100
 
-def geometric_balanced_accuracy(recalls: dict | list, epsilon: float = 1e-6) -> float:
-    """Geometric mean of per-class recalls.
+NEUTRAL_RESULT = {
+    "direction": "NEUTRAL",
+    "ml_score": 0.0,
+    "confidence": 0.0,
+    "sl_atr": 0.0,
+    "tp1_atr": 0.0,
+    "tp2_atr": 0.0,
+}
 
-    Exponentially penalises near-zero recall on any class, preventing
-    degenerate single-class-collapse models that arithmetic mean misses.
+
+def regression_result(mean_return: float, mean_reg: np.ndarray) -> dict:
+    """Build prediction result dict from regression output."""
+    direction = "LONG" if mean_return > 0 else ("SHORT" if mean_return < 0 else "NEUTRAL")
+    ml_score = float(np.clip(mean_return * SCORE_SCALE, -100, 100))
+    return {
+        "direction": direction,
+        "ml_score": ml_score,
+        "sl_atr": float(mean_reg[0]),
+        "tp1_atr": float(mean_reg[1]),
+        "tp2_atr": float(mean_reg[2]),
+    }
+
+
+def sigmoid_confidence(mean_return: float, uncertainty: float) -> float:
+    """Compute confidence via sigmoid(|prediction| / uncertainty - 1)."""
+    uncertainty = max(uncertainty, 1e-6)
+    return 1.0 / (1.0 + np.exp(-(abs(mean_return) / uncertainty - 1.0)))
+
+
+class FeatureMapper:
+    """Shared feature mapping logic for predictors."""
+
+    def __init__(self, input_size: int, expected_features: list[str]):
+        self.input_size = input_size
+        self._expected_features = expected_features
+        self._feature_map = None
+        self._available_features = None
+        self._n_missing_features = 0
+        self._n_expected_features = 0
+        self._out_idx = None
+        self._in_idx = None
+
+    def set_available_features(self, names: list[str]):
+        if names == self._available_features:
+            return
+        self._available_features = names
+        expected = self._expected_features
+        if not expected:
+            self._feature_map = None
+            self._n_missing_features = 0
+            self._n_expected_features = 0
+            return
+        available_idx = {name: i for i, name in enumerate(names)}
+        raw_map = []
+        missing = []
+        for name in expected:
+            idx = available_idx.get(name, -1)
+            raw_map.append(idx)
+            if idx == -1:
+                missing.append(name)
+        self._n_missing_features = len(missing)
+        self._n_expected_features = len(expected)
+        if missing:
+            logger.warning("Missing features (filled with 0): %s", missing)
+        out_idx = np.array([i for i, c in enumerate(raw_map) if c >= 0], dtype=np.intp)
+        in_idx = np.array([c for c in raw_map if c >= 0], dtype=np.intp)
+        valid = out_idx < self.input_size
+        self._out_idx = out_idx[valid]
+        self._in_idx = in_idx[valid]
+        self._feature_map = raw_map
+
+    def map_features(self, features: np.ndarray) -> np.ndarray:
+        if self._feature_map is None:
+            if features.shape[1] > self.input_size:
+                return features[:, :self.input_size]
+            return features
+        n_rows = features.shape[0]
+        mapped = np.zeros((n_rows, self.input_size), dtype=np.float32)
+        mapped[:, self._out_idx] = features[:, self._in_idx]
+        return mapped
+
+
+def directional_accuracy(predictions: np.ndarray, targets: np.ndarray) -> float:
+    """Fraction of predictions with matching sign to targets.
+
+    Samples where target is near-zero (|target| < 1e-6) are excluded.
     """
-    vals = list(recalls.values()) if isinstance(recalls, dict) else list(recalls)
-    if not vals:
+    mask = np.abs(targets) > 1e-6
+    if not mask.any():
         return 0.0
-    log_vals = [math.log(max(v, epsilon)) for v in vals]
-    return math.exp(sum(log_vals) / len(log_vals))
+    pred_sign = np.sign(predictions[mask])
+    target_sign = np.sign(targets[mask])
+    return float((pred_sign == target_sign).mean())
 
 
 def bucket_timestamp(ts: datetime, timeframe: str) -> datetime:

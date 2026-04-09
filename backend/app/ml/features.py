@@ -75,6 +75,75 @@ ALL_FEATURES = BASE_FEATURES
 ALL_FEATURES_WITH_FLOW = BASE_FEATURES + FLOW_FEATURES + FLOW_ROC_FEATURES
 
 
+WARMUP_ROWS = 200  # EMA(200) in ema_slow_dist is the longest indicator lookback
+
+
+def drop_warmup_rows(
+    features: np.ndarray,
+    warmup: int = 200,
+) -> tuple[np.ndarray, int]:
+    """Slice off warmup rows from feature matrix.
+
+    Returns (trimmed_features, offset) where offset is the number of rows removed.
+    """
+    if warmup >= len(features):
+        return features, 0  # not enough data — return all
+    return features[warmup:], warmup
+
+
+def compute_standardization_stats(features: np.ndarray) -> dict:
+    """Compute per-feature mean and std for z-score normalization.
+
+    Returns dict with 'mean' and 'std' lists, serializable to JSON.
+    """
+    mean = features.mean(axis=0)
+    std = features.std(axis=0)
+    # Replace zero std with 1.0 to avoid division by zero
+    std = np.where(std < 1e-10, 1.0, std)
+    return {
+        "mean": mean.tolist(),
+        "std": std.tolist(),
+    }
+
+
+def apply_standardization(
+    features: np.ndarray,
+    stats: dict,
+) -> np.ndarray:
+    """Apply z-score normalization using precomputed stats."""
+    mean = np.array(stats["mean"], dtype=np.float32)
+    std = np.array(stats["std"], dtype=np.float32)
+    return ((features - mean) / std).astype(np.float32)
+
+
+def select_features_by_importance(
+    importances: np.ndarray,
+    feature_names: list[str],
+    threshold: float = 0.01,
+) -> tuple[list[str], list[int]]:
+    """Select features contributing above threshold fraction of total importance.
+
+    Args:
+        importances: Per-feature importance scores.
+        feature_names: Feature names matching importances.
+        threshold: Minimum fraction of total importance to keep.
+
+    Returns:
+        (selected_names, selected_indices) — features that passed.
+    """
+    total = importances.sum()
+    if total <= 0:
+        return list(feature_names), list(range(len(feature_names)))
+    fractions = importances / total
+    selected_names = []
+    selected_indices = []
+    for i, (name, frac) in enumerate(zip(feature_names, fractions)):
+        if frac >= threshold:
+            selected_names.append(name)
+            selected_indices.append(i)
+    return selected_names, selected_indices
+
+
 def get_feature_names(
     flow_used: bool = False,
     regime_used: bool = False,

@@ -1,17 +1,12 @@
 import numpy as np
 import pytest
-import torch
-from torch.utils.data import DataLoader
 
-from app.ml.dataset import CandleDataset
 from app.ml.drift import (
     DriftConfig,
     compute_feature_distributions,
-    compute_permutation_importance,
     compute_psi,
     feature_drift_penalty,
 )
-from app.ml.model import SignalLSTM
 from tests.ml.conftest import make_drift_stats
 
 
@@ -208,51 +203,5 @@ class TestFeatureDriftPenalty:
         )
         assert penalty == 0.45
 
-
-class TestPermutationImportance:
-
-    @pytest.fixture
-    def model_and_loader(self):
-        """Create a small model and validation data loader."""
-        rng = np.random.default_rng(42)
-        input_size = 10
-        seq_len = 5
-        n_samples = 50
-
-        model = SignalLSTM(
-            input_size=input_size, hidden_size=16,
-            num_layers=1, dropout=0.0,
-        )
-        model.eval()
-
-        features = rng.standard_normal((n_samples, input_size)).astype(np.float32)
-        direction = rng.integers(0, 3, size=n_samples)
-        sl = rng.uniform(0.5, 2.0, size=n_samples).astype(np.float32)
-        tp1 = rng.uniform(1.0, 3.0, size=n_samples).astype(np.float32)
-        tp2 = rng.uniform(2.0, 5.0, size=n_samples).astype(np.float32)
-
-        ds = CandleDataset(features, direction, sl, tp1, tp2, seq_len=seq_len)
-        loader = DataLoader(ds, batch_size=16, shuffle=False)
-
-        return model, loader, input_size
-
-    def test_returns_correct_length(self, model_and_loader):
-        model, loader, input_size = model_and_loader
-        importance = compute_permutation_importance(model, loader, input_size)
-        assert len(importance) == input_size
-
-    def test_returns_sorted_indices(self, model_and_loader):
-        """Result should be sorted by importance descending."""
-        model, loader, input_size = model_and_loader
-        importance = compute_permutation_importance(model, loader, input_size)
-        scores = [s for _, s in importance]
-        assert scores == sorted(scores, reverse=True)
-
-    def test_importance_scores_nonnegative_on_average(self, model_and_loader):
-        """Mean importance should be >= 0 (shuffling should not help on average)."""
-        model, loader, input_size = model_and_loader
-        importance = compute_permutation_importance(model, loader, input_size)
-        mean_score = np.mean([s for _, s in importance])
-        assert mean_score >= -0.5
 
 

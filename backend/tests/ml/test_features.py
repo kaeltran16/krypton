@@ -9,6 +9,10 @@ from app.ml.features import (
     INTER_PAIR_FEATURES,
     FLOW_FEATURES,
     FLOW_ROC_FEATURES,
+    WARMUP_ROWS,
+    drop_warmup_rows,
+    compute_standardization_stats,
+    apply_standardization,
 )
 
 
@@ -266,3 +270,45 @@ class TestInterPair:
         assert features.shape[1] == 26
         # btc_ret_5 should have non-zero values after warmup
         assert np.any(features[10:, 24] != 0)
+
+
+class TestWarmupRemoval:
+
+    def test_warmup_constant(self):
+        assert WARMUP_ROWS == 200
+
+    def test_drop_warmup_rows(self):
+        data = np.random.randn(500, 24).astype(np.float32)
+        trimmed, offset = drop_warmup_rows(data, warmup=200)
+        assert trimmed.shape[0] == 300
+        assert offset == 200
+        np.testing.assert_array_equal(trimmed, data[200:])
+
+
+class TestStandardization:
+
+    def test_zero_mean_unit_var(self):
+        rng = np.random.default_rng(42)
+        data = rng.normal(loc=5.0, scale=3.0, size=(1000, 10)).astype(np.float32)
+        stats = compute_standardization_stats(data)
+        normed = apply_standardization(data, stats)
+        # Each column should be ~zero mean, ~unit std
+        for col in range(10):
+            assert abs(normed[:, col].mean()) < 0.05
+            assert abs(normed[:, col].std() - 1.0) < 0.05
+
+    def test_stats_dict_has_expected_keys(self):
+        data = np.random.randn(100, 5).astype(np.float32)
+        stats = compute_standardization_stats(data)
+        assert "mean" in stats
+        assert "std" in stats
+        assert len(stats["mean"]) == 5
+        assert len(stats["std"]) == 5
+
+    def test_zero_std_feature_not_nan(self):
+        """Constant feature should not produce NaN after standardization."""
+        data = np.ones((100, 3), dtype=np.float32)
+        data[:, 1] = 5.0  # constant column
+        stats = compute_standardization_stats(data)
+        normed = apply_standardization(data, stats)
+        assert not np.isnan(normed).any()

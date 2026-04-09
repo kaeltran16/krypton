@@ -96,7 +96,9 @@ class BacktestConfig:
     tp2_atr_multiplier: float = 3.0
     risk_per_trade_pct: float = 1.0
     max_concurrent_positions: int = 3
-    ml_confidence_threshold: float = 0.65  # minimum ML confidence to emit signal
+    ml_confidence_threshold: float = 0.40  # minimum ML confidence to emit signal
+    engine_ml_weight_min: float = 0.20
+    engine_ml_weight_max: float = 0.50
     conviction_floor: float | None = None
     param_overrides: dict = field(default_factory=dict)
     flow_snapshots: list[dict] | None = None
@@ -362,6 +364,8 @@ def run_backtest(
 
         score = blend_with_ml(
             indicator_preliminary, ml_score, ml_confidence,
+            ml_weight_min=config.engine_ml_weight_min,
+            ml_weight_max=config.engine_ml_weight_max,
             ml_confidence_threshold=config.ml_confidence_threshold,
         )
 

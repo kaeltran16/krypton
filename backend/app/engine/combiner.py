@@ -111,7 +111,7 @@ def blend_with_ml(
         and ml_confidence is not None
         and ml_confidence >= ml_confidence_threshold
     ):
-        t = (ml_confidence - ml_confidence_threshold) / (1.0 - ml_confidence_threshold)
+        t = (ml_confidence - ml_confidence_threshold) / max(1.0 - ml_confidence_threshold, 0.01)
         effective_weight = ml_weight_min + (ml_weight_max - ml_weight_min) * t
         blended = indicator_preliminary * (1 - effective_weight) + ml_score * effective_weight
         return max(min(round(blended), 100), -100)

@@ -144,28 +144,19 @@ def feature_drift_penalty(
         return config.penalty_severe
 
 
-def compute_permutation_importance(
+def _permutation_importance(
     model: nn.Module,
     val_loader,
     input_size: int,
     n_repeats: int = 3,
 ) -> list[tuple[int, float]]:
-    """Compute permutation importance for each feature on validation data.
+    """Permutation importance using HuberLoss for regression models.
 
-    Shuffles each feature column across the batch, measures the increase in
-    classification loss. Higher increase = more important feature.
-
-    Args:
-        model: trained SignalLSTM in eval mode.
-        val_loader: DataLoader yielding (x, y_dir, y_reg) batches.
-        input_size: number of feature columns.
-        n_repeats: number of shuffle repeats per feature for stability.
-
-    Returns:
-        List of (feature_index, importance_score) sorted by importance descending.
+    val_loader yields (x, y_return, y_reg) from CandleDataset.
+    model returns (return_pred, reg_out) from SignalLSTM.
     """
     device = next(model.parameters()).device
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.HuberLoss(delta=1.0)
     model.eval()
 
     baseline_loss = 0.0
@@ -173,13 +164,13 @@ def compute_permutation_importance(
     all_x = []
     all_y = []
     with torch.no_grad():
-        for x, y_dir, _ in val_loader:
+        for x, y_return, _ in val_loader:
             x = x.to(device)
-            y_dir = y_dir.to(device)
-            dir_logits, _ = model(x)
-            baseline_loss += criterion(dir_logits, y_dir).item()
+            y_return = y_return.to(device)
+            return_pred, _ = model(x)
+            baseline_loss += criterion(return_pred.squeeze(1), y_return).item()
             all_x.append(x)
-            all_y.append(y_dir)
+            all_y.append(y_return)
             n_batches += 1
 
     if n_batches == 0:
@@ -192,13 +183,13 @@ def compute_permutation_importance(
         total_increase = 0.0
         for _ in range(n_repeats):
             shuffled_loss = 0.0
-            for x, y_dir in zip(all_x, all_y):
+            for x, y_return in zip(all_x, all_y):
                 x_perm = x.clone()
                 perm = torch.randperm(x_perm.size(0), device=device)
                 x_perm[:, :, feat_idx] = x_perm[perm, :, feat_idx]
                 with torch.no_grad():
-                    dir_logits, _ = model(x_perm)
-                    shuffled_loss += criterion(dir_logits, y_dir).item()
+                    return_pred, _ = model(x_perm)
+                    shuffled_loss += criterion(return_pred.squeeze(1), y_return).item()
             shuffled_loss /= n_batches
             total_increase += shuffled_loss - baseline_loss
 
@@ -216,25 +207,12 @@ def compute_drift_stats(
     top_n: int = 5,
     n_repeats: int = 3,
 ) -> dict | None:
-    """Compute drift reference stats (importance ranking + distributions).
-
-    Args:
-        model: trained model in eval mode.
-        val_loader: validation DataLoader for permutation importance.
-        training_features: (n_train_samples, n_features) array for distributions.
-        input_size: number of feature columns.
-        top_n: number of top features to store distributions for.
-        n_repeats: shuffle repeats for permutation importance.
-
-    Returns:
-        dict with 'top_feature_indices' and 'feature_distributions', or None on failure.
-    """
+    """Compute drift reference stats (importance ranking + distributions)."""
     try:
-        importance = compute_permutation_importance(
+        importance = _permutation_importance(
             model, val_loader, input_size, n_repeats=n_repeats,
         )
         top_indices = [idx for idx, _ in importance[:top_n]]
-        # JSON requires string keys for feature indices
         distributions = {}
         for idx in top_indices:
             distributions[str(idx)] = compute_feature_distributions(
@@ -246,5 +224,5 @@ def compute_drift_stats(
             "feature_distributions": distributions,
         }
     except Exception as e:
-        logger.warning("Failed to compute drift stats, model will run without drift detection: %s", e)
+        logger.warning("Failed to compute drift stats: %s", e)
         return None

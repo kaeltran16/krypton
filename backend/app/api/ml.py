@@ -14,10 +14,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.auth import require_auth
 from app.db.models import Candle, OrderFlowSnapshot, MLTrainingRun
-from app.ml.data_loader import prepare_training_data
-from app.ml.labels import LabelConfig
 from app.ml.trainer import Trainer, TrainConfig
-from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime, geometric_balanced_accuracy
+from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +25,14 @@ router = APIRouter(prefix="/api/ml", tags=["ml"])
 class TrainRequest(BaseModel):
     timeframe: str = "1h"
     lookback_days: int = Field(default=365, ge=30, le=1825)
-    epochs: int = Field(default=100, ge=1, le=500)
-    batch_size: int = Field(default=64, ge=8, le=512)
-    hidden_size: int = Field(default=128, ge=32, le=512)
+    epochs: int = Field(default=80, ge=1, le=500)
+    batch_size: int = Field(default=128, ge=8, le=512)
+    hidden_size: int = Field(default=96, ge=32, le=512)
     num_layers: int = Field(default=2, ge=1, le=4)
-    lr: float = Field(default=1e-3, gt=0)
+    lr: float = Field(default=5e-4, gt=0)
     seq_len: int = Field(default=50, ge=25, le=200)
     dropout: float = Field(default=0.3, ge=0.0, le=0.7)
-    label_horizon: int = Field(default=24, ge=4, le=96)
-    label_threshold_pct: float = Field(default=1.5, gt=0, le=10)
+    label_horizon: int = Field(default=48, ge=4, le=96)
     preset_label: str | None = None
 
 
@@ -231,14 +228,16 @@ async def start_training(body: TrainRequest, request: Request):
                             "volume": float(c.volume),
                         } for c in btc_rows]
 
-                label_config = LabelConfig(
-                    horizon=body.label_horizon,
-                    threshold_pct=body.label_threshold_pct,
+                from app.ml.data_loader import prepare_training_data
+                from app.ml.labels import TargetConfig
+
+                target_config = TargetConfig(
+                    horizon=body.label_horizon * 2 if body.timeframe == "15m" else body.label_horizon,
                 )
-                features, direction, sl, tp1, tp2 = prepare_training_data(
+                features, fwd, sl, tp1, tp2, valid, std_stats = prepare_training_data(
                     candles,
                     order_flow=flow,
-                    label_config=label_config,
+                    target_config=target_config,
                     btc_candles=btc_candles_list,
                     regime=regime_list,
                     trend_conviction=conviction_list,
@@ -247,6 +246,8 @@ async def start_training(body: TrainRequest, request: Request):
                 # Per-pair checkpoint directory
                 pair_slug = pair.replace("-", "_").lower()
                 pair_checkpoint_dir = os.path.join(settings.ml_checkpoint_dir, pair_slug)
+
+                from app.ml.trainer import Trainer, TrainConfig
 
                 train_config = TrainConfig(
                     epochs=body.epochs,
@@ -306,36 +307,11 @@ async def start_training(body: TrainRequest, request: Request):
 
                 trainer = Trainer(train_config)
                 ensemble_result = await asyncio.to_thread(
-                    trainer.train_ensemble, features, direction, sl, tp1, tp2, on_progress, train_feature_names,
+                    trainer.train_ensemble, features, fwd, sl, tp1, tp2, valid, on_progress, train_feature_names,
                 )
 
-                # If ensemble fell back to single model, use fallback result
-                if ensemble_result.get("fallback"):
-                    pair_result = ensemble_result["fallback"]
-                else:
-                    # Use most-balanced member (geometric mean of recalls) for DB summary
-                    best_member = max(
-                        ensemble_result["members"],
-                        key=lambda m: geometric_balanced_accuracy(m.get("recall_per_class") or {}),
-                    )
-                    pair_result = {
-                        "best_val_loss": best_member["val_loss"],
-                        "best_epoch": best_member.get("best_epoch", 0),
-                        "train_loss": [],
-                        "val_loss": [],
-                        "total_epochs": best_member.get("total_epochs", 0),
-                        "version": "",
-                        "direction_accuracy": best_member.get("direction_accuracy", 0.0),
-                        "precision_per_class": best_member.get("precision_per_class"),
-                        "recall_per_class": best_member.get("recall_per_class"),
-                        "ensemble_members": ensemble_result["members"],
-                    }
-
                 # Patch config with feature flags
-                if ensemble_result.get("fallback"):
-                    config_path = os.path.join(pair_checkpoint_dir, "model_config.json")
-                else:
-                    config_path = os.path.join(pair_checkpoint_dir, "ensemble_config.json")
+                config_path = os.path.join(pair_checkpoint_dir, "ensemble_config.json")
                 if os.path.isfile(config_path):
                     import json as _j
                     with open(config_path) as f:
@@ -346,26 +322,35 @@ async def start_training(body: TrainRequest, request: Request):
                     with open(config_path, "w") as f:
                         _j.dump(meta, f, indent=2)
 
-                pair_results[pair] = {
-                    "best_epoch": pair_result["best_epoch"],
-                    "best_val_loss": pair_result["best_val_loss"],
-                    "total_epochs": pair_result.get("total_epochs") or len(pair_result["train_loss"]),
-                    "total_samples": len(features),
-                    "flow_data_used": flow_used,
-                    "version": pair_result.get("version"),
-                    "direction_accuracy": pair_result.get("direction_accuracy"),
-                    "precision_per_class": pair_result.get("precision_per_class"),
-                    "recall_per_class": pair_result.get("recall_per_class"),
-                    "ensemble_members": pair_result.get("ensemble_members"),
-                    "loss_history": [
-                        {
-                            "epoch": i + 1,
-                            "train_loss": pair_result["train_loss"][i],
-                            "val_loss": pair_result["val_loss"][i] if i < len(pair_result["val_loss"]) else None,
-                        }
-                        for i in range(len(pair_result["train_loss"]))
-                    ],
-                }
+                # Save standardization stats alongside ensemble config
+                if std_stats is not None:
+                    stats_path = os.path.join(pair_checkpoint_dir, "standardization_stats.json")
+                    with open(stats_path, "w") as f:
+                        _j.dump(std_stats, f, indent=2)
+
+                if ensemble_result["n_members"] == 0:
+                    pair_results[pair] = {
+                        "best_epoch": 0, "best_val_loss": None,
+                        "total_epochs": 0, "total_samples": len(features),
+                        "flow_data_used": flow_used, "version": None,
+                        "directional_accuracy": 0.0, "ensemble_members": ensemble_result["members"],
+                        "loss_history": [],
+                    }
+                else:
+                    active = [m for m in ensemble_result["members"] if not m.get("excluded")]
+                    best_member = min(active, key=lambda m: m["val_huber_loss"])
+                    pair_results[pair] = {
+                        "best_epoch": best_member.get("best_epoch", 0),
+                        "best_val_loss": best_member["val_huber_loss"],
+                        "total_epochs": 0,
+                        "total_samples": len(features),
+                        "flow_data_used": flow_used,
+                        "version": None,
+                        "directional_accuracy": best_member.get("directional_accuracy", 0.0),
+                        "prediction_std": best_member.get("prediction_std", 0.0),
+                        "ensemble_members": ensemble_result["members"],
+                        "loss_history": [],
+                    }
 
                 # Broadcast pair_completed to WS clients
                 ws_data = ml_ws.get(job_id)
@@ -814,7 +799,6 @@ def _prune_old_jobs(train_jobs: dict):
 def _reload_predictors(app, settings):
     """Reload per-pair ML predictors from checkpoints."""
     import os
-    from app.ml.predictor import Predictor
     from app.ml.ensemble_predictor import EnsemblePredictor
     from app.ml.features import get_feature_names
 
@@ -841,32 +825,24 @@ def _reload_predictors(app, settings):
             continue
 
         ensemble_config = os.path.join(pair_dir, "ensemble_config.json")
-        model_path = os.path.join(pair_dir, "best_model.pt")
 
         try:
-            if os.path.isfile(ensemble_config):
-                predictor = EnsemblePredictor(
-                    pair_dir,
-                    ensemble_disagreement_scale=disagreement_scale,
-                    stale_fresh_days=stale_fresh,
-                    stale_decay_days=stale_decay,
-                    stale_floor=stale_floor,
-                    confidence_cap_partial=cap_partial,
-                    drift_config=drift_config,
-                )
-                logger.info(
-                    "Ensemble predictor loaded for %s (%d members)",
-                    entry, predictor.n_members,
-                )
-            elif os.path.isfile(model_path):
-                predictor = Predictor(
-                    model_path,
-                    drift_config=drift_config,
-                )
-                logger.info("Legacy predictor loaded for %s", entry)
-            else:
+            if not os.path.isfile(ensemble_config):
                 continue
 
+            predictor = EnsemblePredictor(
+                pair_dir,
+                ensemble_disagreement_scale=disagreement_scale,
+                stale_fresh_days=stale_fresh,
+                stale_decay_days=stale_decay,
+                stale_floor=stale_floor,
+                confidence_cap_partial=cap_partial,
+                drift_config=drift_config,
+            )
+            logger.info(
+                "Ensemble predictor loaded for %s (%d members)",
+                entry, predictor.n_members,
+            )
             feature_names = get_feature_names(
                 flow_used=predictor.flow_used,
                 regime_used=predictor.regime_used,

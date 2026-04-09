@@ -643,7 +643,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
     try:
         cache_key = f"candles:{pair}:{timeframe}"
-        raw_candles = await redis.lrange(cache_key, -200, -1)
+        raw_candles = await redis.lrange(cache_key, -300, -1)
     except Exception as e:
         logger.error(f"Redis fetch failed for {pair}:{timeframe}: {e}")
         return
@@ -1031,7 +1031,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
             if not is_btc and getattr(ml_predictor, "btc_used", False):
                 try:
                     btc_key = f"candles:BTC-USDT-SWAP:{timeframe}"
-                    raw_btc = await redis.lrange(btc_key, -200, -1)
+                    raw_btc = await redis.lrange(btc_key, -300, -1)
                     if raw_btc:
                         ml_btc_df = pd.DataFrame([json.loads(c) for c in raw_btc])
                 except Exception as e:
@@ -1134,15 +1134,7 @@ async def run_pipeline(app: FastAPI, candle: dict):
 
             ml_direction = ml_prediction["direction"]
             ml_confidence = ml_prediction["confidence"]
-
-            # Convert ML output to -100..+100 score
-            # Center at 1/3 (uniform probability for 3-class softmax)
-            # so confidence=0.33 → 0, confidence=1.0 → 100
-            if ml_direction == "NEUTRAL":
-                ml_score = 0.0
-            else:
-                centered = (ml_confidence - 1 / 3) / (2 / 3) * 100
-                ml_score = centered if ml_direction == "LONG" else -centered
+            ml_score = ml_prediction["ml_score"]
 
             ml_available = True
         except Exception as e:
@@ -1153,8 +1145,6 @@ async def run_pipeline(app: FastAPI, candle: dict):
         indicator_preliminary,
         ml_score,
         ml_confidence,
-        ml_weight_min=settings.engine_ml_weight_min,
-        ml_weight_max=settings.engine_ml_weight_max,
         ml_confidence_threshold=settings.ml_confidence_threshold,
     )
     agreement = compute_agreement(indicator_preliminary, ml_score)
@@ -1515,7 +1505,7 @@ async def handle_candle(app: FastAPI, candle: dict):
 
     try:
         await redis.rpush(cache_key, candle_json)
-        await redis.ltrim(cache_key, -200, -1)
+        await redis.ltrim(cache_key, -300, -1)
     except Exception as e:
         logger.error(f"Redis cache failed for {candle['pair']}:{candle['timeframe']}: {e}")
 
@@ -1635,7 +1625,7 @@ async def check_pending_signals(app: FastAPI):
 
             cache_key = f"candles:{signal.pair}:{signal.timeframe}"
             if cache_key not in candle_cache:
-                raw_candles = await redis.lrange(cache_key, -200, -1)
+                raw_candles = await redis.lrange(cache_key, -300, -1)
                 if not raw_candles:
                     candle_cache[cache_key] = ([], None)
                 else:
@@ -1901,7 +1891,7 @@ async def backfill_candles(redis, db, pairs: list[str], timeframes: list[str]):
                         **{k: candle[k] for k in ("open", "high", "low", "close", "volume")},
                     })
 
-                pipe.ltrim(cache_key, -200, -1)
+                pipe.ltrim(cache_key, -300, -1)
                 await pipe.execute()
                 logger.info(f"Backfilled {len(rows)} candles for {pair}:{tf}")
 

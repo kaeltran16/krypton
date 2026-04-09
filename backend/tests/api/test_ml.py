@@ -297,10 +297,11 @@ def test_reload_predictors_passes_drift_settings(ml_app):
             "num_layers": 1,
             "dropout": 0.0,
             "seq_len": 10,
+            "model_version": "v2",
             "feature_names": [f"f{j}" for j in range(input_size)],
             "members": [
                 {"index": i, "trained_at": "2026-03-31T12:00:00", "val_loss": 0.4,
-                 "temperature": 1.0, "data_range": [0.0, 1.0]}
+                 "data_range": [0.0, 1.0]}
                 for i in range(3)
             ],
         }

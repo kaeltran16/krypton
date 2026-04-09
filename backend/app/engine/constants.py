@@ -169,8 +169,8 @@ AGREEMENT_FLOOR = 0.85
 AGREEMENT_CEILING = 1.15
 
 # -- Blending: adaptive ML weight ramp --
-ML_WEIGHT_MIN = 0.05
-ML_WEIGHT_MAX = 0.30
+ML_WEIGHT_MIN = 0.20
+ML_WEIGHT_MAX = 0.50
 
 # -- IC pruning --
 IC_WINDOW_DAYS = 7
