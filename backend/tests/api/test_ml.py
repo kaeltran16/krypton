@@ -19,6 +19,7 @@ def _mock_db(scalars_all=None, rowcount=0):
     mock_session = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = scalars_all or []
+    mock_result.scalar_one_or_none.return_value = None
     mock_result.rowcount = rowcount
     mock_session.execute = AsyncMock(return_value=mock_result)
     mock_session.commit = AsyncMock()

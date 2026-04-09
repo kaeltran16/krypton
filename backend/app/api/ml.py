@@ -471,10 +471,18 @@ async def delete_training_run(job_id: str, request: Request):
 async def get_training_status(job_id: str, request: Request):
     train_jobs = _get_train_jobs(request.app)
     job = train_jobs.get(job_id)
-    if not job:
+    if job:
+        # Don't expose asyncio task in response
+        return {"job_id": job_id, **{k: v for k, v in job.items() if k != "task"}}
+    # Fall back to DB for completed/failed jobs (in-memory state lost on restart)
+    db = request.app.state.db
+    async with db.session_factory() as session:
+        row = (await session.execute(
+            select(MLTrainingRun).where(MLTrainingRun.job_id == job_id)
+        )).scalar_one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Training job not found")
-    # Don't expose asyncio task in response
-    return {"job_id": job_id, **{k: v for k, v in job.items() if k != "task"}}
+    return _run_to_dict(row)
 
 
 @router.post("/train/{job_id}/cancel", dependencies=[require_auth()])
