@@ -35,3 +35,4 @@ backend/models/
 # Git worktrees
 .worktrees/
 /.superpowers
+/graphify-out
