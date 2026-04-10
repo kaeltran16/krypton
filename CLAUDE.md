@@ -128,3 +128,12 @@ The core data flow on each confirmed candle (orchestrated in `main.py:run_pipeli
 - Do not make small incremental commits per task — commit once at the end of a feature/batch
 - Do not commit immediately after creating spec/plan markdown files — wait until there is accompanying implementation work
 - Do not use git worktrees — work directly on the current branch
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
