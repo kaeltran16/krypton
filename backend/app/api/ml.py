@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.api.auth import require_auth
+from app.api.auth import require_auth, require_agent_key
 from app.db.models import Candle, OrderFlowSnapshot, MLTrainingRun
 from app.ml.trainer import Trainer, TrainConfig
 from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime
@@ -20,6 +20,58 @@ from app.ml.utils import TF_MINUTES, bucket_timestamp, compute_per_candle_regime
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ml", tags=["ml"])
+
+
+def _get_model_store(settings):
+    """Create a ModelStore from settings. Returns None if endpoint is empty.
+
+    Uses lazy import to avoid crashing if boto3 is not installed.
+    """
+    if not settings.minio_endpoint:
+        return None
+    from app.ml.model_store import ModelStore
+
+    return ModelStore(
+        endpoint=settings.minio_endpoint,
+        access_key=settings.minio_access_key,
+        secret_key=settings.minio_secret_key,
+        bucket=settings.minio_bucket,
+        use_ssl=settings.minio_use_ssl,
+    )
+
+
+async def _fetch_from_minio(store, checkpoint_dir: str, pair_slugs: list[str]) -> list[str]:
+    """Download latest models from MinIO for each pair concurrently. Returns list of pairs fetched."""
+
+    async def _fetch_one(pair_slug: str) -> str | None:
+        try:
+            dest = os.path.join(checkpoint_dir, pair_slug)
+            result = await asyncio.to_thread(store.download_model, pair_slug, dest)
+            if result:
+                logger.info("Fetched model from MinIO for %s", pair_slug)
+                return pair_slug
+            logger.info("No model in MinIO for %s", pair_slug)
+        except Exception as e:
+            logger.error("Failed to fetch model from MinIO for %s: %s", pair_slug, e)
+        return None
+
+    results = await asyncio.gather(*[_fetch_one(s) for s in pair_slugs])
+    return [r for r in results if r]
+
+
+async def _do_reload(app) -> dict:
+    """Fetch from MinIO (if configured) then hot-reload predictors. Shared by both auth variants."""
+    settings = app.state.settings
+
+    try:
+        if app.state.model_store:
+            pair_slugs = [p.replace("-", "_").lower() for p in settings.pairs]
+            await _fetch_from_minio(app.state.model_store, settings.ml_checkpoint_dir, pair_slugs)
+    except Exception as e:
+        logger.error("MinIO fetch during reload failed: %s", e)
+
+    _reload_predictors(app, settings)
+    return {"reloaded": True, "loaded_pairs": list(app.state.ml_predictors.keys())}
 
 
 class TrainRequest(BaseModel):
@@ -388,6 +440,18 @@ async def start_training(body: TrainRequest, request: Request):
             # Reload per-pair predictors if live
             _reload_predictors(request.app, settings)
 
+            # Upload trained models to MinIO
+            try:
+                if _app.state.model_store:
+                    for pair_name in pair_results:
+                        slug = pair_name.replace("-", "_").lower()
+                        pair_dir = os.path.join(settings.ml_checkpoint_dir, slug)
+                        if os.path.isdir(pair_dir):
+                            await asyncio.to_thread(_app.state.model_store.upload_model, slug, pair_dir)
+                            logger.info("Uploaded %s models to MinIO", slug)
+            except Exception as e:
+                logger.error("MinIO upload after training failed: %s", e)
+
             # Broadcast job_completed and close WS connections
             from app.api.ws_ml import broadcast_ml_event, close_ml_connections
             await broadcast_ml_event(_app, job_id, {
@@ -513,14 +577,103 @@ async def get_ml_status(request: Request):
 
 @router.post("/reload", dependencies=[require_auth()])
 async def reload_predictors(request: Request):
-    """Hot-reload ML predictors from disk (e.g. after syncing new model files)."""
+    """Fetch latest models from MinIO then hot-reload predictors."""
+    return await _do_reload(request.app)
+
+
+@router.post("/reload-agent", dependencies=[require_agent_key()])
+async def reload_predictors_agent(request: Request):
+    """Agent-key-authenticated reload for scripts/automation."""
+    return await _do_reload(request.app)
+
+
+@router.post("/rollback", dependencies=[require_auth()])
+async def rollback_model(
+    request: Request,
+    pair: str = Query(..., description="Pair slug, e.g. btc_usdt_swap"),
+    version: str = Query(..., description="Archive timestamp, e.g. 20260409_193008"),
+):
+    """Rollback a pair's model to a specific archived version."""
     settings = request.app.state.settings
+    model_store = request.app.state.model_store
+    if not model_store:
+        raise HTTPException(500, "MinIO not configured")
+
+    try:
+        await asyncio.to_thread(model_store.rollback, pair, version)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+    dest = os.path.join(settings.ml_checkpoint_dir, pair)
+    await asyncio.to_thread(model_store.download_model, pair, dest)
     _reload_predictors(request.app, settings)
-    predictors = getattr(request.app.state, "ml_predictors", {})
+
     return {
-        "reloaded": True,
-        "loaded_pairs": list(predictors.keys()),
+        "rolled_back": True,
+        "pair": pair,
+        "version": version,
+        "loaded_pairs": list(request.app.state.ml_predictors.keys()),
     }
+
+
+@router.get("/versions", dependencies=[require_auth()])
+async def list_model_versions(
+    request: Request,
+    pair: str = Query(..., description="Pair slug"),
+):
+    """List available archived versions for a pair."""
+    model_store = request.app.state.model_store
+    if not model_store:
+        raise HTTPException(500, "MinIO not configured")
+
+    versions = await asyncio.to_thread(model_store.list_versions, pair)
+    return {"pair": pair, "versions": versions}
+
+
+class TrainingRunSync(BaseModel):
+    job_id: str
+    status: str = "completed"
+    preset_label: str | None = None
+    params: dict = {}
+    result: dict | None = None
+    error: str | None = None
+    pairs_trained: list[str] | None = None
+    duration_seconds: float | None = None
+    total_candles: int | None = None
+
+
+@router.post("/training-run", dependencies=[require_agent_key()])
+async def sync_training_run(body: TrainingRunSync, request: Request):
+    """Upsert a training run record from an external training environment."""
+    db = request.app.state.db
+    async with db.session_factory() as session:
+        stmt = pg_insert(MLTrainingRun).values(
+            job_id=body.job_id,
+            status=body.status,
+            preset_label=body.preset_label,
+            params=body.params,
+            result=body.result,
+            error=body.error,
+            pairs_trained=body.pairs_trained,
+            duration_seconds=body.duration_seconds,
+            total_candles=body.total_candles,
+            completed_at=datetime.now(timezone.utc) if body.status == "completed" else None,
+        ).on_conflict_do_update(
+            index_elements=[MLTrainingRun.job_id],
+            set_={
+                "status": body.status,
+                "result": body.result,
+                "error": body.error,
+                "pairs_trained": body.pairs_trained,
+                "duration_seconds": body.duration_seconds,
+                "total_candles": body.total_candles,
+                "completed_at": datetime.now(timezone.utc) if body.status == "completed" else None,
+            },
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+    return {"synced": True, "job_id": body.job_id}
 
 
 @router.get("/health", dependencies=[require_auth()])

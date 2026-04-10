@@ -185,16 +185,6 @@ function OpenPositions({ positions, loading }: { positions: Position[]; loading:
   );
 }
 
-const IMPACT_BORDER: Record<string, string> = {
-  high: "border-l-error",
-  medium: "border-l-primary/40",
-};
-
-const SENTIMENT_COLOR: Record<string, string> = {
-  bullish: "text-long",
-  bearish: "text-short",
-  neutral: "text-on-surface-variant",
-};
 
 function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean }) {
   if (loading) return <Skeleton height="h-24" />;
@@ -207,17 +197,12 @@ function LatestNewsCard({ news, loading }: { news: NewsEvent[]; loading: boolean
       ) : (
       <div className="space-y-2">
         {news.map((n) => {
-          const cls = `bg-surface-container-low rounded-lg p-3 border-l-4 ${IMPACT_BORDER[n.impact ?? ""] ?? "border-l-outline-variant/20"}`;
+          const cls = "bg-surface-container-low rounded-lg p-3 border-l-4 border-l-outline-variant/20";
           const inner = (
             <>
               <p className="text-sm font-medium leading-snug">{n.headline}</p>
               <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-xs text-on-surface-variant tabular">{n.source}</span>
-                {n.sentiment && (
-                  <span className={`text-xs font-medium ${SENTIMENT_COLOR[n.sentiment] ?? ""}`}>
-                    {n.sentiment}
-                  </span>
-                )}
                 <span className="text-xs text-outline">{n.published_at ? formatRelativeTime(n.published_at) : ""}</span>
               </div>
             </>

@@ -1,6 +1,5 @@
-import { TrendingUp, TrendingDown, Minus, BookOpen, ExternalLink } from "lucide-react";
+import { BookOpen, ExternalLink } from "lucide-react";
 import type { NewsEvent } from "../types";
-import { IMPACT_BADGE, SENTIMENT_COLOR } from "../constants";
 import { formatRelativeTime, formatPair } from "../../../shared/lib/format";
 
 interface NewsCardProps {
@@ -8,42 +7,15 @@ interface NewsCardProps {
   onSelect?: (event: NewsEvent) => void;
 }
 
-const IMPACT_BORDER: Record<string, string> = {
-  high: "border-l-error",
-  medium: "border-l-primary/40",
-  low: "border-l-on-surface-variant/20",
-};
-
-const SENTIMENT_ICON: Record<string, typeof TrendingUp> = {
-  bullish: TrendingUp,
-  bearish: TrendingDown,
-  neutral: Minus,
-};
-
-const CARD_BASE = "w-full bg-surface-container-low rounded-lg p-4 border-l-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+const CARD_BASE = "w-full bg-surface-container-low rounded-lg p-4 border-l-4 border-l-outline-variant/20 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 function CardContent({ event }: { event: NewsEvent }) {
-  const SentimentIcon = event.sentiment ? SENTIMENT_ICON[event.sentiment] : null;
-
   return (
     <>
       <div className="flex justify-between items-start mb-2">
-        <div className="flex items-center gap-3">
-          {event.impact && (
-            <span className={`text-[10px] tracking-widest px-2 py-0.5 uppercase rounded font-medium ${IMPACT_BADGE[event.impact] ?? ""}`}>
-              {event.impact} Impact
-            </span>
-          )}
-          <span className="text-xs text-on-surface-variant tabular">
-            {event.published_at ? formatRelativeTime(event.published_at) : ""} {event.source ? `\u00B7 ${event.source}` : ""}
-          </span>
-        </div>
-        {SentimentIcon && (
-          <div className={`flex items-center gap-1 ${SENTIMENT_COLOR[event.sentiment!] ?? ""}`}>
-            <SentimentIcon size={14} />
-            <span className="text-[10px] uppercase tracking-widest">{event.sentiment}</span>
-          </div>
-        )}
+        <span className="text-xs text-on-surface-variant tabular">
+          {event.published_at ? formatRelativeTime(event.published_at) : ""} {event.source ? `\u00B7 ${event.source}` : ""}
+        </span>
       </div>
 
       <h3 className="font-headline text-base font-bold leading-tight mb-3">{event.headline}</h3>
@@ -74,14 +46,12 @@ function CardContent({ event }: { event: NewsEvent }) {
 }
 
 export function NewsCard({ event, onSelect }: NewsCardProps) {
-  const borderClass = IMPACT_BORDER[event.impact ?? "low"] ?? "border-l-outline-variant/20";
-
   // Has extractable content → button that opens reader sheet
   if (event.content_text) {
     return (
       <button
         onClick={() => onSelect?.(event)}
-        className={`${CARD_BASE} hover:bg-surface-container cursor-pointer ${borderClass}`}
+        className={`${CARD_BASE} hover:bg-surface-container cursor-pointer`}
       >
         <CardContent event={event} />
       </button>
@@ -95,7 +65,7 @@ export function NewsCard({ event, onSelect }: NewsCardProps) {
         href={event.url}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${CARD_BASE} hover:bg-surface-container block cursor-pointer ${borderClass}`}
+        className={`${CARD_BASE} hover:bg-surface-container block cursor-pointer`}
       >
         <CardContent event={event} />
       </a>
@@ -104,7 +74,7 @@ export function NewsCard({ event, onSelect }: NewsCardProps) {
 
   // Neither → non-interactive div
   return (
-    <div className={`${CARD_BASE} ${borderClass}`}>
+    <div className={CARD_BASE}>
       <CardContent event={event} />
     </div>
   );

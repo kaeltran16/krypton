@@ -16,6 +16,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     restart: unless-stopped
 
   postgres:
@@ -42,6 +44,24 @@ services:
       retries: 5
     restart: unless-stopped
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   nginx:
     image: nginx:alpine
     ports:
@@ -55,6 +75,7 @@ services:
       - certbot-var:/var/lib/letsencrypt
       - certbot-webroot:/var/www/certbot:ro
       - ./monitor:/var/www/monitor:ro
+      - /etc/nginx/.minio_htpasswd:/etc/nginx/.minio_htpasswd:ro
     command: /bin/sh -c "envsubst '$${DOMAIN}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
     depends_on:
       - api
@@ -71,6 +92,7 @@ services:
 
 volumes:
   pgdata:
+  miniodata:
   certbot-etc:
   certbot-var:
   certbot-webroot:

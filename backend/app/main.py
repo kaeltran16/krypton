@@ -295,10 +295,7 @@ async def _fetch_news_context(db, pair: str, window_minutes: int = 30) -> tuple[
     lines = []
     ids = []
     for e in events:
-        impact_tag = f"[{e.impact.upper()}]" if e.impact else ""
-        sentiment_tag = f"({e.sentiment})" if e.sentiment else ""
-        summary = e.llm_summary or ""
-        lines.append(f"- {impact_tag} {e.headline} {sentiment_tag} — {summary}")
+        lines.append(f"- {e.headline}")
         ids.append(e.id)
 
     return "\n".join(lines), ids
@@ -2152,11 +2149,8 @@ async def lifespan(app: FastAPI):
         poll_interval=settings.news_poll_interval_seconds,
         cryptopanic_api_key=settings.cryptopanic_api_key,
         news_api_key=settings.news_api_key,
-        openrouter_api_key=settings.openrouter_api_key,
-        openrouter_model=settings.openrouter_model,
         relevance_keywords=settings.news_relevance_keywords,
         rss_feeds=settings.news_rss_feeds,
-        llm_daily_budget=settings.news_llm_daily_budget,
         high_impact_push_enabled=settings.news_high_impact_push_enabled,
         vapid_private_key=settings.vapid_private_key,
         vapid_claims_email=settings.vapid_claims_email,
@@ -2261,17 +2255,58 @@ async def lifespan(app: FastAPI):
     from app.collector.watchdog import run_watchdog
     watchdog_task = asyncio.create_task(run_watchdog(app.state))
 
+    # Initialize MinIO model store
+    app.state.model_store = None
+    try:
+        from app.api.ml import _get_model_store
+        app.state.model_store = _get_model_store(settings)
+        if app.state.model_store:
+            logger.info("MinIO model store connected")
+    except Exception as e:
+        logger.warning("MinIO model store unavailable: %s", e)
+
+    # MinIO archive cleanup (daily) — only if MinIO is configured
+    minio_cleanup_task = None
+    if app.state.model_store:
+        async def minio_cleanup_loop():
+            while True:
+                await asyncio.sleep(86400)
+                try:
+                    app.state.model_store.cleanup_archives(
+                        retention_count=settings.minio_archive_retention_count,
+                        retention_days=settings.minio_archive_retention_days,
+                    )
+                    logger.info("MinIO archive cleanup completed")
+                except Exception as e:
+                    logger.error("MinIO archive cleanup failed: %s", e)
+
+        minio_cleanup_task = asyncio.create_task(minio_cleanup_loop())
+
     # Load per-pair ML predictors if enabled
     app.state.ml_predictors = {}
     if getattr(settings, "ml_enabled", False):
-        from app.api.ml import _reload_predictors
+        from app.api.ml import _reload_predictors, _fetch_from_minio
+
+        # Fetch latest from MinIO before loading
+        try:
+            if app.state.model_store:
+                pair_slugs = [p.replace("-", "_").lower() for p in settings.pairs]
+                await _fetch_from_minio(app.state.model_store, settings.ml_checkpoint_dir, pair_slugs)
+        except Exception as e:
+            logger.error("MinIO fetch on startup failed (using disk fallback): %s", e)
+
         _reload_predictors(app, settings)
 
     # Load regime classifier if available
     app.state.regime_classifier = None
-    regime_model_dir = os.path.join(
-        getattr(settings, "ml_checkpoint_dir", "models"), "regime"
-    )
+    regime_model_dir = os.path.join(settings.ml_checkpoint_dir, "regime")
+    try:
+        if app.state.model_store:
+            from app.api.ml import _fetch_from_minio
+            await _fetch_from_minio(app.state.model_store, settings.ml_checkpoint_dir, ["regime"])
+    except Exception as e:
+        logger.error("MinIO regime classifier fetch failed: %s", e)
+
     if os.path.isdir(regime_model_dir):
         try:
             from app.engine.regime_classifier import RegimeClassifier
@@ -2304,6 +2339,8 @@ async def lifespan(app: FastAPI):
     pipeline_eval_prune_task.cancel()
     logging.getLogger().removeHandler(db_log_handler)
     watchdog_task.cancel()
+    if minio_cleanup_task:
+        minio_cleanup_task.cancel()
     if onchain_task:
         onchain_collector.stop()
         onchain_task.cancel()

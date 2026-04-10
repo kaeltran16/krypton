@@ -24,6 +24,7 @@ scipy>=1.10
 scikit-optimize>=0.10
 lightgbm>=4.0.0
 joblib
+boto3>=1.35.0
 PyJWT
 google-auth
 

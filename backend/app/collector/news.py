@@ -1,12 +1,11 @@
 """News & events collector.
 
 Polls API sources (CryptoPanic, CoinGecko news) and RSS feeds on a
-configurable interval. Deduplicates, scores via LLM, persists to Postgres,
+configurable interval. Deduplicates, persists to Postgres,
 and triggers alerts for high-impact news.
 """
 import asyncio
 import hashlib
-import json
 import logging
 import re
 from datetime import datetime, timezone, timedelta
@@ -110,66 +109,6 @@ async def is_headline_duplicate(session, headline: str, threshold: float = 85.0)
     return False
 
 
-async def score_headlines_with_llm(
-    headlines: list[dict],
-    api_key: str,
-    model: str,
-    timeout: int = 30,
-) -> list[dict]:
-    """Batch score up to 10 headlines via LLM.
-
-    Returns list of dicts with keys: impact, sentiment, summary, affected_pairs.
-    """
-    if not api_key or not headlines:
-        return [{}] * len(headlines)
-
-    numbered = "\n".join(
-        f"{i+1}. [{h.get('source', '?')}] {h['headline']}"
-        for i, h in enumerate(headlines)
-    )
-
-    prompt = f"""Score these news headlines for crypto market impact.
-For each headline, respond with a JSON array where each element has:
-- "impact": "high" | "medium" | "low"
-- "sentiment": "bullish" | "bearish" | "neutral"
-- "summary": one-sentence explanation of market relevance
-
-Headlines:
-{numbered}
-
-Respond ONLY with the JSON array, no other text."""
-
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.2,
-                    "max_tokens": 1500,
-                },
-            )
-            resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"]["content"].strip()
-
-            # Parse JSON from possible markdown code block
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-            scores = json.loads(content)
-            if isinstance(scores, list) and len(scores) == len(headlines):
-                return scores
-    except Exception as e:
-        logger.error(f"LLM headline scoring failed: {e}")
-
-    return [{}] * len(headlines)
-
-
 class NewsCollector:
     def __init__(
         self,
@@ -180,11 +119,8 @@ class NewsCollector:
         poll_interval: int = 150,
         cryptopanic_api_key: str = "",
         news_api_key: str = "",
-        openrouter_api_key: str = "",
-        openrouter_model: str = "anthropic/claude-3.5-sonnet",
         relevance_keywords: list[str] | None = None,
         rss_feeds: list[dict] | None = None,
-        llm_daily_budget: int = 200,
         high_impact_push_enabled: bool = True,
         vapid_private_key: str = "",
         vapid_claims_email: str = "",
@@ -196,24 +132,12 @@ class NewsCollector:
         self.poll_interval = poll_interval
         self.cryptopanic_api_key = cryptopanic_api_key
         self.news_api_key = news_api_key
-        self.openrouter_api_key = openrouter_api_key
-        self.openrouter_model = openrouter_model
         self.relevance_keywords = relevance_keywords or []
         self.rss_feeds = rss_feeds or DEFAULT_RSS_FEEDS
-        self.llm_daily_budget = llm_daily_budget
         self.high_impact_push_enabled = high_impact_push_enabled
         self.vapid_private_key = vapid_private_key
         self.vapid_claims_email = vapid_claims_email
         self._running = False
-        self._llm_calls_today = 0
-        self._budget_reset_date = datetime.now(timezone.utc).date()
-
-    def _check_budget(self):
-        """Reset daily LLM call counter at midnight UTC."""
-        today = datetime.now(timezone.utc).date()
-        if today != self._budget_reset_date:
-            self._llm_calls_today = 0
-            self._budget_reset_date = today
 
     async def run(self):
         self._running = True
@@ -277,23 +201,6 @@ class NewsCollector:
         if not to_score:
             return
 
-        # LLM scoring in batches of 10
-        self._check_budget()
-        scored = []
-        for i in range(0, len(to_score), 10):
-            batch = to_score[i:i+10]
-            if self._llm_calls_today < self.llm_daily_budget:
-                llm_results = await score_headlines_with_llm(
-                    batch, self.openrouter_api_key, self.openrouter_model,
-                )
-                self._llm_calls_today += 1
-                for h, llm in zip(batch, llm_results):
-                    h["impact"] = llm.get("impact")
-                    h["sentiment"] = llm.get("sentiment")
-                    h["llm_summary"] = llm.get("summary")
-            # else: headlines stored without scoring
-            scored.extend(batch)
-
         # Fetch article content concurrently for extraction
         async def _fetch_article(client: httpx.AsyncClient, h: dict, sem: asyncio.Semaphore):
             if not h.get("url"):
@@ -312,11 +219,11 @@ class NewsCollector:
 
         sem = asyncio.Semaphore(5)
         async with httpx.AsyncClient(timeout=10) as client:
-            await asyncio.gather(*[_fetch_article(client, h, sem) for h in scored])
+            await asyncio.gather(*[_fetch_article(client, h, sem) for h in to_score])
 
         # Persist to DB and alert
         async with self.db.session_factory() as session:
-            for h in scored:
+            for h in to_score:
                 try:
                     async with session.begin_nested():
                         stmt = pg_insert(NewsEvent).values(
@@ -325,10 +232,7 @@ class NewsCollector:
                             url=h["url"],
                             fingerprint=h["fingerprint"],
                             category=h.get("category", "crypto"),
-                            impact=h.get("impact"),
-                            sentiment=h.get("sentiment"),
                             affected_pairs=h.get("affected_pairs", []),
-                            llm_summary=h.get("llm_summary"),
                             content_text=h.get("content_text"),
                             published_at=h.get("published_at", datetime.now(timezone.utc)),
                         ).on_conflict_do_nothing()
@@ -429,10 +333,7 @@ class NewsCollector:
                 "headline": news_event.headline,
                 "source": news_event.source,
                 "category": news_event.category,
-                "impact": news_event.impact,
-                "sentiment": news_event.sentiment,
                 "affected_pairs": news_event.affected_pairs,
-                "llm_summary": news_event.llm_summary,
                 "published_at": news_event.published_at.isoformat()
                 if news_event.published_at else None,
             },

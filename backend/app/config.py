@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # secrets (from .env)
     openrouter_api_key: str
-    openrouter_model: str = "anthropic/claude-3.5-sonnet"
+    openrouter_model: str = "qwen/qwen3.5-plus-02-15"
     database_url: str = "postgresql+asyncpg://krypton:krypton@localhost:5432/krypton"
     redis_url: str = "redis://localhost:6379/0"
     agent_api_key: str = ""
@@ -113,7 +113,6 @@ class Settings(BaseSettings):
     news_poll_interval_seconds: int = 150
     news_llm_context_window_minutes: int = 30
     news_high_impact_push_enabled: bool = True
-    news_llm_daily_budget: int = 200
     news_relevance_keywords: list[str] = [
         "interest rate", "Fed", "CPI", "inflation", "sanctions",
         "war", "tariff", "regulation", "crypto ban", "SEC",
@@ -126,6 +125,15 @@ class Settings(BaseSettings):
     ml_enabled: bool = True
     ml_confidence_threshold: float = 0.40
     ml_checkpoint_dir: str = "models"
+
+    # MinIO model storage
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "krypton-models"
+    minio_use_ssl: bool = False
+    minio_archive_retention_count: int = 5
+    minio_archive_retention_days: int = 30
 
     # conviction floor (min scale applied to low-conviction sources)
     engine_conviction_floor: float = 0.3

@@ -32,6 +32,14 @@ async def _test_lifespan(app: FastAPI):
     mock_settings.google_client_id = "test-client-id"
     mock_settings.allowed_emails = "test@example.com"
     mock_settings.agent_api_key = "test-agent-key"
+    mock_settings.minio_endpoint = "localhost:9000"
+    mock_settings.minio_access_key = "minioadmin"
+    mock_settings.minio_secret_key = "minioadmin"
+    mock_settings.minio_bucket = "krypton-models"
+    mock_settings.minio_use_ssl = False
+    mock_settings.ml_checkpoint_dir = "models"
+    mock_settings.minio_archive_retention_count = 5
+    mock_settings.minio_archive_retention_days = 30
     mock_settings.pairs = ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
     mock_settings.engine_traditional_weight = 0.40
     mock_settings.engine_flow_weight = 0.22

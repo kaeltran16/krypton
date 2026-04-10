@@ -361,16 +361,12 @@ export const api = {
 
   getNews: (params?: {
     category?: string;
-    impact?: string;
-    sentiment?: string;
     pair?: string;
     limit?: number;
     offset?: number;
   }) => {
     const query = new URLSearchParams();
     if (params?.category) query.set("category", params.category);
-    if (params?.impact) query.set("impact", params.impact);
-    if (params?.sentiment) query.set("sentiment", params.sentiment);
     if (params?.pair) query.set("pair", params.pair);
     if (params?.limit) query.set("limit", String(params.limit));
     if (params?.offset) query.set("offset", String(params.offset));

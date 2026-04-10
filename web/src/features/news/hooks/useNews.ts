@@ -4,7 +4,6 @@ import type { NewsEvent } from "../types";
 
 export function useNews(params?: {
   category?: string;
-  impact?: string;
   limit?: number;
 }) {
   const [news, setNews] = useState<NewsEvent[]>([]);
@@ -17,7 +16,7 @@ export function useNews(params?: {
       .then(setNews)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [params?.category, params?.impact, params?.limit]);
+  }, [params?.category, params?.limit]);
 
   useEffect(() => {
     fetch();

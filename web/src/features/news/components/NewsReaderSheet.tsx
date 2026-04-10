@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
-import { X, Zap, ExternalLink } from "lucide-react";
+import { X, ExternalLink } from "lucide-react";
 import { Button } from "../../../shared/components/Button";
 import type { NewsEvent } from "../types";
-import { IMPACT_BADGE, SENTIMENT_COLOR } from "../constants";
 import { formatRelativeTime, formatPair } from "../../../shared/lib/format";
 
 interface NewsReaderSheetProps {
@@ -52,16 +51,6 @@ export function NewsReaderSheet({ event, onClose }: NewsReaderSheetProps) {
             </div>
             <div className="flex items-start justify-between px-4">
               <div className="flex items-center gap-2">
-                {event.impact && (
-                  <span className={`text-[10px] tracking-widest px-2 py-0.5 uppercase rounded font-medium ${IMPACT_BADGE[event.impact] ?? ""}`}>
-                    {event.impact}
-                  </span>
-                )}
-                {event.sentiment && (
-                  <span className={`text-[10px] uppercase tracking-widest font-medium ${SENTIMENT_COLOR[event.sentiment] ?? ""}`}>
-                    {event.sentiment}
-                  </span>
-                )}
                 <span className="text-[10px] text-on-surface-variant tabular">
                   {estimateReadTime(event.content_text)} min read
                 </span>
@@ -79,16 +68,6 @@ export function NewsReaderSheet({ event, onClose }: NewsReaderSheetProps) {
                 {event.published_at && ` · ${formatRelativeTime(event.published_at)}`}
               </p>
             </div>
-
-            {event.llm_summary && (
-              <div className="bg-surface-container-lowest rounded-lg p-4 border border-outline-variant/10 mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap size={14} className="text-primary" />
-                  <h3 className="text-[10px] uppercase tracking-widest text-primary">Krypton AI Summary</h3>
-                </div>
-                <p className="text-sm text-on-surface-variant leading-relaxed">{event.llm_summary}</p>
-              </div>
-            )}
 
             <div className="border-t border-outline-variant/15 pt-4">
               <article className="max-w-prose">
