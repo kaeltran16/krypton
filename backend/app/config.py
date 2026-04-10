@@ -127,9 +127,9 @@ class Settings(BaseSettings):
     ml_checkpoint_dir: str = "models"
 
     # MinIO model storage
-    minio_endpoint: str = "minio:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin"
+    minio_endpoint: str = ""
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
     minio_bucket: str = "krypton-models"
     minio_use_ssl: bool = False
     minio_archive_retention_count: int = 5
